@@ -1,0 +1,11 @@
+{
+  "name": "wiki-trails",
+  "private": true,
+  "description": "Map how you wander through Wikipedia, in 27 skins.",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --legal-comments=none",
+    "watch": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --watch",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": { "esbuild": "^0.24.0" }
+}

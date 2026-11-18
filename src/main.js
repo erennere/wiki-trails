@@ -282,11 +282,19 @@ $('import').onchange = async (e) => {
   catch (err) { msg(`Could not import: ${err.message}`, true); }
 };
 const loadExample = () => { closeStart(); snapshot(); state = exampleState(); cur = null; pinned = null; closeCard(); commit({ refit: true }); };
+// Data shipped as a <script> (not fetch) so it also works when index.html is opened from disk.
+function loadDataScript(src, name) {
+  if (window[name]) return Promise.resolve(window[name]);
+  return new Promise((res, rej) => {
+    const el = document.createElement('script');
+    el.src = src; el.onload = () => (window[name] ? res(window[name]) : rej(new Error('empty'))); el.onerror = () => rej(new Error('not found'));
+    document.head.appendChild(el);
+  });
+}
 async function loadTestData() {
   closeStart(); status('Loading synapses…');
   try {
-    const r = await fetch('data/wikispeedia-1000.json'); if (!r.ok) throw new Error(r.status);
-    const s = validate(await r.json());
+    const s = validate(await loadDataScript('data/wikispeedia-1000.js', 'WIKI_TRAILS_TEST_DATA'));
     snapshot(); state = s; cur = null; pinned = null; closeCard(); commit({ refit: true });
     status(`Loaded ${s.trails.length} real human trails from Wikispeedia.`);
   } catch (err) { status(`Could not load test data (${err.message}).`); }

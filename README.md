@@ -34,11 +34,16 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 
 ## Run it locally
 
-It's a static site with no build step. ES modules need a local server (opening `index.html` as a file won't work):
+Just open `index.html` in your browser by double-clicking it. Nothing to install.
+
+### Developing
+
+The code lives in `src/` as ES modules and is bundled into `js/app.js` (the bundle is committed, so the site needs no build on GitHub). After editing `src/`:
 
 ```bash
-python3 -m http.server 8000
-# open http://localhost:8000
+npm install        # once, installs esbuild
+npm run build      # or: npm run watch
+npm run serve      # optional: http://localhost:8000
 ```
 
 ## Host on GitHub Pages
@@ -49,7 +54,7 @@ python3 -m http.server 8000
 
 ### Publishing your own graph
 
-Visitors who have no local data see the file `data/trails.json`, if it exists. To publish your graph:
+Visitors who have no local data see the file `data/trails.json`, if it exists (on the hosted site; browsers don't allow reading it when the page is opened from disk). To publish your graph:
 
 1. Click **Export JSON** in the app.
 2. Save the file as `data/trails.json` and commit it.
@@ -58,7 +63,7 @@ Your own browser keeps using its local copy. If you want to start from the publi
 
 ## Test data: real human trails
 
-`data/wikispeedia-1000.json` holds 176 real human navigation paths (1,000 clicks, 401 articles, 36 back-steps) from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page. Most of the sample is from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections. The rest are random one-off games. In Wikispeedia a `<` means the player went back, which maps directly to Wiki Trails' branching.
+`data/wikispeedia-1000.json` (and the same data as `data/wikispeedia-1000.js`, which the app loads so it also works from disk) holds 176 real human navigation paths (1,000 clicks, 401 articles, 36 back-steps) from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page. Most of the sample is from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections. The rest are random one-off games. In Wikispeedia a `<` means the player went back, which maps directly to Wiki Trails' branching.
 
 To regenerate the file or change its size:
 
@@ -94,15 +99,16 @@ Each trail is a tree of visits. A visit's `parent` is the page you clicked from,
 
 ```
 index.html        page shell
+js/app.js         bundled app (built from src/ with esbuild)
 css/style.css     base layout; every visual reads a CSS variable (defaults = Desktop 95)
 css/skins.css     chrome presets (bevel, flat, neon, terminal, console, gloss, 1-bit) + 27 skins
-js/skins.js       skin list: graph palette, node shape, effects, wording, toys
-js/effects.js     animated background layer (stars, rain, radar, grid, bubbles, …)
-js/model.js       data model and derived graph (articles, weighted links, routes)
-js/graph.js       d3 force layout, rendering, highlights
-js/main.js        UI: builder, trail list, article card, import/export
-js/storage.js     localStorage + data/trails.json + JSON files
-js/example.js     small example dataset
+src/skins.js      skin list: graph palette, node shape, effects, wording, toys
+src/effects.js    animated background layer (stars, rain, radar, grid, bubbles, …)
+src/model.js      data model and derived graph (articles, weighted links, routes)
+src/graph.js      d3 force layout, rendering, highlights
+src/main.js       UI: builder, trail list, article card, import/export
+src/storage.js    localStorage + data/trails.json + JSON files
+src/example.js    small example dataset
 data/             wikispeedia-1000.json test data; put your published trails.json here
 scripts/          build_test_data.py (Wikispeedia → Wiki Trails JSON)
 vendor/d3.min.js  d3 v7.9.0 (ISC licence, see vendor/d3.LICENSE)
@@ -114,7 +120,7 @@ MIT, see [LICENSE](LICENSE). d3 is © Mike Bostock, ISC licence. Fonts: Pixelify
 
 ## Adding a skin
 
-1. Add an entry to `SKINS` in `js/skins.js`: an `id`, a name, a family, a chrome preset, colours, a node shape and an optional effect.
+1. Add an entry to `SKINS` in `src/skins.js`: an `id`, a name, a family, a chrome preset, colours, a node shape and an optional effect.
 2. Add a `[data-skin="your-id"] { … }` block of CSS variables to `css/skins.css`, plus any `html[data-skin="your-id"] …` extras.
 
 The gallery picks it up automatically.
