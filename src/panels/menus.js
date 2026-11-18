@@ -128,6 +128,7 @@ export function initMenus({ graph }) {
     document.querySelectorAll('#themeseg button').forEach((b) => b.classList.toggle('on', b.dataset.theme === app.settings.theme));
     $('density').value = app.settings.density;
     $('fade').checked = app.settings.fade;
+    $('agefade').value = app.settings.ageFade;
     $('rotate').checked = app.settings.rotate;
     $('sound').checked = app.settings.sound;
     $('lang').value = app.state.lang || 'en';
@@ -146,6 +147,7 @@ export function initMenus({ graph }) {
   grid.addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) { applySkin(c.dataset.id); renderSkins(); } });
   $('density').oninput = () => { setSetting('density', +$('density').value); graph.setView({ density: app.settings.density }); };
   $('fade').onchange = () => { setSetting('fade', $('fade').checked); graph.setView({ fade: app.settings.fade }); };
+  $('agefade').oninput = () => { setSetting('ageFade', +$('agefade').value); graph.setView({ ageFade: app.settings.ageFade }); };
   $('rotate').onchange = () => { setSetting('rotate', $('rotate').checked); graph.setView({ rotate: app.settings.rotate }); };
   $('sound').onchange = () => setSetting('sound', $('sound').checked);
   $('lang').onchange = () => { app.state.lang = $('lang').value; commit(); };

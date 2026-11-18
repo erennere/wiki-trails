@@ -138,7 +138,7 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- start ---------- */
 (async () => {
-  graph.setView({ density: app.settings.density, fade: app.settings.fade, rotate: app.settings.rotate });
+  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate });
   app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
   commit({ fresh: true });
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };

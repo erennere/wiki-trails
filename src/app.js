@@ -5,7 +5,7 @@ import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips }
 import { saveLocal } from './storage.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
-const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, rotate: true, threads: 5, sound: false, left: true, right: true };
+const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, sound: false, left: true, right: true };
 
 export const app = {
   state: emptyState(),
@@ -155,7 +155,7 @@ export function threadsFor(target) {
   threads.forEach((th, i) => {
     th.key = th.trailId + ':' + th.visitId;
     th.color = pal[i % pal.length];
-    th.rec = tNew > tOld ? 0.12 + 0.88 * Math.pow((th.t - tOld) / (tNew - tOld), 0.8) : 1;
+    th.rec = tNew > tOld ? (th.t - tOld) / (tNew - tOld) : 1; // 1 = the newest shown, 0 = the oldest
   });
   return { kind, anchor, threads, total: all.length, times: times.sort((x, y) => x - y) };
 }

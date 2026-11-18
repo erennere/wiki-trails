@@ -37,8 +37,15 @@
     <div class="results" id="results" hidden></div>
   </div>
   <span class="spacer"></span>
-  <div class="seg" id="rangeseg" role="group" aria-label="Time period">
-    <button data-range="30">30 days</button><button data-range="365">1 year</button><button data-range="all" class="on">All time</button>
+  <div class="menu rangewrap">
+    <div class="seg" id="rangeseg" role="group" aria-label="Time period">
+      <button data-range="30">30 days</button><button data-range="365">1 year</button><button data-range="all" class="on">All time</button><button data-range="custom" id="rcustom" aria-haspopup="true">Custom…</button>
+    </div>
+    <div class="dropdown rangepop" id="rangepop" hidden>
+      <div class="rp-row"><label>From<input type="date" id="rfrom"></label><label>To<input type="date" id="rto"></label></div>
+      <div class="rp-err" id="rerr" hidden></div>
+      <div class="btns"><button class="btn small" id="rcancel">Cancel</button><button class="btn small primary" id="rapply">Show this period</button></div>
+    </div>
   </div>
   <div class="menu">
     <button class="btn" id="filebtn" aria-haspopup="true">File ▾</button>
@@ -129,6 +136,7 @@
       <h4>Map</h4>
       <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
       <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
+      <div class="setrow"><span>How much older threads fade</span><span class="hint">a little</span><input type="range" id="agefade" min="0" max="1" step="0.05"><span class="hint">a lot</span></div>
       <div class="setrow"><span>Turn the map slowly when you're not using it</span><input type="checkbox" id="rotate"></div>
       <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>
       <h4>Other</h4>

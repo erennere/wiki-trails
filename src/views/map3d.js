@@ -22,7 +22,7 @@ export function createGraph(el, handlers) {
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
   let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
-  const view = { density: 1, fade: true, rotate: true };
+  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true };
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff' };
   let hub = d3.interpolateRgbBasis(['#d3d8e0', '#38404d']);
 
@@ -48,7 +48,7 @@ export function createGraph(el, handlers) {
   G.d3Force('link').distance((l) => 18 + 26 / Math.sqrt(l.total || 1));
   const cam = G.camera(); cam.fov = 30; cam.updateProjectionMatrix();
   const ctl = G.controls();
-  ctl.autoRotateSpeed = 0.12;
+  ctl.autoRotateSpeed = 0.04; ctl.rotateSpeed = 0.55; ctl.enableDamping = true; ctl.dampingFactor = 0.08;
   ctl.addEventListener('start', () => { lastTouch = performance.now(); ctl.autoRotate = false; });
   ctl.addEventListener('change', () => {
     // zooming far out of the threads goes back to the whole history
@@ -67,7 +67,7 @@ export function createGraph(el, handlers) {
   const nodeSize = (n) => 0.35 + 5 * Math.sqrt(n.visits / maxVisits);
   function linkStrength(l) { return Math.sqrt(l.total / maxTotal) * (view.fade ? recencyOf(l.last) : 1); }
   let now = Date.now(), span = 1;
-  const recencyOf = (t) => 0.25 + 0.75 * Math.exp(-Math.max(0, now - t) / Math.max(21 * 864e5, span / 4));
+  const recencyOf = (t) => 0.08 + 0.92 * Math.exp(-Math.max(0, now - t) / Math.max(14 * 864e5, span / 6));
   function linkColor(l) {
     if (threads) return rgba(style.link, 0.035);
     return rgba(style.link, 0.07 + 0.5 * linkStrength(l));
@@ -266,7 +266,7 @@ export function createGraph(el, handlers) {
     const lanes = new Map();
     const pk = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
     threads.threads.forEach((th, i) => th.path.forEach((t, k) => { if (k) { const key = pk(th.path[k - 1], t); if (!lanes.has(key)) lanes.set(key, []); if (!lanes.get(key).includes(i)) lanes.get(key).push(i); } }));
-    const n = threads.threads.length;
+    const n = threads.threads.length, minOp = 0.5 - 0.46 * view.ageFade;
     // how many drawn threads start / end on each page, and each thread's place in that row
     fans = new Map(); const fanIdx = new Map();
     threads.threads.forEach((th) => {
@@ -281,9 +281,10 @@ export function createGraph(el, handlers) {
     const order = threads.threads.map((th, i) => i).sort((a, b) => (threads.threads[a].key === pin) - (threads.threads[b].key === pin) || b - a);
     for (const i of order) {
       const th = threads.threads[i], focused = pin === th.key;
-      // the older the thread, the fainter; the one you clicked on is shown in full, the rest step back
-      const op = pin ? (focused ? 1 : 0.1 + 0.12 * th.rec) : 0.22 + 0.78 * th.rec;
-      const w = focused ? 1.35 : pin ? 0.6 : 0.55 + 0.45 * th.rec;
+      // the older the thread, the fainter (how much is a setting); the one you clicked on is shown in full
+      const ageOp = minOp + (1 - minOp) * Math.pow(th.rec, 1.5);
+      const op = pin ? (focused ? 1 : Math.min(0.14, ageOp)) : ageOp;
+      const w = focused ? 1.35 : pin ? 0.55 : 0.45 + 0.55 * th.rec;
       const col = new THREE.Color(th.color), pale = col.clone().lerp(bg, 0.55);
       const data = { key: th.key, op, order: focused ? 50 : n - i };
       const pts = th.path.map(posOf);
@@ -348,7 +349,7 @@ export function createGraph(el, handlers) {
         ball(pts[k], (1.8 + 1.2 * k / last) * unit * w, tmpc.copy(pale).lerp(col, k / last), op, { ...data, title: t });
       });
       // start: a ring; end: a pin (unless the thread starts or ends on the page you clicked)
-      const big = focused ? 1.25 : 1, fade = pin && !focused ? 0.35 : 0.55 + 0.45 * th.rec;
+      const big = focused ? 1.25 : 0.8 + 0.2 * th.rec, fade = pin && !focused ? 0.3 : Math.max(0.2, op);
       if (th.path[0] !== threads.anchor || last === 0) marker('start', th.color, pts[0], 24 * big, fade, { ...data, title: th.path[0] }, fanOf(th, 'start', th.path[0]));
       if (last > 0 && th.path[last] !== threads.anchor) marker('end', th.color, pts[last], 34 * big, fade, { ...data, title: th.path[last] }, fanOf(th, 'end', th.path[last]));
       // side trips of a single trail: thin strands in the same colour
@@ -477,7 +478,7 @@ export function createGraph(el, handlers) {
   /** The whole (visible) history. */
   function fit(animate = true) {
     const pts = visiblePoints(); if (!pts.length) return;
-    moveTo(frame(pts, currentBack(), 0.9), animate ? 1400 : 0, false);
+    moveTo(frame(pts, currentBack(), 0.9), animate ? 2000 : 0, false);
   }
   /** The camera for these points: the angle where they spread out best, filling the window. */
   function bestFrame(pts) {
@@ -488,7 +489,7 @@ export function createGraph(el, handlers) {
       for (let yaw = 0; yaw < 360; yaw += 15) for (const pitch of [-40, -20, 0, 20, 40]) {
         const y = yaw * Math.PI / 180, p = pitch * Math.PI / 180;
         const back = new THREE.Vector3(Math.cos(p) * Math.sin(y), Math.sin(p), Math.cos(p) * Math.cos(y));
-        const f = frame(pts, back, 0.8), score = f.d * (1 + 0.15 * (1 - back.dot(cur)));
+        const f = frame(pts, back, 0.8), score = f.d * (1 + 0.45 * (1 - back.dot(cur))); // prefer small turns
         if (score < bestScore) { best = f; bestScore = score; }
       }
     }
@@ -498,10 +499,10 @@ export function createGraph(el, handlers) {
   function focusOn(titles) {
     const pts = [...titles].map(posOf).filter(Boolean); if (!pts.length) return;
     if (pts.length === 1) { for (const m of adj.get([...titles][0]) || []) { const p = posOf(m); if (p) pts.push(p); } }
-    const f = bestFrame(pts); if (f) moveTo(f, 1700, true);
+    const f = bestFrame(pts); if (f) moveTo(f, 2600, true);
   }
   /** Move the camera to the view the threads were drawn for. */
-  function frameThreads() { if (plan) moveTo(plan, 1700, true); }
+  function frameThreads() { if (plan) moveTo(plan, 2600, true); }
   function zoomBy(f) {
     const d = cam.position.distanceTo(ctl.target) / f, back = currentBack();
     const p = ctl.target.clone().addScaledVector(back, d);
@@ -550,6 +551,7 @@ export function createGraph(el, handlers) {
     Object.assign(view, v);
     if ('rotate' in v) { ctl.autoRotate = !!v.rotate && !threads; lastTouch = v.rotate ? -1e9 : lastTouch; }
     if ('density' in v || 'fade' in v) { rebudget(); restyle(); }
+    if ('ageFade' in v && threads) drawThreads();
   }
   function neighbourhood(title, hops = 1) {
     const s = new Set([title]); let frontier = [title];

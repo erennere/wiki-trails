@@ -7,7 +7,7 @@ Click any article and the trails that went through it light up, and you can read
 - **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it and a light running from start to end.
-- **The older a trail, the fainter it is.**
+- **The older a trail, the fainter it is.** How strongly they fade is a setting.
 
 The camera turns to the angle where the trails spread out best and fills the window with them. Click a trail anywhere and it's shown in full while the others step back; the side panel explains it. Zoom out and you're back to your whole history.
 
@@ -19,7 +19,7 @@ The window has one map and two side panels, and both panels can be collapsed.
 
 - **Map** (middle). Drag to turn it, scroll to zoom. Click an article to see its trails, then click one of the trails to focus it. Click empty space or press <kbd>Esc</kbd> to step back (first from the trail, then to your whole history), or zoom far out. Hover anything to see when you last saw it.
 - **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
-- **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, or drag across it to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
+- **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, choose *Custom…* to enter a start and end date, or drag across the timeline to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
 - **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
 - **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
 - **Details** (right). Shows what you selected:
@@ -57,7 +57,7 @@ The ⚙ button opens Settings:
 
 - **Light or dark.** Follows your system by default.
 - **Look.** Plain is the default, and 27 optional looks are available. Hover a card to try one, click to keep it.
-- **Map:** how many connections to show, fade old connections, turn the map slowly when you're not using it, and re-arrange it from scratch.
+- **Map:** how many connections to show, fade old connections, how much older threads fade, turn the map slowly when you're not using it, and re-arrange it from scratch.
 - **Other:** the Wikipedia language for links, and optional sounds.
 
 ![Settings](.github/gallery.png)

@@ -14,6 +14,7 @@ export function initTimeline() {
   const selMode = () => !!(app.threads && app.threads.kind !== 'trail');
   function markSeg() {
     document.querySelectorAll('#rangeseg button').forEach((b) => b.classList.toggle('on', b.dataset.range === app.rangeName));
+    $('rcustom').textContent = app.rangeName === 'custom' && app.range ? `${fmtDate(app.range[0])} – ${fmtDate(app.range[1])}` : 'Custom…';
     $('tllabel').textContent = selMode()
       ? (app.period ? `${fmtDate(app.period[0])} – ${fmtDate(app.period[1])}` : 'Drag to pick a period')
       : app.range ? `${fmtDate(app.range[0])} – ${fmtDate(app.range[1])}` : 'All time';
@@ -56,7 +57,38 @@ export function initTimeline() {
     markSeg();
   }
 
+  /* ---------- a period of your own: from one date to another ---------- */
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  function openCustom() {
+    const span = timeSpan(app.state), pop = $('rangepop');
+    const [a, b] = app.range || span || [Date.now() - 30 * 864e5, Date.now()];
+    $('rfrom').value = day(a); $('rto').value = day(b);
+    if (span) { for (const id of ['rfrom', 'rto']) { $(id).min = day(span[0]); $(id).max = day(span[1]); } }
+    $('rerr').hidden = true;
+    pop.hidden = false; $('rfrom').focus();
+  }
+  function closeCustom() { $('rangepop').hidden = true; }
+  function applyCustom() {
+    const f = $('rfrom').value, t = $('rto').value, err = $('rerr');
+    if (!f || !t) { err.textContent = 'Pick both a start and an end date.'; err.hidden = false; return; }
+    const from = new Date(f + 'T00:00:00').getTime(), to = new Date(t + 'T23:59:59.999').getTime();
+    if (!(from <= to)) { err.textContent = 'The start date has to be on or before the end date.'; err.hidden = false; return; }
+    closeCustom();
+    setRange([from, to], 'custom');
+    render();
+  }
+  $('rapply').onclick = applyCustom;
+  $('rcancel').onclick = closeCustom;
+  for (const id of ['rfrom', 'rto']) {
+    $(id).addEventListener('input', () => { $('rerr').hidden = true; });
+    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') applyCustom(); if (e.key === 'Escape') closeCustom(); });
+  }
+  document.addEventListener('pointerdown', (e) => { if (!$('rangepop').hidden && !e.target.closest('.rangewrap')) closeCustom(); });
+
   function preset(name) {
+    if (name === 'custom') { $('rangepop').hidden ? openCustom() : closeCustom(); return; }
+    closeCustom();
     const span = timeSpan(app.state);
     if (name === 'all' || !span) setRange(null, 'all');
     else setRange([Math.max(span[0], span[1] - (+name) * 864e5), span[1] + 1], name);
