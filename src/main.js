@@ -1,5 +1,5 @@
-import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, trailLabel, emptyState, validate } from './model.js';
-import { loadInitial, saveLocal, exportFile, importFile } from './storage.js';
+import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, routesThrough, trailLabel, emptyState, validate, timeSpan, visitTime } from './model.js';
+import { loadLocal, loadPublished, saveLocal, saveToFile, pickFile, readFile, merge, fileName } from './storage.js';
 import { createGraph, TRAIL_COLORS } from './graph.js';
 import { createEffects } from './effects.js';
 import { exampleState } from './example.js';
@@ -9,37 +9,59 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let state = emptyState();
-let D = derive(state);
+let D = derive(state);   // all time: drives the layout
+let DV = D;              // what you see: the time lens applied
+let range = null;        // [fromMs, toMs] or null = all time
+let focusTitle = null;   // focus mode: only this article's neighbourhood
 let cur = null;          // { trailId, visitId } — where the next link starts
-let pinned = null;       // { kind: 'article'|'trail', id }
+let pinned = null;       // { kind: 'article'|'trail'|'edge', id }
 let hovered = null;
 const undoStack = [];
 
-const graph = createGraph($('svg'), {
+const graph = createGraph($('graph'), {
   onHover: (t) => { hovered = t ? { kind: 'article', id: t } : null; applyHighlight(); statusFor(t); bannerFor(t); },
+  onEdgeHover: (l) => { if (hovered?.kind === 'article') return; hovered = l ? { kind: 'edge', id: l.key } : null; applyHighlight(); if (l) status(`${l.a} ↔ ${l.b}: clicked ${l.total}× (${l.ab}× → ${l.b}, ${l.ba}× → ${l.a})`); },
   onClick: (t) => clickArticle(t),
+  onEdgeClick: (l) => clickEdge(l),
+  onDblClick: (t) => setFocus(t),
   onBackground: () => { const had = pinned; pinned = null; closeCard(); applyHighlight(); renderTrails(); if (had) graph.fit(true); },
+  onSettled: () => { state.layout = graph.getPositions(); saveLocal(state); },
+  onResize: () => { clearTimeout(rzT); rzT = setTimeout(() => graph.fit(false), 120); },
 });
+let rzT;
 
 const colorOf = (trailId) => TRAIL_COLORS[(D.trailIndex.get(trailId)?.index ?? 0) % TRAIL_COLORS.length];
 const trailOf = (id) => state.trails.find((t) => t.id === id);
 const wikiUrl = (t) => `https://${state.lang}.wikipedia.org/wiki/${encodeURIComponent(t.replace(/ /g, '_'))}`;
 
 /* ---------- state changes ---------- */
-function snapshot() { undoStack.push(JSON.stringify({ state, cur })); if (undoStack.length > 100) undoStack.shift(); }
+function snapshot() {
+  const { layout, ...rest } = state;
+  undoStack.push(JSON.stringify({ state: rest, cur }));
+  let bytes = 0; for (const u of undoStack) bytes += u.length;
+  while (undoStack.length > 1 && (undoStack.length > 100 || bytes > 24e6)) bytes -= undoStack.shift().length; // keep memory bounded
+  markDirty();
+}
 function commit({ refit = false } = {}) {
   saveLocal(state);
   D = derive(state);
+  DV = range ? derive(state, range) : D;
   if (cur && !D.trailIndex.get(cur.trailId)?.byId.has(cur.visitId)) cur = null;
   if (pinned?.kind === 'trail' && !D.trailIndex.has(pinned.id)) pinned = null;
   if (pinned?.kind === 'article' && !D.articles.has(pinned.id)) { pinned = null; closeCard(); }
-  graph.update(D);
+  if (focusTitle && !D.articles.has(focusTitle)) setFocus(null, false);
+  if (focusTitle) { focusSet = graph.neighbourhood(focusTitle, focusSet?.size >= 25 ? 1 : 2); graph.setView({ focus: focusSet }); }
+  const firstLayout = graph.update(D, DV, state.layout);
+  if (firstLayout) refit = true;
+  renderTimeline();
   graph.setCursor(cursorArticle());
   renderAll();
   applyHighlight();
-  if (refit) graph.settleAndFit();
+  if (refit) { graph.settleAndFit(); if (graph.isSettling()) waitThenFit(); }
 }
+function waitThenFit() { const iv = setInterval(() => { if (!graph.isSettling()) { clearInterval(iv); graph.fit(true); if (/Laying out|fresh layout/.test($('status').textContent)) status('Map ready.'); } }, 200); }
 function cursorArticle() { return cur ? D.trailIndex.get(cur.trailId)?.byId.get(cur.visitId)?.article ?? null : null; }
+function refresh() { DV = range ? derive(state, range) : D; graph.setVisible(DV); renderStats(); renderTimelineLabel(); applyHighlight(); if (pinned?.kind === 'article') openCard(pinned.id); }
 
 function addLink() {
   const raw = $('next').value;
@@ -53,11 +75,11 @@ function addLink() {
   if (lang && !state.trails.length) state.lang = lang;
   if (!cur) {
     const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [] };
-    const v = { id: uid(), article: title, parent: null };
+    const v = { id: uid(), article: title, parent: null, t: Date.now() };
     t.visits.push(v); state.trails.push(t);
     cur = { trailId: t.id, visitId: v.id };
   } else {
-    const v = { id: uid(), article: title, parent: cur.visitId };
+    const v = { id: uid(), article: title, parent: cur.visitId, t: Date.now() };
     trailOf(cur.trailId).visits.push(v);
     cur = { trailId: cur.trailId, visitId: v.id };
   }
@@ -79,7 +101,7 @@ function afterCursorMove() { graph.setCursor(cursorArticle()); renderBuilder(); 
 
 function undo() {
   const s = undoStack.pop(); if (!s) return;
-  const o = JSON.parse(s); state = o.state; cur = o.cur;
+  const o = JSON.parse(s); state = { ...o.state, layout: graph.getPositions() }; cur = o.cur;
   commit();
 }
 
@@ -102,17 +124,23 @@ function clickArticle(title) {
 }
 
 /* ---------- highlight ---------- */
+let focusSet = null;
+const inView = (steps) => steps.filter((s) => DV.articles.has(s.from) && DV.articles.has(s.to) && (!focusSet || (focusSet.has(s.from) && focusSet.has(s.to))));
 function specFor(target) {
   if (!target) return null;
+  if (target.kind === 'edge') {
+    const [a, b] = target.id.split('\u0000');
+    return { steps: inView(routesThrough(D, a, b)), colorOf, numbers: null, edgeKey: target.id };
+  }
   if (target.kind === 'trail') {
     const t = trailOf(target.id); if (!t) return null;
     const numbers = new Map();
     t.visits.forEach((v, i) => { if (!numbers.has(v.article)) numbers.set(v.article, i + 1); });
-    return { steps: trailSteps(D, [t.id]), colorOf, numbers, focus: t.visits[0].article };
+    return { steps: inView(trailSteps(D, [t.id])), colorOf, numbers, focus: t.visits[0].article };
   }
   const a = D.articles.get(target.id); if (!a) return null;
   // Journeys of trails that start here + every route that ever led here.
-  const steps = [...trailSteps(D, [...a.starts]), ...routesTo(D, a.title)];
+  const steps = inView([...trailSteps(D, [...a.starts]), ...routesTo(D, a.title)]);
   const trails = new Set(steps.map((s) => s.trailId));
   let numbers = null;
   if (trails.size === 1) {
@@ -126,7 +154,7 @@ function applyHighlight() { graph.setHighlight(specFor(hovered || pinned)); }
 function zoomToPinned() {
   const sp = specFor(pinned); if (!sp) return;
   const pad = $('card').style.display === 'block' ? $('card').offsetWidth + 24 : 0;
-  graph.focusOn(new Set(sp.steps.flatMap((s) => [s.from, s.to]).concat(sp.focus ? [sp.focus] : [])), pad);
+  graph.focusOn(new Set(sp.steps.flatMap((s) => [s.from, s.to]).concat(sp.focus ? [sp.focus] : []).concat(sp.edgeKey ? sp.edgeKey.split('\u0000') : [])), pad);
 }
 
 /* ---------- rendering ---------- */
@@ -138,12 +166,15 @@ function renderAll() {
   $('empty').style.display = state.trails.length ? 'none' : 'flex';
   $('lang').value = state.lang;
   if (pinned?.kind === 'article') openCard(pinned.id);
+  if (pinned?.kind === 'edge') openEdgeCard(pinned.id);
+  renderSaved();
 }
 
 function statInfo() {
-  const clicks = [...D.links.values()].reduce((s, l) => s + l.total, 0);
-  let top = null; for (const l of D.links.values()) if (!top || l.total > top.total) top = l;
-  return { articles: D.articles.size, clicks, trails: state.trails.length, top: top && top.total > 1 ? top : null };
+  const clicks = [...DV.links.values()].reduce((s, l) => s + l.total, 0);
+  let top = null; for (const l of DV.links.values()) if (!top || l.total > top.total) top = l;
+  const trails = range ? new Set([...DV.articles.values()].flatMap((a) => [...a.trails])).size : state.trails.length;
+  return { articles: DV.articles.size, clicks, trails, top: top && top.total > 1 ? top : null };
 }
 function renderStats() {
   const i = statInfo();
@@ -185,7 +216,13 @@ const armed = new Set();
 function renderTrails() {
   $('tcount').textContent = `${state.trails.length} ${W('trails')}`;
   const box = $('trails');
-  box.innerHTML = [...state.trails].reverse().map((t) => {
+  const q = $('tsearch').value.trim().toLowerCase();
+  let list = [...state.trails].reverse();
+  if (q) list = list.filter((t) => trailLabel(t).toLowerCase().includes(q) || t.visits.some((v) => v.article.toLowerCase().includes(q)));
+  const LIMIT = 150, more = list.length - LIMIT;
+  if (cur && !list.slice(0, LIMIT).some((t) => t.id === cur.trailId)) { const ct = trailOf(cur.trailId); if (ct) list = [ct, ...list]; }
+  list = list.slice(0, LIMIT);
+  box.innerHTML = list.map((t) => {
     const ends = t.visits.filter((v) => !t.visits.some((w) => w.parent === v.id)).length;
     const date = new Date(t.created).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     const cls = ['tr', cur?.trailId === t.id ? 'active' : '', pinned?.kind === 'trail' && pinned.id === t.id ? 'pinned' : ''].join(' ');
@@ -195,8 +232,8 @@ function renderTrails() {
       <button class="ic" data-act="rename" title="Rename">✎</button>
       <button class="ic${armed.has(t.id) ? ' armed' : ''}" data-act="del" title="Delete">${armed.has(t.id) ? 'Delete?' : '×'}</button>
     </div>`;
-  }).join('');
-  box.querySelectorAll('.tr').forEach((row) => {
+  }).join('') + (more > 0 ? `<div class="tr more">${more} more ${esc(W('trails'))}: type in the search box to find them</div>` : '');
+  box.querySelectorAll('.tr[data-t]').forEach((row) => {
     const id = row.dataset.t;
     row.onmouseenter = () => { hovered = { kind: 'trail', id }; applyHighlight(); };
     row.onmouseleave = () => { hovered = null; applyHighlight(); };
@@ -252,7 +289,7 @@ function openCard(title) {
   $('cont').onclick = () => {
     if (cur && lastVisit(cur.trailId, title)) { $('next').focus(); return; }
     snapshot();
-    const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null }] };
+    const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
     state.trails.push(t); cur = { trailId: t.id, visitId: t.visits[0].id };
     commit(); $('next').focus();
   };
@@ -271,37 +308,35 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target.tagName === 'INPUT' && e.target.value;
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !typing) { e.preventDefault(); undo(); }
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); stepBack(); }
+  if (e.key === 'Escape' && focusTitle && !pinned) { setFocus(null); return; }
   if (e.key === 'Escape') { closeStart(); const had = pinned; pinned = null; closeCard(); applyHighlight(); renderTrails(); if (had) graph.fit(true); }
 });
 $('lang').onchange = () => { state.lang = $('lang').value; saveLocal(state); if (pinned?.kind === 'article') openCard(pinned.id); };
-$('export').onclick = () => exportFile(state);
-$('import').onchange = async (e) => {
-  const f = e.target.files[0]; e.target.value = '';
-  if (!f) return;
-  try { const s = await importFile(f); snapshot(); state = s; cur = null; pinned = null; closeCard(); commit({ refit: true }); msg(`Imported ${s.trails.length} trails.`); }
-  catch (err) { msg(`Could not import: ${err.message}`, true); }
-};
-const loadExample = () => { closeStart(); snapshot(); state = exampleState(); cur = null; pinned = null; closeCard(); commit({ refit: true }); };
+$('tsearch').addEventListener('input', () => { clearTimeout(window.__tsT); window.__tsT = setTimeout(renderTrails, 120); });
+const loadExample = () => { closeStart(); snapshot(); state = exampleState(); cur = null; pinned = null; range = null; closeCard(); graph.reset(); commit({ refit: true }); };
 // Data shipped as a <script> (not fetch) so it also works when index.html is opened from disk.
 function loadDataScript(src, name) {
-  if (window[name]) return Promise.resolve(window[name]);
+  const key = src.split('/').pop().replace(/\.js$/, '');
+  if (window[name]?.[key]) return Promise.resolve(window[name]);
   return new Promise((res, rej) => {
     const el = document.createElement('script');
     el.src = src; el.onload = () => (window[name] ? res(window[name]) : rej(new Error('empty'))); el.onerror = () => rej(new Error('not found'));
     document.head.appendChild(el);
   });
 }
-async function loadTestData() {
+async function loadTestData(which = 'wikispeedia-1000') {
   closeStart(); status('Loading synapses…');
   try {
-    const s = validate(await loadDataScript('data/wikispeedia-1000.js', 'WIKI_TRAILS_TEST_DATA'));
-    snapshot(); state = s; cur = null; pinned = null; closeCard(); commit({ refit: true });
-    status(`Loaded ${s.trails.length} real human trails from Wikispeedia.`);
+    await loadDataScript(`data/${which}.js`, 'WIKI_TRAILS_DATA');
+    const s = validate(window.WIKI_TRAILS_DATA[which]);
+    snapshot(); state = s; cur = null; pinned = null; range = null; setFocus(null, false); closeCard(); setPreset('all', false); graph.reset(); commit({ refit: true });
+    status(`Loaded ${s.trails.length} real human trails from Wikispeedia.${graph.isSettling() ? ' Laying out the map…' : ''}`);
   } catch (err) { status(`Could not load test data (${err.message}).`); }
 }
 $('example').onclick = loadExample;
-$('testdata').onclick = loadTestData;
-$('example2').onclick = loadTestData;
+$('testdata').onclick = () => loadTestData('wikispeedia-1000');
+$('testdata2').onclick = () => loadTestData('wikispeedia-2years');
+$('example2').onclick = () => loadTestData('wikispeedia-1000');
 
 /* ---------- skins ---------- */
 const fx = createEffects($('fx'));
@@ -450,16 +485,207 @@ let clearArmed = false;
 $('clear').onclick = () => {
   if (!clearArmed) { clearArmed = true; $('clear').lastChild.textContent = 'Click again to clear'; setTimeout(() => { clearArmed = false; $('clear').lastChild.textContent = 'Clear all'; }, 2500); return; }
   clearArmed = false; $('clear').lastChild.textContent = 'Clear all'; closeStart();
-  snapshot(); state = { ...emptyState(), lang: state.lang }; cur = null; pinned = null; closeCard(); commit({ refit: true });
+  snapshot(); state = { ...emptyState(), lang: state.lang }; cur = null; pinned = null; range = null; closeCard(); graph.reset(); commit({ refit: true });
 };
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => graph.fit(false), 150); });
+
+
+/* ---------- connection click ---------- */
+function clickEdge(l) {
+  blip(0.9);
+  pinned = { kind: 'edge', id: l.key };
+  openEdgeCard(l.key);
+  applyHighlight(); renderTrails(); zoomToPinned();
+}
+function openEdgeCard(key) {
+  const l = DV.links.get(key) || D.links.get(key); if (!l) return closeCard();
+  const trails = [...(l.trails || [])].map(trailOf).filter(Boolean).sort((p, q) => Date.parse(q.created) - Date.parse(p.created));
+  const when = l.last ? new Date(l.last).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '?';
+  $('card').innerHTML = `<div class="title"><span class="ico ico-brain"></span><span class="tt">Connection</span><button class="x" id="cx" aria-label="Close">×</button></div>
+    <div class="inner">
+    <div class="meta"><b><a data-go="${esc(l.a)}">${esc(l.a)}</a> ↔ <a data-go="${esc(l.b)}">${esc(l.b)}</a></b><br>clicked ${l.total}× · last on ${when}</div>
+    <div class="mode">${l.ab}× ${esc(l.a)} → ${esc(l.b)}<br>${l.ba}× ${esc(l.b)} → ${esc(l.a)}<br>Showing every route that used this connection.</div>
+    <fieldset><legend>In ${trails.length} ${esc(W(trails.length === 1 ? 'trail' : 'trails'))}</legend><ul>${trails.slice(0, 10).map((t) => `<li><a data-trail="${t.id}">${esc(trailLabel(t))}</a><span class="w">${new Date(t.created).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span></li>`).join('')}${trails.length > 10 ? `<li>…and ${trails.length - 10} more</li>` : ''}</ul></fieldset>
+    </div>`;
+  $('card').style.display = 'block';
+  $('cx').onclick = () => { pinned = null; closeCard(); applyHighlight(); };
+  $('card').querySelectorAll('[data-go]').forEach((el) => { el.style.cursor = 'pointer'; el.onclick = () => clickArticle(el.dataset.go); });
+  $('card').querySelectorAll('[data-trail]').forEach((el) => el.onclick = () => { pinned = { kind: 'trail', id: el.dataset.trail }; closeCard(); applyHighlight(); renderTrails(); zoomToPinned(); });
+}
+
+/* ---------- focus mode ---------- */
+function setFocus(title, refitView = true) {
+  focusTitle = title;
+  const chip = $('focuschip');
+  if (title) {
+    let nb = graph.neighbourhood(title, 1);
+    if (nb.size < 25) nb = graph.neighbourhood(title, 2);
+    focusSet = nb; graph.setView({ focus: nb });
+    pinned = null; hovered = null; closeCard();
+    chip.hidden = false; chip.innerHTML = `Focus: ${esc(title)} <b>×</b>`;
+    status(`Focus: ${title} and its ${nb.size - 1} neighbours. Double-click another article to move, Esc to leave.`);
+  } else {
+    focusSet = null; graph.setView({ focus: null }); chip.hidden = true;
+  }
+  graph.setVisible(DV); applyHighlight();
+  if (refitView) graph.fit(true);
+}
+$('focuschip').onclick = () => setFocus(null);
+
+/* ---------- view: density, fade, maximize, relayout ---------- */
+const VKEY = 'wiki-trails.view';
+function saveView() { try { localStorage.setItem(VKEY, JSON.stringify({ density: +$('density').value, fade: $('fade').checked, max: !!document.documentElement.dataset.max })); } catch {} }
+function restoreView() {
+  let v = {}; try { v = JSON.parse(localStorage.getItem(VKEY)) || {}; } catch {}
+  if (v.density) $('density').value = v.density;
+  if (v.fade === false) $('fade').checked = false;
+  graph.setView({ density: +$('density').value, fade: $('fade').checked });
+  if (v.max) toggleMax(true);
+}
+$('density').oninput = () => { graph.setView({ density: +$('density').value }); saveView(); };
+$('fade').onchange = () => { graph.setView({ fade: $('fade').checked }); saveView(); };
+function toggleMax(on = !document.documentElement.dataset.max) {
+  if (on) document.documentElement.dataset.max = '1'; else delete document.documentElement.dataset.max;
+  $('maxbtn').classList.toggle('on', !!on); $('maxbtn').textContent = on ? '⛶ Restore' : '⛶ Maximize';
+  saveView();
+}
+$('maxbtn').onclick = () => toggleMax();
+$('relayout').onclick = () => { graph.relayout(); status('Computing a fresh layout…'); waitThenFit(); };
+document.addEventListener('keydown', (e) => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.ctrlKey || e.metaKey || e.altKey || !gal.hidden) return;
+  if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleMax(); }
+});
+
+/* ---------- time lens ---------- */
+let tlBrush = null, tlX = null, tlSilent = false;
+function renderTimeline() {
+  const svg = d3.select('#tlsvg'), node = svg.node(), w = node.clientWidth || 600, h = node.clientHeight || 42;
+  svg.selectAll('*').remove();
+  const span = timeSpan(state);
+  if (!span) { $('tllabel').textContent = ''; return; }
+  const [t0, t1] = [span[0], Math.max(span[1], span[0] + 864e5)];
+  const days = (t1 - t0) / 864e5, binMs = (days > 400 ? 7 : 1) * 864e5;
+  const bins = new Map();
+  for (const tr of state.trails) for (const v of tr.visits) { if (v.parent == null) continue; const b = Math.floor((visitTime(tr, v) - t0) / binMs); bins.set(b, (bins.get(b) || 0) + 1); }
+  tlX = d3.scaleTime().domain([t0, t1 + binMs]).range([4, w - 4]);
+  const mx = Math.max(1, ...bins.values()), y = d3.scaleSqrt().domain([0, mx]).range([0, h - 16]);
+  const bw = Math.max(1, tlX(t0 + binMs) - tlX(t0) - 0.5);
+  svg.append('g').selectAll('rect').data([...bins]).join('rect').attr('class', 'bar')
+    .attr('x', ([b]) => tlX(t0 + b * binMs)).attr('width', bw).attr('y', ([, c]) => h - 14 - y(c)).attr('height', ([, c]) => Math.max(1, y(c)));
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - 14})`).call(d3.axisBottom(tlX).ticks(Math.max(2, Math.floor(w / 110))).tickSize(3));
+  tlBrush = d3.brushX().extent([[0, 0], [w, h - 14]]).on('end', (e) => {
+    if (tlSilent) return;
+    if (!e.selection) { setRange(null); markPreset('all'); return; }
+    const [a, b] = e.selection.map((px) => +tlX.invert(px));
+    setRange([a, b]); markPreset(null);
+  });
+  const g = svg.append('g').attr('class', 'brush').call(tlBrush);
+  if (range) { tlSilent = true; g.call(tlBrush.move, [Math.max(4, tlX(range[0])), Math.min(w - 4, tlX(range[1]))]); tlSilent = false; }
+  renderTimelineLabel();
+}
+function renderTimelineLabel() {
+  const f = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' });
+  $('tllabel').textContent = range ? `${f(range[0])} – ${f(range[1])}` : 'All time';
+}
+function setRange(r) { range = r; refresh(); }
+function markPreset(p) { document.querySelectorAll('.tl-presets .mi').forEach((b) => b.classList.toggle('on', b.dataset.range === p)); }
+function setPreset(p, apply = true) {
+  markPreset(p);
+  const span = timeSpan(state);
+  if (p === 'all' || !span) range = null;
+  else range = [Math.max(span[0], span[1] - (+p) * 864e5), span[1] + 1];
+  if (apply) { refresh(); renderTimeline(); graph.fit(true); }
+}
+document.querySelectorAll('.tl-presets .mi').forEach((b) => b.onclick = () => setPreset(b.dataset.range));
+new ResizeObserver(() => { clearTimeout(window.__tlT); window.__tlT = setTimeout(renderTimeline, 150); }).observe($('tlsvg'));
+
+/* ---------- history files ---------- */
+const SKEY = 'wiki-trails.saved';
+let savedInfo = { at: 0, clicks: 0, name: '' };
+try { savedInfo = { ...savedInfo, ...JSON.parse(localStorage.getItem(SKEY)) }; } catch {}
+let unsaved = false;
+function markDirty() { unsaved = true; }
+function totalClicks() { let n = 0; for (const t of state.trails) n += t.visits.length - 1; return n; }
+function renderSaved() {
+  const el = $('savedinfo'), tray = $('trayinfo');
+  const ago = savedInfo.at ? Date.now() - savedInfo.at : Infinity, days = Math.floor(ago / 864e5);
+  const since = Math.max(0, totalClicks() - (savedInfo.clicks || 0));
+  const due = state.trails.length > 0 && (since >= 200 || (since > 0 && days >= 7) || (!savedInfo.at && totalClicks() >= 30));
+  const when = !savedInfo.at ? 'never saved to a file' : days >= 1 ? `saved ${days} day${days === 1 ? '' : 's'} ago` : ago < 36e5 ? `saved ${Math.max(1, Math.round(ago / 6e4))} min ago` : 'saved today';
+  el.textContent = when + (since > 0 && savedInfo.at ? ` · ${since} new click${since === 1 ? '' : 's'}` : '');
+  el.classList.toggle('due', due);
+  tray.textContent = due ? '💾 Time to save' : ''; tray.classList.toggle('due', due);
+}
+async function doSave(saveAs = false) {
+  closeStart();
+  try {
+    state.layout = graph.getPositions();
+    const r = await saveToFile(state, { saveAs }); if (!r) return;
+    savedInfo = { at: Date.now(), clicks: totalClicks(), name: r.name };
+    try { localStorage.setItem(SKEY, JSON.stringify(savedInfo)); } catch {}
+    unsaved = false; renderSaved();
+    status(r.how === 'file' ? `Saved to ${r.name}. Ctrl+S updates the same file.` : `Downloaded ${r.name}. Keep it somewhere safe; open it with Open or by dropping it on the window.`);
+  } catch (err) { status(`Could not save: ${err.message}`); }
+}
+let pendingOpen = null;
+function askOpen(s, name) {
+  if (!state.trails.length) return applyOpen(s, 'replace', name);
+  pendingOpen = { s, name };
+  const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
+  $('od-text').innerHTML = `<b>${esc(name || 'History file')}</b> has ${s.trails.length} trails and ${clicks} clicks. You currently have ${state.trails.length} trails.`;
+  $('opendlg').hidden = false; $('od-merge').focus();
+}
+function applyOpen(s, how, name) {
+  snapshot();
+  if (how === 'merge') { const m = merge(state, s); state = m.state; status(`Merged ${name || 'the file'}: ${m.added} new trails added.`); }
+  else { state = s; graph.reset(); status(`Opened ${name || 'the file'}: ${s.trails.length} trails.`); }
+  cur = null; pinned = null; closeCard(); range = null; setFocus(null, false); markPreset('all');
+  savedInfo = { at: Date.now(), clicks: totalClicks(), name: name || '' };
+  try { localStorage.setItem(SKEY, JSON.stringify(savedInfo)); } catch {}
+  commit({ refit: true }); renderSaved();
+}
+$('od-merge').onclick = () => { $('opendlg').hidden = true; if (pendingOpen) applyOpen(pendingOpen.s, 'merge', pendingOpen.name); pendingOpen = null; };
+$('od-replace').onclick = () => { $('opendlg').hidden = true; if (pendingOpen) applyOpen(pendingOpen.s, 'replace', pendingOpen.name); pendingOpen = null; };
+$('od-cancel').onclick = $('odclose').onclick = () => { $('opendlg').hidden = true; pendingOpen = null; };
+async function doOpen() {
+  closeStart();
+  try {
+    const r = await pickFile();
+    if (r === 'fallback') return $('import').click();
+    if (r) askOpen(r.state, r.name);
+  } catch (err) { status(`Could not open: ${err.message}`); }
+}
+async function openFileObj(f) {
+  try { askOpen(await readFile(f), f.name); } catch (err) { status(`Could not open ${f.name}: ${err.message}`); }
+}
+$('import').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openFileObj(f); };
+$('savebtn').onclick = () => doSave(); $('export').onclick = () => doSave(); $('saveas').onclick = () => doSave(true);
+$('openbtn').onclick = doOpen; $('importbtn').onclick = doOpen; $('trayinfo').onclick = () => doSave();
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key === 's' || e.key === 'S') { e.preventDefault(); doSave(e.shiftKey); }
+  if (e.key === 'o' || e.key === 'O') { e.preventDefault(); doOpen(); }
+});
+let dragDepth = 0;
+window.addEventListener('dragenter', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { dragDepth++; $('dropzone').hidden = false; } });
+window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('dropzone').hidden = true; });
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('dropzone').hidden = true; const f = e.dataTransfer?.files?.[0]; if (f) openFileObj(f); });
+window.addEventListener('beforeunload', (e) => { /* the browser copy is saved continuously; files are optional backups */ });
+setInterval(renderSaved, 60000);
 
 /* ---------- start ---------- */
 (async () => {
   const booting = boot();
-  state = await loadInitial();
+  state = (await loadLocal()) || (await loadPublished()) || emptyState();
+  restoreView();
   await (document.fonts?.ready ?? Promise.resolve());
   await booting;
   commit({ refit: true });
-  window.__wikiTrails = { get state() { return state; } }; // handy for debugging in the console
+  renderSaved();
+  const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
+  window.__wikiTrails = { // handy for debugging in the console (and for tests)
+    get state() { return state; }, settling: () => graph.isSettling(), gstats: () => graph.stats(),
+    nodeXY: (t) => rel(graph.screenOf(t)), drawMs: () => graph.drawMs(), edgeXY: (i) => rel(graph.edgeMid(i)),
+  };
 })();

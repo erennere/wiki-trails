@@ -6,6 +6,8 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 
 ![A pinned trail with step numbers](.github/screenshot-trail.png)
 
+![Two years of browsing (20,000 clicks) still reads calmly](.github/two-years.png)
+
 ![All 27 skins](.github/skins.png)
 
 ![The skin gallery](.github/gallery.png)
@@ -19,6 +21,12 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 - **“How did I get here?”** Hover any article to see every route that led to it, coloured by trail, with animated direction.
 - **Full journeys.** Hover a trail's start article, or a trail in the sidebar, to see that journey from start to every end, with step numbers.
 - **Pin and zoom.** Click an article or a trail to keep its highlight and zoom in to it; press <kbd>Esc</kbd> or click the background to zoom back out.
+- **Calm at any size.** Built to still feel like day one after years of use. At full zoom-out only the ~380 strongest connections are drawn, and zooming in reveals more in the area you are looking at. Labels never overlap, and the most important ones win. Sizes are relative to your busiest article, and connections you haven't used for a while fade (toggle *Fade old*). Use the **Density** slider to see more or less.
+- **Fills the window.** The map stretches to the window's shape, and **Maximize** (<kbd>F</kbd>) hides the side windows. The map is stable: article positions are saved, so it doesn't reshuffle from day to day. New articles settle next to the ones they came from, and *Re-layout* starts fresh.
+- **Time lens.** The timeline under the graph shows your clicks over time. Pick *30 days*, *1 year* or *All*, or drag a range. The map keeps its layout; it just shows that period.
+- **Focus mode.** Double-click an article to see only its neighbourhood; <kbd>Esc</kbd> goes back.
+- **Click a connection** to highlight every trail that used it and see how often you clicked it in each direction.
+- **History files.** **Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) and **Open** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop a file onto the window. In Chrome/Edge, Save remembers the file, so <kbd>Ctrl</kbd>+<kbd>S</kbd> just updates it; other browsers download a copy. Opening asks whether to **Merge** into your history or **Replace** it. The file includes the map layout, and the app reminds you when it's been a while since your last save.
 - **27 skins in 7 families.** Press <kbd>S</kbd>, or use the Skins button, to open the gallery. Hover a card to try a skin live, click to keep it, use <kbd>←</kbd>/<kbd>→</kbd> to flip through them, or press **Slideshow** to tour them all.
   - *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
   - *Futuristic:* Holo HUD (radar sweep) · Star Chart (constellations) · Bio-Neural (travelling signals)
@@ -29,8 +37,8 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
   - *Minimal:* Swiss Paper · Midnight Mono · Zen Ink
 
   Each skin sets its own window chrome, fonts, node shape, line style, background effect, wording and little toys. Optional sound effects can be turned on in the Start menu.
-- **Test data.** Start → *Load test data* loads 1,000 real clicks from 176 human Wikispeedia trails (see below).
-- **Your data stays local.** Trails are stored in your browser (`localStorage`), with JSON export and import. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
+- **Test data.** Start → *Load test data* loads real human Wikispeedia trails: *30 days* (1,000 clicks) or *2 years* (20,000 clicks, 3,145 articles), to see how it feels after long use.
+- **Your data stays local.** Trails are stored in your browser (IndexedDB, so years of history fit), and you can save them to a file. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
 
 ## Run it locally
 
@@ -83,7 +91,7 @@ Sources: Robert West and Jure Leskovec, *Human Wayfinding in Information Network
     {
       "id": "k3j2…", "name": "", "created": "2026-11-18T09:00:00.000Z",
       "visits": [
-        { "id": "a", "article": "Brain",   "parent": null },
+        { "id": "a", "article": "Brain",   "parent": null, "t": 1763456400000 },
         { "id": "b", "article": "Neuron",  "parent": "a" },
         { "id": "c", "article": "Synapse", "parent": "b" },
         { "id": "d", "article": "Axon",    "parent": "b" }
@@ -93,7 +101,7 @@ Sources: Robert West and Jure Leskovec, *Human Wayfinding in Information Network
 }
 ```
 
-Each trail is a tree of visits. A visit's `parent` is the page you clicked from, so going back and branching just means attaching a new visit to an earlier one. Going back is not a click and adds no connection. Articles and weighted connections are derived from the visits: a connection's weight is the number of clicks between its two articles in either direction, counted over all trails.
+`t` is when you clicked (ms since 1970). A saved file may also contain `layout` (article → [x, y]) so the map looks the same after opening it. Each trail is a tree of visits. A visit's `parent` is the page you clicked from, so going back and branching just means attaching a new visit to an earlier one. Going back is not a click and adds no connection. Articles and weighted connections are derived from the visits: a connection's weight is the number of clicks between its two articles in either direction, counted over all trails.
 
 ## Project layout
 
@@ -105,9 +113,9 @@ css/skins.css     chrome presets (bevel, flat, neon, terminal, console, gloss, 1
 src/skins.js      skin list: graph palette, node shape, effects, wording, toys
 src/effects.js    animated background layer (stars, rain, radar, grid, bubbles, …)
 src/model.js      data model and derived graph (articles, weighted links, routes)
-src/graph.js      d3 force layout, rendering, highlights
+src/graph.js      canvas renderer: draw budgets, label placement, layout (d3-force), highlights
 src/main.js       UI: builder, trail list, article card, import/export
-src/storage.js    localStorage + data/trails.json + JSON files
+src/storage.js    IndexedDB, history files (save/open/merge), data/trails.json
 src/example.js    small example dataset
 data/             wikispeedia-1000.json test data; put your published trails.json here
 scripts/          build_test_data.py (Wikispeedia → Wiki Trails JSON)

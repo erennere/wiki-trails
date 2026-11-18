@@ -37,6 +37,11 @@
           <button class="btn" id="undo" title="Undo (Ctrl+Z)">Undo</button>
           <button class="btn" id="skins2" title="Choose a skin (S)">Skins</button>
         </div>
+        <div class="btns filebtns">
+          <button class="btn" id="savebtn" title="Save your history to a file (Ctrl+S)">💾 Save</button>
+          <button class="btn" id="openbtn" title="Open a history file (Ctrl+O), or drop one on the window">📂 Open</button>
+          <span class="savedinfo" id="savedinfo"></span>
+        </div>
         <p class="hint">To branch off, click an earlier step, or click an article of this trail in the graph.</p>
       </div>
     </section>
@@ -44,6 +49,7 @@
     <section class="win grow" id="w-trails">
       <div class="title"><span class="ico ico-folder"></span><span class="tt" id="tt-trails" data-page="101">Trails</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
       <div class="body list-body">
+        <input id="tsearch" class="tsearch" placeholder="Search trails and articles…" autocomplete="off">
         <div class="listview" id="trails"></div>
       </div>
       <div class="statusbar"><span id="tcount">0</span><span>Hover = show · Click = continue</span></div>
@@ -53,7 +59,12 @@
   <section class="win big" id="w-brain">
     <div class="title"><span class="ico ico-brain"></span><span class="tt" id="tt-brain" data-page="102">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
     <div class="menubar">
-      <button class="mi" id="fit"><u>F</u>it</button>
+      <button class="mi" id="fit" title="Fit the graph to the window">Fit</button>
+      <button class="mi" id="maxbtn" title="Maximize the graph (F)">⛶ Maximize</button>
+      <label class="mi viewctl" title="How many connections and labels to show">Density <input type="range" id="density" min="0.3" max="2.5" step="0.1" value="1"></label>
+      <label class="mi viewctl" title="Dim connections you have not used in a while"><input type="checkbox" id="fade" checked> Fade old</label>
+      <button class="mi" id="relayout" title="Compute a fresh layout for the whole map">↻ Re-layout</button>
+      <span class="focuschip" id="focuschip" hidden></span>
       <span class="mi legend"><span class="ln thin"></span>1 click</span>
       <span class="mi legend"><span class="ln thick"></span>many clicks</span>
       <span class="mi legend"><span class="sq start"></span>trail start</span>
@@ -64,7 +75,7 @@
     </div>
     <div class="crt" id="stage">
       <canvas id="fx"></canvas>
-      <svg id="svg" aria-label="Graph of Wikipedia trails"></svg>
+      <canvas id="graph" aria-label="Graph of Wikipedia trails"></canvas>
       <div class="ticker" id="ticker"><span></span></div>
       <div class="banner" id="banner"></div>
       <div class="toast" id="toast"></div>
@@ -77,6 +88,11 @@
       </div>
       <div class="dialog" id="card"></div>
     </div>
+    <div class="timeline" id="timeline">
+      <div class="tl-presets"><button class="mi" data-range="30">30 days</button><button class="mi" data-range="365">1 year</button><button class="mi on" data-range="all">All</button></div>
+      <svg id="tlsvg" aria-label="Timeline"></svg>
+      <span class="tl-label" id="tllabel"></span>
+    </div>
     <div class="statusbar"><span id="status">Ready.</span><span id="stats"></span></div>
   </section>
 </main>
@@ -88,11 +104,13 @@
     <div class="items">
       <button class="it" id="skinsmenu"><span class="ico ico-paint"></span>Skins… <small>S</small></button>
       <hr>
-      <button class="it" id="testdata"><span class="ico ico-brain"></span>Load test data <small>1,000 real clicks</small></button>
+      <button class="it" id="testdata"><span class="ico ico-brain"></span>Load test data <small>30 days · 1,000 clicks</small></button>
+      <button class="it" id="testdata2"><span class="ico ico-brain"></span>Load test data <small>2 years · 20,000 clicks</small></button>
       <button class="it" id="example"><span class="ico ico-pen"></span>Load small example</button>
       <hr>
-      <button class="it" id="export"><span class="ico ico-disk"></span><span id="lbl-export">Export JSON…</span></button>
-      <label class="it" for="import"><span class="ico ico-folder"></span><span id="lbl-import">Import JSON…</span></label>
+      <button class="it" id="export"><span class="ico ico-disk"></span><span id="lbl-export">Save history…</span><small>Ctrl+S</small></button>
+      <button class="it" id="saveas"><span class="ico ico-disk"></span>Save as…</button>
+      <button class="it" id="importbtn"><span class="ico ico-folder"></span><span id="lbl-import">Open history…</span><small>Ctrl+O</small></button>
       <input type="file" id="import" accept="application/json,.json" hidden>
       <hr>
       <label class="it"><span class="ico ico-sound"></span>Sound effects <input type="checkbox" id="sound"></label>
@@ -110,8 +128,24 @@
     <span class="task on"><span class="ico ico-brain"></span><span id="task-brain">BRAIN.EXE</span></span>
     <span class="task"><span class="ico ico-pen"></span><span id="task-builder">TRAILBLZ.EXE</span></span>
   </div>
-  <div class="tray"><span class="ico ico-sound"></span><span id="clock">--:--</span></div>
+  <div class="tray"><span id="trayinfo"></span><span class="ico ico-sound"></span><span id="clock">--:--</span></div>
 </footer>
+
+<div class="gallery" id="opendlg" hidden>
+  <section class="win dlg" role="dialog" aria-modal="true" aria-labelledby="od-title">
+    <div class="title"><span class="ico ico-folder"></span><span class="tt" id="od-title">Open history</span><span class="tb"><i>_</i><i>□</i><i id="odclose" style="cursor:pointer">×</i></span></div>
+    <div class="body">
+      <p id="od-text"></p>
+      <div class="btns">
+        <button class="btn default" id="od-merge">Merge into my history</button>
+        <button class="btn" id="od-replace">Replace my history</button>
+        <button class="btn" id="od-cancel">Cancel</button>
+      </div>
+      <p class="hint">Merge keeps everything you have and adds the trails from the file. Replace switches to the file completely (Undo can bring yours back).</p>
+    </div>
+  </section>
+</div>
+<div class="dropzone" id="dropzone" hidden><div>Drop a Wiki Trails history file to open it</div></div>
 
 <div class="gallery" id="gallery" hidden>
   <section class="win" role="dialog" aria-modal="true" aria-labelledby="gal-title">

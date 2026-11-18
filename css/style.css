@@ -137,8 +137,8 @@ button.mi:hover { background: var(--sel-bg); color: var(--sel-fg); }
 .crt::after { content: ''; position: absolute; inset: 2px; pointer-events: none; z-index: 3; background: var(--vignette); animation: var(--flicker); border-radius: inherit; }
 @keyframes flicker { 0%, 100% { opacity: 1; } 47% { opacity: .9; } 48% { opacity: 1; } 83% { opacity: .94; } 84% { opacity: 1; } }
 #fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
-.crt svg { position: relative; z-index: 1; width: 100%; height: 100%; display: block; cursor: crosshair; }
-.crt svg:active { cursor: move; }
+#graph { position: relative; z-index: 1; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#graph:active { cursor: grabbing; }
 
 .link { fill: none; stroke: var(--link); stroke-linecap: round; transition: opacity .2s; }
 .link.dim { opacity: .07; }
@@ -278,3 +278,42 @@ button.mi:hover { background: var(--sel-bg); color: var(--sel-fg); }
   .win.big { min-height: 70vh; }
   .tasks { display: none; }
 }
+
+/* --- view controls, focus, maximize --- */
+.viewctl { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.viewctl input[type=range] { width: 90px; padding: 0; box-shadow: none; border: none; background: transparent; accent-color: var(--accent); }
+.viewctl input[type=checkbox] { width: auto; margin: 0; }
+.focuschip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--sel-bg); color: var(--sel-fg); border-radius: var(--btn-radius); cursor: pointer; }
+.focuschip[hidden] { display: none; }
+html[data-max] .col { display: none; }
+html[data-max] .desk { padding: 6px; }
+#maxbtn.on { background: var(--sel-bg); color: var(--sel-fg); }
+
+/* --- time lens --- */
+.timeline { display: flex; align-items: center; gap: 6px; height: 46px; padding: 4px 2px 0; }
+.tl-presets { display: flex; flex-direction: column; gap: 1px; font-size: .82em; }
+.tl-presets .mi { padding: 0 6px; text-align: left; }
+.tl-presets .mi.on { background: var(--sel-bg); color: var(--sel-fg); }
+#tlsvg { flex: 1; height: 42px; min-width: 0; background: var(--field-bg); border: var(--field-border); box-shadow: var(--field-shadow); border-radius: var(--field-radius); }
+#tlsvg .bar { fill: var(--accent); opacity: .75; }
+#tlsvg .selection { fill: var(--cursor); fill-opacity: .18; stroke: var(--cursor); }
+#tlsvg .handle { fill: var(--cursor); }
+#tlsvg .axis text { fill: var(--muted); font: 10px var(--font-ui); }
+#tlsvg .axis line, #tlsvg .axis path { stroke: var(--muted); opacity: .5; }
+.tl-label { font-size: .82em; color: var(--muted); width: 130px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- files --- */
+.filebtns { align-items: center; }
+.savedinfo { font-size: .82em; color: var(--muted); }
+.savedinfo.due { color: var(--cursor); font-weight: 600; }
+#trayinfo { font-size: .9em; }
+#trayinfo.due { color: var(--cursor); font-weight: 600; cursor: pointer; }
+.gallery > .win.dlg { width: min(520px, 94vw); height: auto; }
+.dropzone { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); pointer-events: none; }
+.dropzone[hidden] { display: none; }
+.dropzone div { padding: 30px 40px; border: 3px dashed #fff; color: #fff; font: 600 20px var(--font-ui); border-radius: 12px; }
+
+/* --- trail list search --- */
+.list-body { flex-direction: column; gap: 6px; }
+.tsearch { flex: none; }
+.tr.more { cursor: default; opacity: .7; font-size: .85em; justify-content: center; border: none; }
