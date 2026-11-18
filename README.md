@@ -6,6 +6,8 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 
 ![A pinned trail with step numbers](.github/screenshot-trail.png)
 
+![The five skins](.github/skins.png)
+
 ## Features
 
 - **Guided trail builder.** Paste the first page's URL or type its title, then answer “Link 2”, “Link 3”, …
@@ -15,6 +17,7 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 - **“How did I get here?”** Hover any article to see every route that led to it, coloured by trail, with animated direction.
 - **Full journeys.** Hover a trail's start article, or a trail in the sidebar, to see that journey from start to every end, with step numbers.
 - **Pin and zoom.** Click an article or a trail to keep its highlight and zoom in to it; press <kbd>Esc</kbd> or click the background to zoom back out.
+- **Skins (optional).** Windows 95 is the default. You can switch to *Synthwave '84*, *Game Boy*, *System 7* or *Amber Terminal* from the Start menu or the skin picker in BRAIN.EXE's menu bar. Each skin has its own graph palette, and your choice is remembered. Window chrome lives in `css/skins.css`, graph colours in `js/skins.js`, so adding a skin means one CSS block plus one entry in that list.
 - **Test data.** Start → *Load test data* loads 1,000 real clicks from 176 human Wikispeedia trails (see below).
 - **Your data stays local.** Trails are stored in your browser (`localStorage`), with JSON export and import. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
 
@@ -80,7 +83,9 @@ Each trail is a tree of visits. A visit's `parent` is the page you clicked from,
 
 ```
 index.html        page shell
-css/style.css     styles
+css/style.css     base styles (Windows 95 skin)
+css/skins.css     optional skins
+js/skins.js       skin list + graph palettes
 js/model.js       data model and derived graph (articles, weighted links, routes)
 js/graph.js       d3 force layout, rendering, highlights
 js/main.js        UI: builder, trail list, article card, import/export

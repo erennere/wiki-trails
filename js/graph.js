@@ -4,7 +4,7 @@ const d3 = window.d3;
 
 // VGA bright palette
 export const TRAIL_COLORS = ['#ffff55', '#55ffff', '#ff55ff', '#ff5555', '#55ff55', '#ffaa00', '#7f7fff', '#ffffff', '#ff9ecf', '#aaff00'];
-const HUB = d3.interpolateRgbBasis(['#1d6b36', '#2fd35a', '#a8ff4d', '#ffe14d', '#ffaa00']);
+let HUB = d3.interpolateRgbBasis(['#1d6b36', '#2fd35a', '#a8ff4d', '#ffe14d', '#ffaa00']);
 
 const radius = (n) => Math.round(3 + 1.9 * Math.sqrt(n.visits));
 const width = (l) => Math.min(11, 0.7 + 1.9 * Math.log2(1 + l.total));
@@ -225,5 +225,13 @@ export function createGraph(svgEl, handlers) {
     tick(); fit(false); sim.alpha(0.05).restart();
   }
 
-  return { update, setHighlight, setCursor, fit, focusOn, settleAndFit, hasNode: (t) => nodeBy.has(t) };
+  /** Swap colours for a skin: hub = node gradient, trails = trail colours. */
+  function setPalette({ hub, trails }) {
+    HUB = d3.interpolateRgbBasis(hub);
+    TRAIL_COLORS.splice(0, TRAIL_COLORS.length, ...trails);
+    gNodes.selectAll('g.node').select('rect.core').attr('fill', (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg)));
+    if (over) drawOverlay(true);
+  }
+
+  return { update, setPalette, setHighlight, setCursor, fit, focusOn, settleAndFit, hasNode: (t) => nodeBy.has(t) };
 }

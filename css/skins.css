@@ -1,0 +1,199 @@
+/* =====================================================================
+   Optional skins. Default (no override) = Windows 95, in style.css.
+   Each skin sets the graph's CSS variables, then restyles the chrome.
+   ===================================================================== */
+
+/* ---------- Synthwave '84 ---------- */
+html[data-skin="synth"] {
+  --link: #2de2e6; --label: #fbe9ff; --label-bg: #12002a; --label-start: #fff200; --cursor: #fff200;
+  --label-font: 'Orbitron', sans-serif; --hub-lo: #5a189a; --hub-hi: #fff200;
+  --ui: 'Orbitron', sans-serif;
+}
+html[data-skin="synth"] body {
+  color: #fbe9ff; font-size: 13px;
+  background:
+    linear-gradient(transparent 0 58%, rgba(255, 42, 109, .0) 58%),
+    repeating-linear-gradient(90deg, rgba(255, 47, 208, .35) 0 1px, transparent 1px 60px) 0 100% / 100% 42% no-repeat,
+    repeating-linear-gradient(0deg, rgba(255, 47, 208, .35) 0 1px, transparent 1px 28px) 0 100% / 100% 42% no-repeat,
+    radial-gradient(circle at 50% 58%, #ffcf3f 0 7%, #ff2a6d 7.2% 13%, transparent 13.5%),
+    linear-gradient(#0b0221 0%, #2b0b4f 45%, #a1137b 58%, #12002a 58.2%, #0b0221 100%);
+}
+html[data-skin="synth"] :is(.win, .btn, .startmenu, .dialog, .taskbar .start, .task) {
+  background: rgba(18, 0, 42, .86); box-shadow: 0 0 0 1px #ff2fd0, 0 0 14px rgba(255, 47, 208, .45); border-radius: 6px; color: #fbe9ff;
+}
+html[data-skin="synth"] .win { backdrop-filter: blur(4px); }
+html[data-skin="synth"] .title { background: linear-gradient(90deg, #ff2a6d, #7b2ff7); border-radius: 4px 4px 0 0; letter-spacing: 2px; text-transform: uppercase; font-size: 12px; }
+html[data-skin="synth"] .title .tb i { background: transparent; box-shadow: 0 0 0 1px #fff; color: #fff; border-radius: 50%; width: 14px; height: 14px; font-size: 9px; }
+html[data-skin="synth"] .btn { color: #2de2e6; box-shadow: 0 0 0 1px #2de2e6, 0 0 10px rgba(45, 226, 230, .4); background: transparent; text-transform: uppercase; font-size: 11.5px; letter-spacing: 1px; }
+html[data-skin="synth"] .btn:active:not(:disabled), html[data-skin="synth"] .btn.pressed { background: #2de2e6; color: #12002a; box-shadow: 0 0 18px #2de2e6; }
+html[data-skin="synth"] .btn.default { outline: none; color: #fff200; box-shadow: 0 0 0 1px #fff200, 0 0 12px rgba(255, 242, 0, .45); }
+html[data-skin="synth"] .btn:disabled { color: #6b4f86; text-shadow: none; box-shadow: 0 0 0 1px #4a2b6b; }
+html[data-skin="synth"] :is(input, select, .listview, #crumbs) { background: #0b0019; color: #fbe9ff; box-shadow: 0 0 0 1px #7b2ff7; border-radius: 3px; }
+html[data-skin="synth"] :is(.hint, .msg, .tr .mt, .legend, .it small, .dialog .w) { color: #b9a3d6; }
+html[data-skin="synth"] #qlabel em, html[data-skin="synth"] .dialog li a, html[data-skin="synth"] .dialog a.ext { color: #2de2e6; }
+html[data-skin="synth"] :is(.c.cur, .tr.active, .tr.pinned, .it:hover, button.mi:hover) { background: linear-gradient(90deg, #ff2a6d, #7b2ff7); color: #fff; }
+html[data-skin="synth"] .tr:hover, html[data-skin="synth"] .c:hover { border-color: #ff2fd0; }
+html[data-skin="synth"] .mi { color: #fbe9ff; }
+html[data-skin="synth"] .statusbar span, html[data-skin="synth"] .tray { box-shadow: 0 0 0 1px #4a2b6b; color: #d8c4f0; }
+html[data-skin="synth"] .crt { background: radial-gradient(ellipse at 50% 40%, #2a0a4a 0%, #0b0221 70%); box-shadow: 0 0 0 1px #ff2fd0; border-radius: 4px; }
+html[data-skin="synth"] .crt::before { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .18) 0 1px, transparent 1px 4px); }
+html[data-skin="synth"] .dialog .mode { background: rgba(255, 242, 0, .1); border-color: #fff200; color: #fff6a0; }
+html[data-skin="synth"] .dialog fieldset { border-color: #7b2ff7; box-shadow: none; }
+html[data-skin="synth"] .taskbar { background: rgba(11, 2, 33, .92); box-shadow: 0 -1px #ff2fd0, 0 -6px 18px rgba(255, 47, 208, .35); }
+html[data-skin="synth"] .task.on { background: rgba(255, 47, 208, .2); }
+html[data-skin="synth"] .startmenu .side { background: linear-gradient(0deg, #ff2a6d, #7b2ff7); color: #fff200; }
+html[data-skin="synth"] .startmenu hr { border-color: #4a2b6b transparent transparent; }
+html[data-skin="synth"] .empty { text-shadow: 0 0 10px #2de2e6; font-size: 16px; letter-spacing: 1px; }
+html[data-skin="synth"] #boot { background: linear-gradient(#0b0221, #2b0b4f); color: #ff2fd0; }
+html[data-skin="synth"] #boot pre { font-family: 'Orbitron', sans-serif; font-size: 18px; text-shadow: 0 0 10px #ff2fd0; }
+html[data-skin="synth"] #boot .ok { color: #2de2e6; }
+
+/* ---------- Game Boy ---------- */
+html[data-skin="gameboy"] {
+  --gb0: #0f380f; --gb1: #306230; --gb2: #8bac0f; --gb3: #9bbc0f;
+  --link: #306230; --label: #0f380f; --label-bg: #9bbc0f; --label-start: #0f380f; --cursor: #8e2a5c;
+  --label-font: 'Press Start 2P', monospace; --hub-lo: #8bac0f; --hub-hi: #0f380f;
+  --ui: 'Press Start 2P', monospace;
+}
+html[data-skin="gameboy"] body { font-size: 9.5px; line-height: 1.6; color: var(--gb0); background: #c4c0b8; background-image: radial-gradient(rgba(0, 0, 0, .06) 1px, transparent 1px); background-size: 3px 3px; }
+html[data-skin="gameboy"] :is(.win, .startmenu, .dialog) { background: #b1ada3; box-shadow: inset 0 0 0 2px #8b8780, 0 3px 0 #8b8780; border-radius: 8px 8px 28px 8px; padding: 8px; }
+html[data-skin="gameboy"] .title { background: none; color: #23238a; font-style: italic; font-size: 10px; padding: 0 2px 6px; }
+html[data-skin="gameboy"] .title .tb { display: none; }
+html[data-skin="gameboy"] .title .ico { display: none; }
+html[data-skin="gameboy"] .body, html[data-skin="gameboy"] .list-body, html[data-skin="gameboy"] .dialog .inner { background: var(--gb3); border-radius: 3px; box-shadow: inset 0 0 0 3px #5f5a6e, inset 0 0 0 10px var(--gb3); padding: 14px; }
+html[data-skin="gameboy"] .btn, html[data-skin="gameboy"] .taskbar .start {
+  background: #8e2a5c; color: #f3e6ec; border-radius: 999px; box-shadow: 0 3px 0 #5c1a3b; font-size: 8.5px; padding: 8px 12px 6px; text-transform: uppercase; }
+html[data-skin="gameboy"] .btn:active:not(:disabled), html[data-skin="gameboy"] .btn.pressed { box-shadow: 0 1px 0 #5c1a3b; transform: translateY(2px); padding: 8px 12px 6px; }
+html[data-skin="gameboy"] .btn.default { outline: none; background: #6d1f46; }
+html[data-skin="gameboy"] .btn:disabled { background: #9c8b93; color: #d8d0d4; text-shadow: none; box-shadow: 0 3px 0 #7c6e75; }
+html[data-skin="gameboy"] :is(input, select, .listview, #crumbs) { background: var(--gb2); color: var(--gb0); box-shadow: inset 0 0 0 2px var(--gb1); font-size: 9px; }
+html[data-skin="gameboy"] input::placeholder { color: var(--gb1); }
+html[data-skin="gameboy"] :is(.hint, .msg, .tr .mt, .legend, .it small, .dialog .w, .c i) { color: var(--gb1); }
+html[data-skin="gameboy"] .tr .nm, html[data-skin="gameboy"] .c { font-size: 9px; }
+html[data-skin="gameboy"] :is(.c.cur, .tr.active, .tr.pinned, .it:hover, button.mi:hover) { background: var(--gb0); color: var(--gb3); }
+html[data-skin="gameboy"] .tr.active .mt, html[data-skin="gameboy"] .tr.pinned .mt { color: var(--gb2); }
+html[data-skin="gameboy"] #qlabel em, html[data-skin="gameboy"] .dialog li a, html[data-skin="gameboy"] .dialog a.ext { color: var(--gb0); }
+html[data-skin="gameboy"] .menubar { font-size: 8.5px; }
+html[data-skin="gameboy"] .mi { color: var(--gb0); }
+html[data-skin="gameboy"] .statusbar { font-size: 8.5px; padding-top: 6px; }
+html[data-skin="gameboy"] .statusbar span, html[data-skin="gameboy"] .tray { box-shadow: none; color: #4a4658; }
+html[data-skin="gameboy"] .crt {
+  background-color: var(--gb3);
+  background-image: linear-gradient(rgba(15, 56, 15, .07) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 56, 15, .07) 1px, transparent 1px);
+  background-size: 4px 4px; box-shadow: inset 0 0 0 4px #5f5a6e, inset 0 0 0 6px var(--gb2); border-radius: 4px; }
+html[data-skin="gameboy"] .crt::before, html[data-skin="gameboy"] .crt::after { display: none; }
+html[data-skin="gameboy"] .node .lbl { stroke-width: 3px; }
+html[data-skin="gameboy"] .lane-glow { display: none; }
+html[data-skin="gameboy"] .empty { text-shadow: none; font-size: 11px; line-height: 2; color: var(--gb0); }
+html[data-skin="gameboy"] .dialog .mode { background: var(--gb2); border-color: var(--gb0); }
+html[data-skin="gameboy"] .dialog fieldset { border: 2px solid var(--gb1); box-shadow: none; }
+html[data-skin="gameboy"] .taskbar { background: #b1ada3; box-shadow: inset 0 2px #8b8780; }
+html[data-skin="gameboy"] .task { box-shadow: none; color: #4a4658; font-size: 8.5px; }
+html[data-skin="gameboy"] .task.on { background: none; color: #23238a; }
+html[data-skin="gameboy"] .startmenu .side { background: #23238a; color: #b1ada3; font-size: 11px; border-radius: 4px; }
+html[data-skin="gameboy"] .startmenu .items { background: var(--gb3); border-radius: 3px; }
+html[data-skin="gameboy"] .it { font-size: 9px; color: var(--gb0); }
+html[data-skin="gameboy"] .it .ico { display: none; }
+html[data-skin="gameboy"] #boot { background: var(--gb3); color: var(--gb0); display: grid; place-items: center; }
+html[data-skin="gameboy"] #boot pre { font: 14px/2 'Press Start 2P', monospace; text-align: center; }
+html[data-skin="gameboy"] #boot .ok { color: var(--gb1); }
+
+/* ---------- System 7 ---------- */
+html[data-skin="mac"] {
+  --link: #000000; --label: #000000; --label-bg: #ffffff; --label-start: #000000; --cursor: #000000;
+  --label-font: 'Pixelify Sans', 'Chicago', sans-serif; --hub-lo: #bbbbbb; --hub-hi: #000000;
+}
+html[data-skin="mac"] body { background: #a8a8a8; background-image: repeating-conic-gradient(#888 0 25%, #c8c8c8 0 50%); background-size: 2px 2px; }
+html[data-skin="mac"] :is(.win, .startmenu, .dialog) { background: #fff; box-shadow: 0 0 0 1px #000, 2px 2px 0 1px #000; padding: 0; }
+html[data-skin="mac"] .title {
+  color: #000; justify-content: center; position: relative; padding: 2px 6px; font-weight: 600; border-bottom: 1px solid #000;
+  background: repeating-linear-gradient(#000 0 1px, #fff 1px 2px) 0 4px / 100% 11px no-repeat, #fff; }
+html[data-skin="mac"] .title .ico { display: none; }
+html[data-skin="mac"] .title::before { content: ''; position: absolute; left: 8px; top: 3px; width: 13px; height: 13px; background: #fff; box-shadow: 0 0 0 1px #000, 0 0 0 3px #fff; }
+html[data-skin="mac"] .title .tb { display: none; }
+html[data-skin="mac"] .title .tt { background: #fff; padding: 0 8px; position: relative; }
+html[data-skin="mac"] .dialog .title .x { position: absolute; left: 6px; top: 2px; width: 13px; height: 13px; font-size: 0; background: #fff; box-shadow: 0 0 0 1px #000; }
+html[data-skin="mac"] .dialog .title::before { display: none; }
+html[data-skin="mac"] .btn, html[data-skin="mac"] .taskbar .start { background: #fff; box-shadow: 0 0 0 1px #000; border-radius: 6px; padding: 4px 12px 3px; }
+html[data-skin="mac"] .btn:active:not(:disabled), html[data-skin="mac"] .btn.pressed { background: #000; color: #fff; padding: 4px 12px 3px; box-shadow: 0 0 0 1px #000; }
+html[data-skin="mac"] .btn.default { outline: none; box-shadow: 0 0 0 1px #000, 0 0 0 3px #fff, 0 0 0 5px #000; margin: 0 4px; }
+html[data-skin="mac"] .btn:disabled { color: #999; text-shadow: none; }
+html[data-skin="mac"] :is(input, select, .listview, #crumbs) { box-shadow: 0 0 0 1px #000; }
+html[data-skin="mac"] :is(.c.cur, .tr.active, .tr.pinned, .it:hover, button.mi:hover) { background: #000; color: #fff; }
+html[data-skin="mac"] .tr.active .mt, html[data-skin="mac"] .tr.pinned .mt { color: #ccc; }
+html[data-skin="mac"] #qlabel em, html[data-skin="mac"] .dialog li a, html[data-skin="mac"] .dialog a.ext { color: #000; }
+html[data-skin="mac"] .menubar { border-bottom: 1px solid #000; padding: 3px 4px; }
+html[data-skin="mac"] .statusbar { border-top: 1px solid #000; padding: 2px; }
+html[data-skin="mac"] .statusbar span, html[data-skin="mac"] .tray { box-shadow: none; }
+html[data-skin="mac"] .crt { background: #fff; box-shadow: none; padding: 0; }
+html[data-skin="mac"] .crt::before, html[data-skin="mac"] .crt::after { display: none; }
+html[data-skin="mac"] .link.dim { opacity: .1; }
+html[data-skin="mac"] .lane-glow { display: none; }
+html[data-skin="mac"] .empty { text-shadow: none; color: #000; font-family: 'Pixelify Sans', sans-serif; font-size: 16px; }
+html[data-skin="mac"] .dialog .mode { background: #fff; border: 1px dotted #000; }
+html[data-skin="mac"] .dialog fieldset { border: 1px solid #000; box-shadow: none; }
+html[data-skin="mac"] .taskbar { order: -1; height: 26px; background: #fff; box-shadow: 0 1px #000; padding: 0 8px; }
+html[data-skin="mac"] .taskbar .start { box-shadow: none; border-radius: 0; font-size: 0; padding: 2px 10px; }
+html[data-skin="mac"] .taskbar .start .flag { width: 15px; height: 15px; background: conic-gradient(#61bb46 0 16%, #fdb827 0 33%, #f5821f 0 50%, #e03a3e 0 66%, #963d97 0 83%, #009ddc 0); border-radius: 50% 50% 45% 45%; }
+html[data-skin="mac"] .startmenu { top: 26px; bottom: auto; }
+html[data-skin="mac"] .startmenu .side { display: none; }
+html[data-skin="mac"] .task { box-shadow: none; width: auto; font-weight: 600; }
+html[data-skin="mac"] .task.on { background: none; }
+html[data-skin="mac"] .task .ico { display: none; }
+html[data-skin="mac"] #boot { background: #fff; color: #000; display: grid; place-items: center; }
+html[data-skin="mac"] #boot pre { font: 16px/1.6 'Pixelify Sans', sans-serif; text-align: center; padding: 26px 40px; box-shadow: 0 0 0 1px #000, 2px 2px 0 1px #000; }
+html[data-skin="mac"] #boot .ok { color: #000; }
+
+/* ---------- Amber Terminal ---------- */
+html[data-skin="amber"] {
+  --amb: #ffb000; --amb-dim: #7a5300;
+  --link: #ffb000; --label: #ffd27a; --label-bg: #0d0800; --label-start: #fff2cc; --cursor: #ffffff;
+  --label-font: 'VT323', monospace; --hub-lo: #5a3a00; --hub-hi: #fff2cc;
+  --ui: 'VT323', monospace;
+}
+html[data-skin="amber"] body { font-size: 18px; line-height: 1.15; color: var(--amb); background: #0d0800; text-shadow: 0 0 4px rgba(255, 176, 0, .55); }
+html[data-skin="amber"] body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .3) 0 1px, transparent 1px 3px), radial-gradient(ellipse, transparent 60%, rgba(0, 0, 0, .6)); }
+html[data-skin="amber"] :is(.win, .startmenu, .dialog) { background: #0d0800; box-shadow: none; border: 4px double var(--amb); padding: 0; }
+html[data-skin="amber"] .title { background: var(--amb); color: #0d0800; text-shadow: none; font-weight: 400; font-size: 18px; padding: 0 6px; }
+html[data-skin="amber"] .title .ico { display: none; }
+html[data-skin="amber"] .title::before { content: '═[■]═'; margin-right: 4px; }
+html[data-skin="amber"] .title .tb { display: none; }
+html[data-skin="amber"] .btn, html[data-skin="amber"] .taskbar .start { background: none; box-shadow: none; color: var(--amb); font-size: 18px; padding: 0 2px; min-width: 0; }
+html[data-skin="amber"] .btn::before { content: '[ '; }
+html[data-skin="amber"] .btn::after { content: ' ]'; }
+html[data-skin="amber"] .btn:hover:not(:disabled), html[data-skin="amber"] .btn:active:not(:disabled), html[data-skin="amber"] .btn.pressed { background: var(--amb); color: #0d0800; text-shadow: none; padding: 0 2px; box-shadow: none; }
+html[data-skin="amber"] .btn.default { outline: none; font-weight: 400; }
+html[data-skin="amber"] .btn:disabled { color: var(--amb-dim); text-shadow: none; }
+html[data-skin="amber"] :is(input, select) { background: #0d0800; color: var(--amb); box-shadow: none; border-bottom: 2px solid var(--amb); font-size: 18px; padding: 3px 4px; }
+html[data-skin="amber"] input::placeholder { color: var(--amb-dim); }
+html[data-skin="amber"] :is(.listview, #crumbs) { background: #0d0800; box-shadow: none; border: 1px dashed var(--amb-dim); }
+html[data-skin="amber"] :is(.hint, .msg, .tr .mt, .legend, .it small, .dialog .w, .c i) { color: #c98a00; }
+html[data-skin="amber"] .hint, html[data-skin="amber"] .tr .mt { font-size: 16px; }
+html[data-skin="amber"] .tr .nm, html[data-skin="amber"] .c { font-size: 18px; }
+html[data-skin="amber"] :is(.c.cur, .tr.active, .tr.pinned, .it:hover, button.mi:hover) { background: var(--amb); color: #0d0800; text-shadow: none; }
+html[data-skin="amber"] .tr.active .mt, html[data-skin="amber"] .tr.pinned .mt { color: #3a2600; }
+html[data-skin="amber"] #qlabel em, html[data-skin="amber"] .dialog li a, html[data-skin="amber"] .dialog a.ext { color: #fff2cc; }
+html[data-skin="amber"] .mi { color: var(--amb); font-size: 18px; }
+html[data-skin="amber"] .menubar { border-bottom: 1px dashed var(--amb-dim); }
+html[data-skin="amber"] .statusbar { border-top: 1px dashed var(--amb-dim); font-size: 17px; }
+html[data-skin="amber"] .statusbar span, html[data-skin="amber"] .tray { box-shadow: none; }
+html[data-skin="amber"] .crt { background: radial-gradient(ellipse at 50% 45%, #1c1100, #0d0800 70%); box-shadow: none; }
+html[data-skin="amber"] .crt::before { background: none; }
+html[data-skin="amber"] .dialog .mode { background: none; border: 1px dashed var(--amb); color: var(--amb); }
+html[data-skin="amber"] .dialog fieldset { border: 1px dashed var(--amb-dim); box-shadow: none; }
+html[data-skin="amber"] .taskbar { background: var(--amb); box-shadow: none; color: #0d0800; text-shadow: none; }
+html[data-skin="amber"] .taskbar .start { color: #0d0800; text-shadow: none; }
+html[data-skin="amber"] .taskbar .start::before { content: 'F1 '; }
+html[data-skin="amber"] .taskbar .start::after { content: ''; }
+html[data-skin="amber"] .taskbar .start .flag { display: none; }
+html[data-skin="amber"] .task, html[data-skin="amber"] .tray { box-shadow: none; font-size: 18px; color: #0d0800; }
+html[data-skin="amber"] .task.on { background: none; text-decoration: underline; }
+html[data-skin="amber"] .task .ico, html[data-skin="amber"] .tray .ico, html[data-skin="amber"] .it .ico { display: none; }
+html[data-skin="amber"] .startmenu .side { background: var(--amb); color: #0d0800; text-shadow: none; }
+html[data-skin="amber"] .it { font-size: 18px; color: var(--amb); }
+html[data-skin="amber"] .it.danger:hover { background: #ff5f1f; }
+html[data-skin="amber"] .startmenu hr { border-color: var(--amb-dim) transparent transparent; border-style: dashed; }
+html[data-skin="amber"] #boot { background: #0d0800; color: var(--amb); }
+html[data-skin="amber"] #boot .ok { color: #fff2cc; }
+
+#boot[hidden] { display: none !important; }

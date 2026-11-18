@@ -2,6 +2,7 @@ import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, tra
 import { loadInitial, saveLocal, exportFile, importFile } from './storage.js';
 import { createGraph, TRAIL_COLORS } from './graph.js';
 import { exampleState } from './example.js';
+import { SKINS, savedSkin, skinById, rememberSkin } from './skins.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -220,7 +221,7 @@ function openCard(title) {
   }
   const list = (arr) => arr.length ? `<ul>${arr.sort((x, y) => y[1] - x[1]).slice(0, 8).map(([t, n]) => `<li><a data-go="${esc(t)}">${esc(t)}</a><span class="w">×${n}</span></li>`).join('')}</ul>` : '<ul><li>none</li></ul>';
   const mode = a.starts.size ? `Start of ${a.starts.size} trail${a.starts.size === 1 ? '' : 's'}: showing every full journey from here, plus every route that led here.` : 'Showing every route that led here.';
-  $('card').innerHTML = `<div class="title"><span class="ico ico-brain"></span>Properties: ${esc(title)}<button class="x" id="cx" aria-label="Close">×</button></div>
+  $('card').innerHTML = `<div class="title"><span class="ico ico-brain"></span><span class="tt">Properties: ${esc(title)}</span><button class="x" id="cx" aria-label="Close">×</button></div>
     <div class="inner">
     <div class="meta"><b>${esc(title)}</b><br>${a.visits} visit${a.visits === 1 ? '' : 's'} · ${a.trails.size} trail${a.trails.size === 1 ? '' : 's'}</div>
     <div class="mode">${mode}</div>
@@ -279,6 +280,22 @@ $('example').onclick = loadExample;
 $('testdata').onclick = loadTestData;
 $('example2').onclick = loadTestData;
 
+/* ---------- skins ---------- */
+let skin = savedSkin();
+function applySkin(id, persist = true) {
+  skin = skinById(id);
+  document.documentElement.dataset.skin = skin.id;
+  graph.setPalette(skin);
+  for (const sel of document.querySelectorAll('.skin-select')) sel.value = skin.id;
+  if (persist) rememberSkin(skin.id);
+  renderTrails(); applyHighlight();
+}
+for (const sel of document.querySelectorAll('.skin-select')) {
+  sel.innerHTML = SKINS.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  sel.onchange = () => applySkin(sel.value);
+}
+applySkin(skin.id, false);
+
 /* ---------- start menu, clock, status, boot ---------- */
 function closeStart() { $('startmenu').hidden = true; $('startbtn').classList.remove('pressed'); $('startbtn').setAttribute('aria-expanded', 'false'); }
 $('startbtn').onclick = (e) => { e.stopPropagation(); const open = $('startmenu').hidden; $('startmenu').hidden = !open; $('startbtn').classList.toggle('pressed', open); $('startbtn').setAttribute('aria-expanded', String(open)); };
@@ -298,7 +315,7 @@ function boot() {
   let seen = false; try { seen = sessionStorage.getItem('wt-boot'); sessionStorage.setItem('wt-boot', '1'); } catch {}
   if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
   const el = $('boot'), log = $('bootlog'); el.hidden = false;
-  const lines = ['WIKITRAILS BIOS v2.0  (C) 1996 Hyperlink Systems', '', 'Memory test: 640K OK', 'Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', 'Mounting C:\\WIKI\\TRAILS....... <span class="ok">OK</span>', '', 'Starting Wiki Trails 95...'];
+  const lines = [...skin.boot, 'Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', 'Mounting C:\\WIKI\\TRAILS....... <span class="ok">OK</span>', '', 'Starting Wiki Trails 95...'];
   return new Promise((res) => {
     let i = 0; const done = () => { clearInterval(iv); el.hidden = true; res(); };
     const iv = setInterval(() => { log.innerHTML += lines[i++] + '\n'; if (i >= lines.length) { clearInterval(iv); setTimeout(done, 450); } }, 140);

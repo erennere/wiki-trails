@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-skin="win95">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -8,8 +8,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23031a0a'/%3E%3Crect x='2' y='3' width='3' height='3' fill='%23ffe14d'/%3E%3Crect x='11' y='2' width='3' height='3' fill='%2339ff88'/%3E%3Crect x='7' y='10' width='4' height='4' fill='%23ffaa00'/%3E%3Cpath d='M4 5L12 4M4 5L9 11M12 4L9 11' stroke='%2339ff88'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/skins.css">
+<script>try{var s=localStorage.getItem("wiki-trails.skin");if(s)document.documentElement.dataset.skin=s}catch(e){}</script>
 <script src="vendor/d3.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </head>
@@ -19,7 +21,7 @@
 <main class="desk">
   <div class="col">
     <section class="win" id="w-builder">
-      <div class="title"><span class="ico ico-pen"></span>TRAILBLZ.EXE<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-pen"></span><span class="tt">TRAILBLZ.EXE</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
       <div class="body">
         <div id="crumbs"></div>
         <label id="qlabel" for="next"></label>
@@ -39,7 +41,7 @@
     </section>
 
     <section class="win grow" id="w-trails">
-      <div class="title"><span class="ico ico-folder"></span>Trails<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-folder"></span><span class="tt">Trails</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
       <div class="body list-body">
         <div class="listview" id="trails"></div>
       </div>
@@ -48,13 +50,14 @@
   </div>
 
   <section class="win big" id="w-brain">
-    <div class="title"><span class="ico ico-brain"></span>BRAIN.EXE - C:\WIKI\TRAILS<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+    <div class="title"><span class="ico ico-brain"></span><span class="tt">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
     <div class="menubar">
       <button class="mi" id="fit"><u>F</u>it</button>
       <span class="mi legend"><span class="ln thin"></span>1 click</span>
       <span class="mi legend"><span class="ln thick"></span>many clicks</span>
       <span class="mi legend"><span class="sq start"></span>trail start</span>
       <span class="mi legend"><span class="sq hub"></span>busy article</span>
+      <label class="mi skinpick">Skin <select class="skin-select" aria-label="Skin"></select></label>
     </div>
     <div class="crt" id="stage">
       <svg id="svg" aria-label="Graph of Wikipedia trails"></svg>
@@ -82,6 +85,9 @@
       <label class="it" for="import"><span class="ico ico-folder"></span>Import JSON…</label>
       <input type="file" id="import" accept="application/json,.json" hidden>
       <hr>
+      <label class="it lang"><span class="ico ico-paint"></span>Skin
+        <select class="skin-select" aria-label="Skin"></select>
+      </label>
       <label class="it lang"><span class="ico ico-globe"></span>Wiki language
         <select id="lang">
           <option value="en">en</option><option value="de">de</option><option value="tr">tr</option>
