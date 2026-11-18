@@ -3,9 +3,13 @@ import { app, on, select, trailOf, commit, snapshot } from '../app.js';
 import { trailLabel, trailShape, visitTime, timeSpan } from '../model.js';
 import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, confirmClick, toast } from '../ui.js';
 
-const LEGEND = `<div class="legend-line"><span class="lg lg-before"></span>how you got here <span class="lg lg-after"></span>where you went next<br><span class="explain">Thicker and brighter = more recent.</span></div>`;
+/** The colour of the thread drawn for this visit, if it's one of the threads on the map. */
+function swatch(trailId, visitId) {
+  const th = app.threads?.threads.find((x) => x.trailId === trailId && x.visitId === visitId);
+  return th ? `<span class="sw" style="background:${th.color}" title="Drawn on the map in this colour"></span>` : '<span class="sw none"></span>';
+}
 
-export function initDetails({ record, focusArticle, loadTest }) {
+export function initDetails({ record, loadTest }) {
   const box = $('details');
   let showAll = false;
 
@@ -59,7 +63,7 @@ export function initDetails({ record, focusArticle, loadTest }) {
         if (app.range && (t < app.range[0] || t > app.range[1])) continue;
         const from = v.parent != null ? ti.byId.get(v.parent).article : null;
         const next = (ti.children.get(v.id) || []).map((cid) => ti.byId.get(cid).article);
-        seen.push({ t, trail: ti.trail, from, next });
+        seen.push({ t, trail: ti.trail, vid: v.id, from, next });
       }
     }
     seen.sort((p, q) => q.t - p.t);
@@ -70,22 +74,18 @@ export function initDetails({ record, focusArticle, loadTest }) {
     }
     const list = (m) => [...m].sort((p, q) => q[1] - p[1]).slice(0, 8).map(([t, n]) => `<div class="lrow" data-a="${esc(t)}"><span class="l">${esc(t)}</span><span class="c">${n}×</span></div>`).join('') || '<p class="explain">None.</p>';
     const shownSeen = showAll ? seen : seen.slice(0, 12);
-    const focused = app.focus?.title === title;
     box.innerHTML = `<h3>${esc(title)}</h3>
       <div class="sub">You saw this page ${plural(seen.length, 'time')}${seen.length ? `, last on ${fmtDateTime(seen[0].t)}` : ''}${seen.length > 1 ? `, first on ${fmtDate(seen[seen.length - 1].t)}` : ''}.</div>
-      ${seen.length ? LEGEND : ''}
       <div class="actions">
         <button class="btn small" id="d-start">Start a trail here</button>
-        <button class="btn small" id="d-focus">${focused ? 'Show the whole map' : 'Only its neighbourhood'}</button>
         <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
       </div>
       <section><h4>When you saw it</h4>${shownSeen.map((s) => `<div class="lrow" data-t="${s.trail.id}" title="Show this trail">
-          <span class="l"><span class="when">${fmtDateTime(s.t)}</span><br><span class="explain">${s.from ? `from ${esc(s.from)}` : 'start of the trail'}${s.next.length ? ` → ${esc(s.next.join(', '))}` : ' · end of the trail'}</span></span></div>`).join('')}
+          <span class="l">${swatch(s.trail.id, s.vid)}<span class="when">${fmtDateTime(s.t)}</span><br><span class="explain">${s.from ? `from ${esc(s.from)}` : 'start of the trail'}${s.next.length ? ` → ${esc(s.next.join(', '))}` : ' · end of the trail'}</span></span></div>`).join('')}
         ${seen.length > shownSeen.length ? `<button class="btn small more" id="d-all">Show all ${seen.length}</button>` : ''}</section>
       <section><h4>You came from</h4>${list(inc)}</section>
       <section><h4>You went on to</h4>${list(out)}</section>`;
     $('d-start').onclick = () => record.startAt(title);
-    $('d-focus').onclick = () => focusArticle(focused ? null : title);
     $('d-all')?.addEventListener('click', () => { showAll = true; render(); });
   }
 
@@ -100,15 +100,14 @@ export function initDetails({ record, focusArticle, loadTest }) {
       for (const v of ti.trail.visits) {
         if (v.parent == null) continue;
         const from = ti.byId.get(v.parent).article;
-        if ((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a)) uses.push({ t: visitTime(ti.trail, v), trail: ti.trail, from, to: v.article });
+        if ((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a)) uses.push({ t: visitTime(ti.trail, v), trail: ti.trail, vid: v.id, from, to: v.article });
       }
     }
     uses.sort((p, q) => q.t - p.t);
     box.innerHTML = `<h3><a class="alink" data-a="${esc(l.a)}">${esc(l.a)}</a> ↔ <a class="alink" data-a="${esc(l.b)}">${esc(l.b)}</a></h3>
       <div class="sub">Clicked ${plural(l.total, 'time')}${uses.length ? `, last on ${fmtDateTime(uses[0].t)}` : ''}.</div>
-      ${LEGEND}
       <section><h4>Directions</h4><div class="dirbar"><span>${esc(l.a)} → ${esc(l.b)}</span><b>${l.ab}×</b><span>${esc(l.b)} → ${esc(l.a)}</span><b>${l.ba}×</b></div></section>
-      <section><h4>When you clicked it</h4>${uses.slice(0, showAll ? 1e9 : 12).map((u) => `<div class="lrow" data-t="${u.trail.id}"><span class="l"><span class="when">${fmtDateTime(u.t)}</span><br><span class="explain">${esc(u.from)} → ${esc(u.to)} · ${esc(trailLabel(u.trail))}</span></span></div>`).join('')}
+      <section><h4>When you clicked it</h4>${uses.slice(0, showAll ? 1e9 : 12).map((u) => `<div class="lrow" data-t="${u.trail.id}"><span class="l">${swatch(u.trail.id, u.vid)}<span class="when">${fmtDateTime(u.t)}</span><br><span class="explain">${esc(u.from)} → ${esc(u.to)} · ${esc(trailLabel(u.trail))}</span></span></div>`).join('')}
         ${uses.length > 12 && !showAll ? `<button class="btn small more" id="d-all">Show all ${uses.length}</button>` : ''}</section>`;
     $('d-all')?.addEventListener('click', () => { showAll = true; render(); });
   }
@@ -123,7 +122,6 @@ export function initDetails({ record, focusArticle, loadTest }) {
     const mins = Math.round((t1 - t0) / 6e4);
     box.innerHTML = `<h3 id="d-name">${esc(trailLabel(tr))}</h3>
       <div class="sub">${fmtDateTime(t0)} · ${plural(tr.visits.length, 'page')}${sh.branches.length ? ` · went back ${plural(sh.branches.length, 'time')}` : ''}${mins > 0 ? ` · ${mins} min` : ''}</div>
-      <div class="legend-line"><span class="lg lg-trail"></span>from the start (blue) to the end (orange)</div>
       <div class="actions">
         <button class="btn small" id="d-cont">Continue this trail</button>
         <button class="btn small" id="d-rename">Rename</button>
@@ -154,6 +152,6 @@ export function initDetails({ record, focusArticle, loadTest }) {
     const t = e.target.closest('[data-t]'); if (t) return select({ kind: 'trail', id: t.dataset.t }, { zoom: true });
   });
   on('select', () => { showAll = false; render(); });
-  for (const ev of ['data', 'range', 'focus', 'cursor']) on(ev, render);
+  for (const ev of ['data', 'range', 'threads', 'cursor']) on(ev, render);
   return { render };
 }

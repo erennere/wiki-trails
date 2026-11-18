@@ -1,8 +1,8 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
-import { app, on, commit, select, setHover, setFocus, specFor, cursorVisit, saveSettings, undo } from './app.js';
+import { app, on, commit, select, setHover, setPeriod, refreshThreads, setSetting, cursorVisit, saveSettings, undo } from './app.js';
 import { loadLocal, loadPublished, saveLocal } from './storage.js';
 import { emptyState } from './model.js';
-import { createGraph } from './views/map.js';
+import { createGraph } from './views/map3d.js';
 import { createEffects } from './views/effects.js';
 import { initAppearance } from './appearance.js';
 import { initRecord } from './panels/record.js';
@@ -11,7 +11,7 @@ import { initDetails } from './panels/details.js';
 import { initSearch } from './panels/search.js';
 import { initTimeline } from './panels/timeline.js';
 import { initMenus } from './panels/menus.js';
-import { $, esc, plural, fmtDateTime, toast } from './ui.js';
+import { $, esc, plural, fmtDate, fmtDateTime, toast } from './ui.js';
 
 const html = document.documentElement;
 
@@ -30,12 +30,13 @@ let rz;
 const graph = createGraph($('graph'), {
   onHover: (t) => { setHover(t ? { kind: 'article', id: t } : null); showTip(); },
   onEdgeHover: (l) => { if (app.hover?.kind === 'article') return; setHover(l ? { kind: 'edge', id: l.key } : null); showTip(); },
-  onClick: (t) => { select({ kind: 'article', id: t }); revealSel(app.sel); },
-  onEdgeClick: (l) => { select({ kind: 'edge', id: l.key }); revealSel(app.sel); },
-  onDblClick: (t) => focusArticle(t),
+  onClick: (t) => select({ kind: 'article', id: t }, { force: true }),
+  onEdgeClick: (l) => select({ kind: 'edge', id: l.key }, { force: true }),
+  onTrailClick: (id) => select({ kind: 'trail', id }, { force: true }),
   onBackground: () => select(null),
+  onZoomedOut: () => select(null),
   onSettled: () => { app.state.layout = graph.getPositions(); saveLocal(app.state); },
-  onResize: () => { clearTimeout(rz); rz = setTimeout(() => graph.fit(false), 120); },
+  onResize: () => { clearTimeout(rz); rz = setTimeout(() => (app.threads ? showThreads() : graph.fit(false)), 160); },
 });
 const fx = createEffects($('fx'));
 initAppearance(graph, fx);
@@ -67,67 +68,59 @@ function showTip() {
 $('graph').addEventListener('mousemove', (e) => { const r = $('stage').getBoundingClientRect(); mouse = [e.clientX - r.left, e.clientY - r.top]; placeTip(); });
 $('graph').addEventListener('mouseleave', () => { tip.hidden = true; });
 
-function applyHighlight() { graph.setHighlight(specFor(app.hover || app.sel)); }
-/** every article the highlight for this selection touches */
-function titlesOf(sel) {
-  const sp = specFor(sel); if (!sp) return new Set();
-  const titles = new Set(sp.paths.flatMap((p) => p.segs.flatMap((s) => [s.from, s.to])));
-  if (sp.anchor) titles.add(sp.anchor);
-  if (sp.edgeKey) sp.edgeKey.split('\u0000').forEach((t) => titles.add(t));
-  return titles;
+/** Draw the selection's threads and let the camera frame them (or go back to the whole history). */
+function showThreads(frame = true) {
+  graph.setHighlight(app.threads);
+  renderThreadbar();
+  if (!frame) return;
+  if (app.threads) graph.frameThreads(); else graph.fit(true);
 }
-/** list or search click: frame the whole highlight */
-function zoomTo(sel) { const t = titlesOf(sel); if (t.size) graph.focusOn(t); }
-/** map click: zoom out only if part of the highlight is off-screen */
-function revealSel(sel) { if (!sel) return; const t = titlesOf(sel); if (t.size) graph.reveal(t); }
 function fitWhenSettled() {
   graph.settleAndFit();
-  const iv = setInterval(() => { if (!graph.isSettling()) { clearInterval(iv); graph.fit(true); } }, 200);
+  const iv = setInterval(() => { if (!graph.isSettling()) { clearInterval(iv); app.threads ? graph.frameThreads() : graph.fit(true); } }, 250);
 }
 
-/* focus: show only an article's neighbourhood */
-function focusArticle(title) {
-  if (!title) { setFocus(null); return; }
-  let nb = graph.neighbourhood(title, 1);
-  if (nb.size < 25) nb = graph.neighbourhood(title, 2);
-  setFocus(title, nb);
-  select({ kind: 'article', id: title });
-}
-function renderFocusbar() {
-  const bar = $('focusbar');
-  bar.hidden = !app.focus;
-  if (app.focus) bar.innerHTML = `<span class="btn small primary" id="unfocus">Only around ${esc(app.focus.title)} · show everything ✕</span>`;
-  $('unfocus')?.addEventListener('click', () => focusArticle(null));
+/* the bar over the map: how many threads, and which period */
+const LIMITS = [1, 3, 5, 10, 20, 50];
+function renderThreadbar() {
+  const bar = $('threadbar'), th = app.threads;
+  bar.hidden = !th || th.kind === 'trail';
+  if (bar.hidden) return;
+  const lim = +app.settings.threads || 5;
+  bar.innerHTML = `<label>Latest <select id="tlimit">${LIMITS.map((n) => `<option value="${n}"${n === lim ? ' selected' : ''}>${n}</option>`).join('')}</select> threads</label>
+    <span class="tcount">${th.threads.length} of ${plural(th.total, 'thread')}</span>
+    ${app.period ? `<button class="btn small" id="tperiod" title="Show every period">${fmtDate(app.period[0])} – ${fmtDate(app.period[1])} ✕</button>` : ''}`;
+  $('tlimit').onchange = (e) => { setSetting('threads', +e.target.value); refreshThreads(); };
+  $('tperiod')?.addEventListener('click', () => setPeriod(null));
 }
 
 $('zoomin').onclick = () => graph.zoomBy(1.5);
 $('zoomout').onclick = () => graph.zoomBy(1 / 1.5);
-$('fit').onclick = () => graph.fit(true);
+$('fit').onclick = () => (app.threads ? graph.frameThreads() : graph.fit(true));
 
 on('data', (opts = {}) => {
   const first = graph.update(app.D, app.DV, app.state.layout);
   graph.setCursor(cursorVisit()?.article || null);
-  if (app.focus) graph.setView({ focus: app.focus.set });
-  applyHighlight();
+  showThreads(false);
   $('empty').hidden = app.state.trails.length > 0;
   if (first || opts.fresh) fitWhenSettled();
   else if (opts.added) {
-    // keep the page you just added in view: refit a small map, gently pan a big one
+    // keep the page you just added in view
     const t = cursorVisit()?.article;
-    setTimeout(() => { if (graph.nodeCount() < 60) graph.fit(true); else if (t) graph.ensureVisible(t); }, graph.nodeCount() < 60 ? 250 : 900);
+    setTimeout(() => { if (graph.nodeCount() < 60) graph.fit(true); else if (t) graph.ensureVisible(t); }, graph.isSettling() ? 1600 : 250);
   }
 });
-on('select', (opts = {}) => { applyHighlight(); if (opts.zoom && app.sel) zoomTo(app.sel); });
-on('hover', applyHighlight);
+on('select', () => showThreads());
+on('threads', () => showThreads());
 on('cursor', () => graph.setCursor(cursorVisit()?.article || null));
-on('range', () => { graph.setVisible(app.DV); applyHighlight(); graph.fit(true); });
-on('focus', () => { graph.setView({ focus: app.focus?.set || null }); graph.setVisible(app.DV); applyHighlight(); renderFocusbar(); graph.fit(true); });
+on('range', () => { graph.setVisible(app.DV); showThreads(); });
+on('skin', () => { if (app.sel) refreshThreads(); });
 
 /* ---------- panels ---------- */
 const record = initRecord({ showLeft: () => setPanel('left', true) });
 const menus = initMenus({ graph });
 initTrails();
-initDetails({ record, focusArticle, loadTest: menus.loadTest });
+initDetails({ record, loadTest: menus.loadTest });
 initSearch();
 initTimeline();
 document.querySelectorAll('[data-example]').forEach((b) => { if (!b.onclick) b.onclick = () => menus.loadTest(b.dataset.example); });
@@ -135,19 +128,19 @@ document.querySelectorAll('[data-example]').forEach((b) => { if (!b.onclick) b.o
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(e.target.tagName);
   if (e.key === 'Escape' && !typing && $('settings').hidden) {
-    if (app.focus) focusArticle(null); else if (app.sel) select(null);
+    if (app.sel) select(null);
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !(typing && e.target.value)) { e.preventDefault(); if (undo()) toast('Undone'); }
 });
 
 /* ---------- start ---------- */
 (async () => {
-  graph.setView({ density: app.settings.density, fade: app.settings.fade });
+  graph.setView({ density: app.settings.density, fade: app.settings.fade, rotate: app.settings.rotate });
   app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
   commit({ fresh: true });
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
-    app, settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
+    app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
     nodeXY: (t) => rel(graph.screenOf(t)), edgeXY: (i) => rel(graph.edgeMid(i)),
   };
 })();

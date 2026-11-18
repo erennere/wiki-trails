@@ -86,12 +86,12 @@
   <section class="panel" id="center">
     <div class="viewport crt" id="stage">
       <canvas id="fx"></canvas>
-      <canvas id="graph" aria-label="Map of your Wikipedia trails"></canvas>
-      <div class="focusbar" id="focusbar" hidden></div>
+      <div id="graph" role="img" aria-label="3D map of your Wikipedia trails"></div>
+      <div class="threadbar" id="threadbar" hidden></div>
       <div class="mapctl">
         <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="btn" id="zoomout" title="Zoom out" aria-label="Zoom out">−</button>
-        <button class="btn" id="fit" title="Show everything" aria-label="Show everything">⤢</button>
+        <button class="btn" id="fit" title="Fit to the window" aria-label="Fit to the window">⤢</button>
       </div>
       <div class="tip" id="tip" hidden></div>
       <div class="empty" id="empty">
@@ -129,6 +129,7 @@
       <h4>Map</h4>
       <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
       <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
+      <div class="setrow"><span>Turn the map slowly when you're not using it</span><input type="checkbox" id="rotate"></div>
       <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>
       <h4>Other</h4>
       <div class="setrow"><span>Wikipedia language (for links)</span><select id="lang"><option value="en">English</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option></select></div>

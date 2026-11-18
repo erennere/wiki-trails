@@ -1,6 +1,8 @@
 // Time: the "30 days · 1 year · All" switch in the top bar, and the timeline under the map
 // (bars = clicks per day/week; drag across it to pick any period).
-import { app, on, setRange } from '../app.js';
+// With an article or connection selected, the timeline marks each time you were there,
+// and dragging picks the period whose threads are drawn.
+import { app, on, setRange, setPeriod } from '../app.js';
 import { timeSpan, visitTime } from '../model.js';
 import { $, fmtDate } from '../ui.js';
 
@@ -9,9 +11,12 @@ const d3 = window.d3;
 export function initTimeline() {
   let brush = null, x = null, silent = false;
 
+  const selMode = () => !!(app.threads && app.threads.kind !== 'trail');
   function markSeg() {
     document.querySelectorAll('#rangeseg button').forEach((b) => b.classList.toggle('on', b.dataset.range === app.rangeName));
-    $('tllabel').textContent = app.range ? `${fmtDate(app.range[0])} – ${fmtDate(app.range[1])}` : 'All time';
+    $('tllabel').textContent = selMode()
+      ? (app.period ? `${fmtDate(app.period[0])} – ${fmtDate(app.period[1])}` : 'Drag to pick a period')
+      : app.range ? `${fmtDate(app.range[0])} – ${fmtDate(app.range[1])}` : 'All time';
   }
 
   function render() {
@@ -32,16 +37,22 @@ export function initTimeline() {
     x = d3.scaleTime().domain([t0, t1 + binMs]).range([4, w - 4]);
     const mx = Math.max(1, ...bins.values()), y = d3.scaleSqrt().domain([0, mx]).range([0, h - 15]);
     const bw = Math.max(1, x(t0 + binMs) - x(t0) - 0.5);
-    svg.append('g').selectAll('rect').data([...bins]).join('rect').attr('class', 'bar')
+    const sm = selMode();
+    svg.append('g').selectAll('rect').data([...bins]).join('rect').attr('class', sm ? 'bar dim' : 'bar')
       .attr('x', ([b]) => x(t0 + b * binMs)).attr('width', bw).attr('y', ([, c]) => h - 13 - y(c)).attr('height', ([, c]) => Math.max(1, y(c)));
     svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - 13})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(w / 110))).tickSize(3));
+    if (sm) svg.append('g').attr('class', 'seen').selectAll('line').data(app.threads.times).join('line')
+      .attr('x1', (t) => x(t)).attr('x2', (t) => x(t)).attr('y1', 2).attr('y2', h - 13);
     brush = d3.brushX().extent([[0, 0], [w, h - 13]]).on('end', (e) => {
       if (silent) return;
-      if (!e.selection) return setRange(null, 'all');
-      setRange(e.selection.map((px) => +x.invert(px)), 'custom');
+      const r = e.selection ? e.selection.map((px) => +x.invert(px)) : null;
+      if (sm) return setPeriod(r);
+      if (!r) return setRange(null, 'all');
+      setRange(r, 'custom');
     });
     const g = svg.append('g').attr('class', 'brush').call(brush);
-    if (app.range) { silent = true; g.call(brush.move, [Math.max(4, x(app.range[0])), Math.min(w - 4, x(app.range[1]))]); silent = false; }
+    const cur = sm ? app.period : app.range;
+    if (cur) { silent = true; g.call(brush.move, [Math.max(4, x(cur[0])), Math.min(w - 4, x(cur[1]))]); silent = false; }
     markSeg();
   }
 
@@ -54,7 +65,6 @@ export function initTimeline() {
 
   document.querySelectorAll('#rangeseg button').forEach((b) => b.onclick = () => preset(b.dataset.range));
   new ResizeObserver(() => { clearTimeout(window.__tlT); window.__tlT = setTimeout(render, 150); }).observe($('tlsvg'));
-  on('data', render);
-  on('range', markSeg);
+  for (const ev of ['data', 'range', 'select', 'threads']) on(ev, render);
   return { render };
 }

@@ -1,11 +1,11 @@
 // The app's shared state and the few actions that change it.
 // Panels and views never talk to each other directly: they call these
-// actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'focus', 'skin', 'settings', 'dirty').
-import { derive, emptyState, visitTime, trailPath, timeSpan } from './model.js';
+// actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'skin', 'settings', 'dirty').
+import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips } from './model.js';
 import { saveLocal } from './storage.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
-const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, sound: false, left: true, right: true };
+const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, rotate: true, threads: 5, sound: false, left: true, right: true };
 
 export const app = {
   state: emptyState(),
@@ -16,7 +16,8 @@ export const app = {
   sel: null,        // what's selected: { kind: 'article' | 'edge' | 'trail', id }
   hover: null,      // what the pointer is over (preview only)
   cur: null,        // where the next recorded click attaches: { trailId, visitId }
-  focus: null,      // focus mode: { title, set }
+  threads: null,    // the threads drawn for the selection (see threadsFor)
+  period: null,     // [fromMs, toMs]: only show threads from this period (picked on the timeline)
   colors: [],       // trail colours of the current skin
   settings: loadSettings(),
 };
@@ -51,7 +52,7 @@ export function commit(opts = {}) {
   if (app.cur && !app.D.trailIndex.get(app.cur.trailId)?.byId.has(app.cur.visitId)) app.cur = null;
   const s = app.sel;
   if (s && ((s.kind === 'trail' && !trailOf(s.id)) || (s.kind === 'article' && !app.D.articles.has(s.id)) || (s.kind === 'edge' && !app.D.links.has(s.id)))) app.sel = null;
-  if (app.focus && !app.D.articles.has(app.focus.title)) app.focus = null;
+  app.threads = threadsFor(app.sel);
   emit('data', opts);
 }
 
@@ -77,83 +78,92 @@ export function undo() {
 /** Swap in a whole different history (open a file, load test data, clear). */
 export function replaceState(next) {
   snapshot();
-  app.state = next; app.cur = null; app.sel = null; app.hover = null; app.focus = null;
+  app.state = next; app.cur = null; app.sel = null; app.hover = null; app.period = null;
   app.range = null; app.rangeName = 'all';
   commit({ fresh: true });
 }
 
 /* ---------- selection, hover, cursor ---------- */
 const same = (a, b) => (a === b) || (a && b && a.kind === b.kind && a.id === b.id);
-export function select(sel, opts = {}) { if (same(sel, app.sel) && !opts.force) return; app.sel = sel; emit('select', opts); }
+export function select(sel, opts = {}) {
+  if (same(sel, app.sel) && !opts.force) return;
+  app.sel = sel; app.period = null; app.threads = threadsFor(sel);
+  emit('select', opts);
+}
 export function setHover(h) { if (same(h, app.hover)) return; app.hover = h; emit('hover'); }
 export function setCursor(cur) { app.cur = cur; emit('cursor'); }
 
 export function setRange(range, name = range ? 'custom' : 'all') {
   app.range = range; app.rangeName = name;
   app.DV = range ? derive(app.state, range) : app.D;
+  app.threads = threadsFor(app.sel);
   emit('range');
 }
-export function setFocus(title, set = null) { app.focus = title ? { title, set } : null; emit('focus'); }
+/** Only show the selection's threads from this period (null = all). */
+export function setPeriod(p) { app.period = p; refreshThreads(); }
+export function refreshThreads() { app.threads = threadsFor(app.sel); emit('threads'); }
 
 /* ---------- what to highlight ---------- */
-const MAX_PATHS = 120;
-/** 1 for something you did today, fading towards 0.15 for the oldest part of your history. */
-export function recency(t) {
-  const span = app.span || 30 * 864e5;
-  const tau = Math.max(21 * 864e5, span / 4);
-  return 0.15 + 0.85 * Math.exp(-Math.max(0, Date.now() - t) / tau);
-}
+const collapse = (titles) => titles.filter((t, i) => i === 0 || t !== titles[i - 1]);
 /**
- * One rule for every selection: draw the trails involved, start to end.
- *  - an article: every trail that passed through it, anchored at that page
- *    (blue = how you got there, orange = where you went next)
- *  - a connection: every trail that used it, anchored at that click
- *  - a trail: that one trail, blue at its start to orange at its end, with step numbers
- * Recent trails are drawn thicker and brighter.
+ * One rule for every selection: the threads that went through it, newest first, each from where
+ * it started to where it ended.
+ *  - an article: every trail that passed through it (at its latest pass in the period)
+ *  - a connection: every trail that used it
+ *  - a trail: that trail's main line, with its side trips
+ * Returns { kind, anchor, edge, threads: [{ trailId, visitId, t, path, passes, sides, color, rec }], total, times }.
+ * `times` are all the moments you were there (in the time lens), for the timeline.
  */
-export function specFor(target) {
+export function threadsFor(target) {
   if (!target) return null;
-  const D = app.D, DV = app.DV, fs = app.focus?.set, r = app.range;
-  const ok = (s) => DV.articles.has(s.from) && DV.articles.has(s.to) && (!fs || (fs.has(s.from) && fs.has(s.to)));
-  const inR = (t) => !r || (t >= r[0] && t <= r[1]);
-  const paths = [];
-  const add = (ti, anchorVisit) => {
-    const t = anchorVisit ? visitTime(ti.trail, anchorVisit) : Date.parse(ti.trail.created);
-    const segs = trailPath(ti, anchorVisit?.id).filter(ok);
-    paths.push({ trailId: ti.trail.id, segs, t, rec: recency(t) });
-  };
-  if (target.kind === 'trail') {
+  const D = app.D, r = app.range, p = app.period;
+  const inLens = (t) => !r || (t >= r[0] && t <= r[1]);
+  const inPeriod = (t) => !p || (t >= p[0] && t <= p[1]);
+  const all = [], times = [];
+  let kind = target.kind, anchor = null, edge = null;
+  const add = (ti, v, passes) => all.push({ trailId: ti.trail.id, visitId: v.id, t: visitTime(ti.trail, v), path: collapse(threadOf(ti, v.id).map((x) => x.article)), passes, sides: [] });
+  if (kind === 'trail') {
     const ti = D.trailIndex.get(target.id); if (!ti) return null;
-    add(ti, null);
-    const numbers = new Map();
-    ti.trail.visits.forEach((v, i) => { if (!numbers.has(v.article)) numbers.set(v.article, i + 1); });
-    return { mode: 'trail', paths, numbers, anchor: null, total: 1 };
-  }
-  if (target.kind === 'article') {
+    const vs = ti.trail.visits, last = vs[vs.length - 1];
+    const main = chainTo(ti, last.id);
+    all.push({ trailId: ti.trail.id, visitId: last.id, t: visitTime(ti.trail, vs[0]), path: collapse(main.map((x) => x.article)), passes: 1, sides: sideTrips(ti, new Set(main.map((x) => x.id))) });
+  } else if (kind === 'article') {
     const a = D.articles.get(target.id); if (!a) return null;
+    anchor = a.title;
     for (const id of a.trails) {
       const ti = D.trailIndex.get(id);
-      // the latest time this trail was on the page (a trail can come back to a page)
-      let anchor = null;
-      for (const v of ti.trail.visits) if (v.article === a.title && inR(visitTime(ti.trail, v))) anchor = v;
-      if (anchor) add(ti, anchor);
+      let at = null, passes = 0;
+      for (const v of ti.trail.visits) {
+        if (v.article !== a.title) continue;
+        const t = visitTime(ti.trail, v); if (!inLens(t)) continue;
+        times.push(t); passes++;
+        if (inPeriod(t)) at = v; // the latest pass in the period
+      }
+      if (at) add(ti, at, passes);
     }
-  } else if (target.kind === 'edge') {
+  } else if (kind === 'edge') {
     const l = D.links.get(target.id); if (!l) return null;
+    edge = [l.a, l.b];
     for (const id of l.trails) {
       const ti = D.trailIndex.get(id);
-      let anchor = null;
+      let at = null, passes = 0;
       for (const v of ti.trail.visits) {
         if (v.parent == null) continue;
         const from = ti.byId.get(v.parent).article;
-        if (((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a)) && inR(visitTime(ti.trail, v))) anchor = v;
+        if (!((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a))) continue;
+        const t = visitTime(ti.trail, v); if (!inLens(t)) continue;
+        times.push(t); passes++;
+        if (inPeriod(t)) at = v;
       }
-      if (anchor) add(ti, anchor);
+      if (at) add(ti, at, passes);
     }
-  }
-  paths.sort((p, q) => q.t - p.t);
-  const total = paths.length;
-  return { mode: 'anchor', paths: paths.slice(0, MAX_PATHS), total, anchor: target.kind === 'article' ? target.id : null, edgeKey: target.kind === 'edge' ? target.id : null };
+  } else return null;
+  all.sort((x, y) => y.t - x.t);
+  const limit = kind === 'trail' ? 1 : Math.min(50, +app.settings.threads || 5);
+  const threads = all.slice(0, limit), n = threads.length, pal = app.colors.length ? app.colors : ['#2f6fdb'];
+  // each thread its own colour; the newest strongest, older ones fainter
+  threads.forEach((th, i) => { th.color = pal[i % pal.length]; th.rec = n === 1 ? 1 : 1 - 0.72 * i / (n - 1); });
+  return { kind, anchor, edge, threads, total: all.length, times: times.sort((x, y) => x - y) };
 }
 
 /* ---------- settings ---------- */

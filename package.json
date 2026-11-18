@@ -1,14 +1,18 @@
 {
   "name": "wiki-trails",
   "private": true,
-  "description": "Map how you wander through Wikipedia: record your trails by hand and see them as one calm map.",
+  "description": "Map how you wander through Wikipedia: record your trails by hand and see them as one brain-like 3D network.",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --legal-comments=none",
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --minify --outfile=js/app.js --legal-comments=none",
     "watch": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --watch",
     "serve": "python3 -m http.server 8000"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "3d-force-graph": "1.80.2",
+    "three": "0.187.0"
+  }
 }

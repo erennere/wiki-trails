@@ -113,6 +113,41 @@ export function chainTo(trailInfo, visitId) {
 }
 
 /**
+ * One thread through a visit, as the list of visits from the trail's start to its end:
+ * the way in (start → this visit), then onward, at each step taking the branch you used last.
+ */
+export function threadOf(ti, visitId) {
+  const vs = ti.trail.visits;
+  const latest = new Map(); // visit id → index of the latest visit at or below it
+  for (let i = vs.length - 1; i >= 0; i--) {
+    const v = vs[i], m = Math.max(i, latest.get(v.id) ?? -1);
+    latest.set(v.id, m);
+    if (v.parent != null) latest.set(v.parent, Math.max(latest.get(v.parent) ?? -1, m));
+  }
+  const out = chainTo(ti, visitId);
+  for (let c = ti.byId.get(visitId); c;) {
+    const kids = ti.children.get(c.id) || [];
+    if (!kids.length) break;
+    let best = kids[0];
+    for (const k of kids) if (latest.get(k) > latest.get(best)) best = k;
+    c = ti.byId.get(best); out.push(c);
+  }
+  return out;
+}
+
+/** Side trips of a trail: for every page you went back from, the pages from the fork to it. */
+export function sideTrips(ti, mainIds) {
+  const out = [];
+  for (const v of ti.trail.visits) {
+    if (mainIds.has(v.id) || (ti.children.get(v.id) || []).length) continue; // leaves off the main line
+    const branch = [];
+    for (let c = v; c; c = c.parent == null ? null : ti.byId.get(c.parent)) { branch.unshift(c.article); if (mainIds.has(c.id)) break; }
+    if (branch.length > 1) out.push(branch);
+  }
+  return out;
+}
+
+/**
  * A trail as a path for drawing, relative to an "anchor" page (the article you clicked).
  * Returns segments {from, to, p0, p1, before}: p runs 0 → 0.5 along the way in (start → anchor)
  * and 0.5 → 1 along everything after it (including branches), so colour can show arrival vs. onward.

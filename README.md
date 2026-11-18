@@ -1,38 +1,46 @@
 # Wiki Trails
 
-Map how you wander through Wikipedia. You record each trail by hand: the page you started on, then each link you clicked. Wiki Trails draws all your trails as one calm, brain-like map. Connections you use often grow thicker, the way well-used pathways between neurons strengthen.
+Map how you wander through Wikipedia. You record each trail by hand: the page you started on, then each link you clicked. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
-Click any article and every trail that went through it lights up from start to end. Blue shows how you got there and orange shows where you went next. More recent trails are thicker and brighter. The side panel lists each time you saw the page.
+Click any article and the trails that went through it light up, and you can read them at a glance:
 
-![Clicking an article shows every trail through it](.github/screenshot.png)
+- **Each trail has its own colour.**
+- **Each trail is drawn like a brush stroke:** thin and pale where you started, bold where you ended.
+- **A light runs along each one** from its start to its end.
+- **Newer trails are brighter and thicker,** older ones fainter.
+
+The camera turns to the angle where the trails spread out best and fills the window with them. Zoom out and you're back to your whole history.
+
+![Clicking an article shows its latest trails, each from start to end](.github/screenshot.png)
 
 ## How it works
 
 The window has one map and two side panels, and both panels can be collapsed.
 
-- **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one dot on the map, so arriving somewhere you have been before links into it.
-- **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with numbered steps.
-- **Map** (middle). Click an article, a connection or a trail to highlight it. Click the background or press <kbd>Esc</kbd> to clear it. Hover anything to see when you last saw it.
+- **Map** (middle). Drag to turn it, scroll to zoom. Click an article, a connection or a trail to see its trails. Zoom far out, click empty space or press <kbd>Esc</kbd> to go back to your whole history. Hover anything to see when you last saw it.
+- **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
+- **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, or drag across it to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
+- **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
+- **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
 - **Details** (right). Shows what you selected:
-  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it; click a visit to see that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there, show only its neighbourhood, or open it on Wikipedia.
-  - **A connection:** how often you clicked it in each direction, and when.
+  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it. A coloured dot marks the visits drawn on the map, in the same colour as their trail. Click a visit to see that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there or open it on Wikipedia.
+  - **A connection:** how often you clicked it in each direction, and when, with the same coloured dots.
   - **A trail:** its steps, with Continue, Rename and Delete.
 
-![One trail, from the start (blue) to the end (orange)](.github/screenshot-trail.png)
+![One trail, thin at its start (Theatre) and bold at its end (Zebra)](.github/screenshot-trail.png)
 
 ### Built to last for years
 
 It should still feel like day one after years of use.
 
-- **Few lines at a time.** At full zoom-out only the ~380 strongest connections are drawn, and zooming in reveals more where you look.
-- **Readable labels.** Labels never overlap, and the most important ones win.
-- **Relative sizes.** Dot and line sizes are relative to your busiest article.
+- **Calm overview.** The whole history shows every article, but only the strongest ~1,400 connections, and only the busiest articles are named.
+- **A handful of trails at a time.** A click shows the latest five trails by default, so even a page you've seen 600 times stays readable.
 - **Fading.** Connections you haven't used for a while fade.
-- **Stable layout.** Positions are saved, so the map doesn't reshuffle from day to day. New articles settle next to the page you came from.
+- **Stable layout.** Positions are saved, so the network doesn't reshuffle from day to day. New articles settle next to the page you came from.
 
-The map stretches to fill the window. The **time lens** under the map shows your clicks over time: pick *30 days*, *1 year* or *All time*, or drag across the timeline to choose a range.
+![Two years of browsing: 20,000 clicks, 3,145 articles](.github/whole.png)
 
-![Two years of browsing: 20,000 clicks, 3,145 articles](.github/two-years.png)
+![The latest ten trails through Communication](.github/two-years.png)
 
 ### Your data
 
@@ -47,15 +55,15 @@ The ⚙ button opens Settings:
 
 - **Light or dark.** Follows your system by default.
 - **Look.** Plain is the default, and 27 optional looks are available. Hover a card to try one, click to keep it.
-- **Map density** and **fade old connections**.
-- **Re-arrange the map**, the Wikipedia language, and optional sounds.
+- **Map:** how many connections to show, fade old connections, turn the map slowly when you're not using it, and re-arrange it from scratch.
+- **Other:** the Wikipedia language for links, and optional sounds.
 
 ![Settings](.github/gallery.png)
 
 <details>
 <summary>All 28 looks</summary>
 
-![All looks](.github/skins.jpg)
+![Six of the looks with the same trails selected](.github/looks.jpg)
 
 - *Plain*
 - *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
@@ -74,12 +82,12 @@ Look names describe a style; they are not affiliated with any product.
 | Key | Action |
 | --- | --- |
 | <kbd>/</kbd> | Find an article or trail |
-| <kbd>Esc</kbd> | Clear the selection or leave the neighbourhood view |
+| <kbd>Esc</kbd> | Back to your whole history |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save history to a file (<kbd>Shift</kbd> for Save as) |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a history file |
 
-Double-click an article to show only its neighbourhood.
+Drag to turn the map, scroll to zoom.
 
 ### Try it with real data
 
@@ -102,14 +110,14 @@ To publish your own map, save your history with **File → Save as**, put the fi
 The code lives in `src/` as ES modules and is bundled into `js/app.js`. The bundle is committed, so GitHub Pages needs no build step. After editing `src/`:
 
 ```bash
-npm install        # once, installs esbuild
+npm install        # once: esbuild, three.js and 3d-force-graph
 npm run build      # or: npm run watch
 npm run serve      # optional: http://localhost:8000
 ```
 
 ```
 index.html            page: top bar, three panels, Settings and Open dialogs
-js/app.js             bundled app (built from src/)
+js/app.js             bundled app (built from src/, includes three.js and 3d-force-graph)
 css/style.css         layout and components; every colour is a CSS variable
 css/skins.css         plain light/dark, window styles, and the 27 optional looks
 src/main.js           wires the map, panels and keyboard together
@@ -120,7 +128,7 @@ src/appearance.js     light/dark and looks
 src/skins.js          the list of looks: map palette, dot shape, background effect
 src/ui.js             small helpers (dates, toasts, the steps list)
 src/panels/           record, trails, details, search, timeline, menus
-src/views/map.js      canvas map: draw budgets, labels, layout (d3-force), highlights
+src/views/map3d.js    the 3D network (3d-force-graph), threads drawn with three.js, labels, camera
 src/views/effects.js  animated backgrounds for some looks
 src/example.js        tiny example
 data/                 Wikispeedia examples; your published trails.json goes here
@@ -152,14 +160,14 @@ The Settings gallery picks it up automatically.
       ]
     }
   ],
-  "layout": { "Brain": [12.5, -40.1] }
+  "layout": { "Brain": [12.5, -40.1, 8.3] }
 }
 ```
 
 - **A trail is a tree of visits.** A visit's `parent` is the page you clicked from. Going back and branching means attaching a new visit to an earlier one; in the example, you read Synapse, went back to Neuron and clicked Axon.
 - **Going back is not a click** and adds no connection.
 - **`t`** is when you opened the page, in milliseconds since 1970.
-- **`layout`** is optional and keeps the map looking the same after you open the file.
+- **`layout`** is optional and keeps the network looking the same after you open the file: each article's position in 3D. Files from the older flat map have two numbers per article; those positions are ignored and the network is arranged afresh.
 - **Derived data.** Articles and connections are computed from the visits. A connection's weight is the number of clicks between its two articles, in either direction, over all trails.
 
 ## Test data: Wikispeedia
@@ -186,4 +194,5 @@ Sources:
 MIT, see [LICENSE](LICENSE).
 
 - d3 is © Mike Bostock, ISC licence (see `vendor/d3.LICENSE`).
+- The bundle in `js/app.js` includes [three.js](https://threejs.org) and [3d-force-graph](https://github.com/vasturiano/3d-force-graph) with their dependencies, all under MIT, ISC or BSD licences; their notices are in `js/THIRD-PARTY-LICENSES.txt`.
 - Fonts are loaded from Google Fonts under the SIL Open Font Licence: Inter and the fonts of the optional looks.

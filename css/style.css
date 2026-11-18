@@ -163,7 +163,17 @@ html[data-left="closed"] #left > .rail, html[data-right="closed"] #right > .rail
 #graph:active { cursor: grabbing; }
 .mapctl { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; flex-direction: column; gap: 6px; }
 .mapctl .btn { width: 34px; height: 34px; padding: 0; font-size: 16px; }
-.focusbar { position: absolute; left: 12px; top: 12px; z-index: 5; }
+.threadbar { position: absolute; left: 12px; top: 12px; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 6px 10px; background: var(--win-bg); color: var(--win-fg); border: var(--win-border); border-radius: 8px; font-size: 13px; }
+.threadbar select { font: inherit; background: var(--field-bg); color: var(--field-fg); border: var(--field-border); border-radius: var(--field-radius); padding: 1px 4px; }
+.threadbar .tcount { color: var(--muted); }
+#graph canvas { display: block; }
+.labels3d { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+.lbl3d { position: absolute; left: 0; top: 0; white-space: nowrap; font: var(--label-weight, 400) 12px var(--font-label); text-transform: var(--label-case, none); color: var(--label); background: color-mix(in srgb, var(--label-bg) 85%, transparent); padding: 1px 6px; border-radius: 4px; will-change: transform; }
+.lbl3d.anchor { font-size: 14px; font-weight: 600; box-shadow: 0 0 0 1px var(--label); }
+.lbl3d.start { opacity: .72; }
+.lbl3d.hub { opacity: .78; font-size: 11.5px; }
+.lbl3d.step { opacity: .85; font-size: 11.5px; }
+.lbl3d.cursor { color: var(--cursor); box-shadow: 0 0 0 1px var(--cursor); }
 .tip { position: absolute; z-index: 6; pointer-events: none; background: var(--win-bg); color: var(--win-fg); border: var(--win-border); border-radius: 7px; padding: 5px 9px;
   font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.2); white-space: nowrap; max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
 .tip b { font-weight: 600; }
@@ -177,6 +187,8 @@ html[data-left="closed"] #left > .rail, html[data-right="closed"] #right > .rail
 .timeline { flex: none; display: flex; align-items: center; gap: 8px; height: 46px; padding: 4px 8px 6px; }
 #tlsvg { flex: 1; height: 38px; min-width: 0; }
 #tlsvg .bar { fill: var(--accent); opacity: .55; }
+#tlsvg .bar.dim { opacity: .18; }
+#tlsvg .seen line { stroke: var(--cursor); stroke-width: 2; opacity: .9; }
 #tlsvg .selection { fill: var(--cursor); fill-opacity: .18; stroke: var(--cursor); }
 #tlsvg .handle { fill: var(--cursor); }
 #tlsvg .axis text { fill: var(--muted); font: 10px var(--font-ui); }
@@ -266,3 +278,7 @@ kbd { font: 12px var(--font-ui); border: 1px solid var(--line); border-bottom-wi
 .lrow .l { line-height: 1.35; }
 .alink { cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); }
 .alink:hover { color: var(--accent); }
+
+/* colour of a thread drawn on the map */
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; }
+.sw.none { box-shadow: inset 0 0 0 1px var(--line); }
