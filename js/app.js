@@ -43,25 +43,25 @@
   }
   var pairKey = (a, b) => a < b ? a + "\0" + b : b + "\0" + a;
   var visitTime = (tr, v) => v.t || Date.parse(tr.created) || 0;
-  function timeSpan(state2) {
+  function timeSpan(state) {
     let a = Infinity, b = -Infinity;
-    for (const tr of state2.trails) for (const v of tr.visits) {
+    for (const tr of state.trails) for (const v of tr.visits) {
       const t = visitTime(tr, v);
       if (t < a) a = t;
       if (t > b) b = t;
     }
     return a <= b ? [a, b] : null;
   }
-  function derive(state2, range2 = null) {
+  function derive(state, range = null) {
     const articles = /* @__PURE__ */ new Map();
     const links = /* @__PURE__ */ new Map();
-    const inRange = (t) => !range2 || t >= range2[0] && t <= range2[1];
+    const inRange2 = (t) => !range || t >= range[0] && t <= range[1];
     const art = (t) => {
       if (!articles.has(t)) articles.set(t, { title: t, visits: 0, trails: /* @__PURE__ */ new Set(), starts: /* @__PURE__ */ new Set(), last: 0 });
       return articles.get(t);
     };
-    const trailIndex = /* @__PURE__ */ new Map();
-    state2.trails.forEach((tr, i) => {
+    const trailIndex2 = /* @__PURE__ */ new Map();
+    state.trails.forEach((tr, i) => {
       const byId = new Map(tr.visits.map((v) => [v.id, v]));
       const children = new Map(tr.visits.map((v) => [v.id, []]));
       let root = null;
@@ -69,7 +69,7 @@
         if (v.parent != null) children.get(v.parent)?.push(v.id);
         if (v.parent == null && !root) root = v;
         const t = visitTime(tr, v);
-        if (!inRange(t)) continue;
+        if (!inRange2(t)) continue;
         const a = art(v.article);
         a.visits++;
         a.trails.add(tr.id);
@@ -92,67 +92,83 @@
         if (t > l.last) l.last = t;
         art(from);
       }
-      trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root });
+      trailIndex2.set(tr.id, { trail: tr, index: i, byId, children, root });
     });
-    return { articles, links, trailIndex };
+    return { articles, links, trailIndex: trailIndex2 };
   }
   function chainTo(trailInfo, visitId) {
     const out = [];
     for (let v = trailInfo.byId.get(visitId); v; v = v.parent == null ? null : trailInfo.byId.get(v.parent)) out.unshift(v);
     return out;
   }
-  function trailSteps(d, trailIds) {
-    const steps = [];
-    for (const id of trailIds) {
-      const ti = d.trailIndex.get(id);
-      if (!ti) continue;
-      ti.trail.visits.forEach((v, order) => {
+  function trailPath(ti, anchorId = null) {
+    const segs = [];
+    const vs = ti.trail.visits;
+    if (!anchorId) {
+      const n = Math.max(1, vs.length - 1);
+      vs.forEach((v, i) => {
         if (v.parent == null) return;
-        const from = ti.byId.get(v.parent).article;
-        if (from !== v.article) steps.push({ trailId: id, from, to: v.article, order });
+        const from = ti.byId.get(v.parent);
+        const i0 = vs.indexOf(from);
+        if (from.article !== v.article) segs.push({ from: from.article, to: v.article, p0: i0 / n, p1: i / n, before: false, vid: v.id });
       });
+      return segs;
     }
-    return steps;
+    const chain = chainTo(ti, anchorId);
+    const L = Math.max(1, chain.length - 1);
+    for (let i = 1; i < chain.length; i++) {
+      if (chain[i - 1].article !== chain[i].article) segs.push({ from: chain[i - 1].article, to: chain[i].article, p0: 0.5 * (i - 1) / L, p1: 0.5 * i / L, before: true, vid: chain[i].id });
+    }
+    const depth = /* @__PURE__ */ new Map([[anchorId, 0]]);
+    const after = [];
+    for (const v of vs) {
+      if (v.parent == null || !depth.has(v.parent)) continue;
+      depth.set(v.id, depth.get(v.parent) + 1);
+      after.push(v);
+    }
+    const maxD = Math.max(1, ...after.map((v) => depth.get(v.id)));
+    for (const v of after) {
+      const from = ti.byId.get(v.parent), d = depth.get(v.id);
+      if (from.article !== v.article) segs.push({ from: from.article, to: v.article, p0: 0.5 + 0.5 * (d - 1) / maxD, p1: 0.5 + 0.5 * d / maxD, before: false, vid: v.id });
+    }
+    return segs;
   }
-  function routesTo(d, title) {
-    const steps = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const [id, ti] of d.trailIndex) {
-      for (const v of ti.trail.visits) {
-        if (v.article !== title) continue;
-        const chain = chainTo(ti, v.id);
-        for (let i = 1; i < chain.length; i++) {
-          const k = id + "|" + chain[i].id;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          if (chain[i - 1].article !== chain[i].article) steps.push({ trailId: id, from: chain[i - 1].article, to: chain[i].article, order: i });
-        }
-      }
+  function trailShape(tr) {
+    const byId = new Map(tr.visits.map((v) => [v.id, v]));
+    const last = tr.visits[tr.visits.length - 1];
+    const main = [];
+    for (let v = last; v; v = v.parent == null ? null : byId.get(v.parent)) main.unshift(v);
+    const onMain = new Set(main.map((v) => v.id));
+    const children = /* @__PURE__ */ new Map();
+    for (const v of tr.visits) if (v.parent != null) {
+      if (!children.has(v.parent)) children.set(v.parent, []);
+      children.get(v.parent).push(v);
     }
-    return steps;
-  }
-  function routesThrough(d, a, b) {
-    const steps = [], seen = /* @__PURE__ */ new Set();
-    for (const [id, ti] of d.trailIndex) {
-      for (const v of ti.trail.visits) {
-        if (v.parent == null) continue;
-        const from = ti.byId.get(v.parent).article;
-        if (!(from === a && v.article === b || from === b && v.article === a)) continue;
-        const chain = chainTo(ti, v.id);
-        for (let i = 1; i < chain.length; i++) {
-          const k = id + "|" + chain[i].id;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          if (chain[i - 1].article !== chain[i].article) steps.push({ trailId: id, from: chain[i - 1].article, to: chain[i].article, order: i });
-        }
-      }
+    const branches = [];
+    for (const v of tr.visits) {
+      if (onMain.has(v.id) || v.parent == null || !onMain.has(v.parent)) continue;
+      const seq = [];
+      const walk = (x) => {
+        seq.push(x);
+        for (const c of children.get(x.id) || []) walk(c);
+      };
+      walk(v);
+      branches.push({ from: byId.get(v.parent), visits: seq });
     }
-    return steps;
+    const depth = /* @__PURE__ */ new Map();
+    const lines = tr.visits.map((v, i) => {
+      let d = 0;
+      if (!onMain.has(v.id)) d = (depth.get(v.parent) || 0) + 1;
+      depth.set(v.id, d);
+      return { v, n: i + 1, depth: d, side: d > 0 };
+    });
+    return { main, branches, lines, onMain };
   }
   function trailLabel(tr) {
     if (tr.name) return tr.name;
     const first = tr.visits[0]?.article || "Empty";
-    return `${first} trail`;
+    const last = tr.visits[tr.visits.length - 1]?.article;
+    return last && last !== first ? `${first} \u2192 ${last}` : first;
   }
 
   // src/storage.js
@@ -207,12 +223,12 @@
     return null;
   }
   var saveT;
-  function saveLocal(state2) {
+  function saveLocal(state) {
     clearTimeout(saveT);
     saveT = setTimeout(() => {
-      idbSet(KEY, JSON.parse(JSON.stringify(state2))).catch(() => {
+      idbSet(KEY, JSON.parse(JSON.stringify(state))).catch(() => {
         try {
-          localStorage.setItem(OLD_KEY, JSON.stringify(state2));
+          localStorage.setItem(OLD_KEY, JSON.stringify(state));
         } catch {
         }
       });
@@ -230,8 +246,8 @@
   }
   var handle = null;
   var TYPES = [{ description: "Wiki Trails history", accept: { "application/json": [".json"] } }];
-  async function saveToFile(state2, { saveAs = false } = {}) {
-    const text = JSON.stringify({ app: "wiki-trails", savedAt: (/* @__PURE__ */ new Date()).toISOString(), ...state2 });
+  async function saveToFile(state, { saveAs = false } = {}) {
+    const text = JSON.stringify({ app: "wiki-trails", savedAt: (/* @__PURE__ */ new Date()).toISOString(), ...state });
     if ("showSaveFilePicker" in window) {
       try {
         if (!handle || saveAs) handle = await window.showSaveFilePicker({ suggestedName: "wiki-trails-history.json", types: TYPES });
@@ -259,9 +275,9 @@
     try {
       const [h] = await window.showOpenFilePicker({ types: TYPES });
       const f = await h.getFile();
-      const state2 = validate(JSON.parse(await f.text()));
+      const state = validate(JSON.parse(await f.text()));
       handle = h;
-      return { state: state2, name: f.name };
+      return { state, name: f.name };
     } catch (e) {
       if (e.name === "AbortError") return null;
       if (e.name === "SecurityError" || e.name === "NotAllowedError") return "fallback";
@@ -285,10 +301,204 @@
     return { state: { ...a, trails, layout: { ...b.layout || {}, ...a.layout || {} } }, added };
   }
 
-  // src/graph.js
-  var d32 = window.d3;
+  // src/app.js
+  var SETTINGS_KEY = "wiki-trails.settings";
+  var DEFAULTS = { skin: "plain", theme: "system", density: 1, fade: true, sound: false, left: true, right: true };
+  var app = {
+    state: emptyState(),
+    D: null,
+    // derived over all time (drives the map layout)
+    DV: null,
+    // derived for the time range you're looking at
+    range: null,
+    // [fromMs, toMs] or null for all time
+    rangeName: "all",
+    // '30' | '365' | 'all' | 'custom'
+    sel: null,
+    // what's selected: { kind: 'article' | 'edge' | 'trail', id }
+    hover: null,
+    // what the pointer is over (preview only)
+    cur: null,
+    // where the next recorded click attaches: { trailId, visitId }
+    focus: null,
+    // focus mode: { title, set }
+    colors: [],
+    // trail colours of the current skin
+    settings: loadSettings()
+  };
+  app.D = app.DV = derive(app.state);
+  var listeners = {};
+  function on(ev, fn) {
+    (listeners[ev] || (listeners[ev] = [])).push(fn);
+  }
+  function emit(ev, data) {
+    for (const fn of listeners[ev] || []) fn(data);
+  }
+  var trailOf = (id) => app.state.trails.find((t) => t.id === id);
+  var trailIndex = (id) => app.D.trailIndex.get(id)?.index ?? 0;
+  var colorOf = (trailId) => app.colors[trailIndex(trailId) % Math.max(1, app.colors.length)] || "#888";
+  function cursorVisit() {
+    return app.cur ? app.D.trailIndex.get(app.cur.trailId)?.byId.get(app.cur.visitId) || null : null;
+  }
+  function totalClicks(state = app.state) {
+    let n = 0;
+    for (const t of state.trails) n += Math.max(0, t.visits.length - 1);
+    return n;
+  }
+  function inRange(tr) {
+    if (!app.range) return true;
+    return tr.visits.some((v) => {
+      const t = visitTime(tr, v);
+      return t >= app.range[0] && t <= app.range[1];
+    });
+  }
+  function rederive() {
+    app.D = derive(app.state);
+    app.DV = app.range ? derive(app.state, app.range) : app.D;
+    const sp = timeSpan(app.state);
+    app.span = sp ? sp[1] - sp[0] : 0;
+  }
+  function commit(opts = {}) {
+    saveLocal(app.state);
+    rederive();
+    if (app.cur && !app.D.trailIndex.get(app.cur.trailId)?.byId.has(app.cur.visitId)) app.cur = null;
+    const s = app.sel;
+    if (s && (s.kind === "trail" && !trailOf(s.id) || s.kind === "article" && !app.D.articles.has(s.id) || s.kind === "edge" && !app.D.links.has(s.id))) app.sel = null;
+    if (app.focus && !app.D.articles.has(app.focus.title)) app.focus = null;
+    emit("data", opts);
+  }
+  var undoStack = [];
+  function snapshot() {
+    const { layout, ...rest } = app.state;
+    undoStack.push(JSON.stringify({ state: rest, cur: app.cur }));
+    let bytes = 0;
+    for (const u of undoStack) bytes += u.length;
+    while (undoStack.length > 1 && (undoStack.length > 100 || bytes > 24e6)) bytes -= undoStack.shift().length;
+    emit("dirty");
+  }
+  var canUndo = () => undoStack.length > 0;
+  function undo() {
+    const s = undoStack.pop();
+    if (!s) return false;
+    const o = JSON.parse(s);
+    app.state = { ...o.state, layout: app.state.layout };
+    app.cur = o.cur;
+    commit();
+    return true;
+  }
+  function replaceState(next) {
+    snapshot();
+    app.state = next;
+    app.cur = null;
+    app.sel = null;
+    app.hover = null;
+    app.focus = null;
+    app.range = null;
+    app.rangeName = "all";
+    commit({ fresh: true });
+  }
+  var same = (a, b) => a === b || a && b && a.kind === b.kind && a.id === b.id;
+  function select(sel, opts = {}) {
+    if (same(sel, app.sel) && !opts.force) return;
+    app.sel = sel;
+    emit("select", opts);
+  }
+  function setHover(h) {
+    if (same(h, app.hover)) return;
+    app.hover = h;
+    emit("hover");
+  }
+  function setCursor(cur) {
+    app.cur = cur;
+    emit("cursor");
+  }
+  function setRange(range, name = range ? "custom" : "all") {
+    app.range = range;
+    app.rangeName = name;
+    app.DV = range ? derive(app.state, range) : app.D;
+    emit("range");
+  }
+  function setFocus(title, set = null) {
+    app.focus = title ? { title, set } : null;
+    emit("focus");
+  }
+  var MAX_PATHS = 120;
+  function recency(t) {
+    const span = app.span || 30 * 864e5;
+    const tau = Math.max(21 * 864e5, span / 4);
+    return 0.15 + 0.85 * Math.exp(-Math.max(0, Date.now() - t) / tau);
+  }
+  function specFor(target) {
+    if (!target) return null;
+    const D = app.D, DV = app.DV, fs = app.focus?.set, r = app.range;
+    const ok = (s) => DV.articles.has(s.from) && DV.articles.has(s.to) && (!fs || fs.has(s.from) && fs.has(s.to));
+    const inR = (t) => !r || t >= r[0] && t <= r[1];
+    const paths = [];
+    const add = (ti, anchorVisit) => {
+      const t = anchorVisit ? visitTime(ti.trail, anchorVisit) : Date.parse(ti.trail.created);
+      const segs = trailPath(ti, anchorVisit?.id).filter(ok);
+      paths.push({ trailId: ti.trail.id, segs, t, rec: recency(t) });
+    };
+    if (target.kind === "trail") {
+      const ti = D.trailIndex.get(target.id);
+      if (!ti) return null;
+      add(ti, null);
+      const numbers = /* @__PURE__ */ new Map();
+      ti.trail.visits.forEach((v, i) => {
+        if (!numbers.has(v.article)) numbers.set(v.article, i + 1);
+      });
+      return { mode: "trail", paths, numbers, anchor: null, total: 1 };
+    }
+    if (target.kind === "article") {
+      const a = D.articles.get(target.id);
+      if (!a) return null;
+      for (const id of a.trails) {
+        const ti = D.trailIndex.get(id);
+        let anchor = null;
+        for (const v of ti.trail.visits) if (v.article === a.title && inR(visitTime(ti.trail, v))) anchor = v;
+        if (anchor) add(ti, anchor);
+      }
+    } else if (target.kind === "edge") {
+      const l = D.links.get(target.id);
+      if (!l) return null;
+      for (const id of l.trails) {
+        const ti = D.trailIndex.get(id);
+        let anchor = null;
+        for (const v of ti.trail.visits) {
+          if (v.parent == null) continue;
+          const from = ti.byId.get(v.parent).article;
+          if ((from === l.a && v.article === l.b || from === l.b && v.article === l.a) && inR(visitTime(ti.trail, v))) anchor = v;
+        }
+        if (anchor) add(ti, anchor);
+      }
+    }
+    paths.sort((p, q) => q.t - p.t);
+    const total = paths.length;
+    return { mode: "anchor", paths: paths.slice(0, MAX_PATHS), total, anchor: target.kind === "article" ? target.id : null, edgeKey: target.kind === "edge" ? target.id : null };
+  }
+  function loadSettings() {
+    try {
+      return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
+    } catch {
+      return { ...DEFAULTS };
+    }
+  }
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(app.settings));
+    } catch {
+    }
+  }
+  function setSetting(key, value) {
+    app.settings[key] = value;
+    saveSettings();
+    emit("settings", key);
+  }
+
+  // src/views/map.js
+  var d3 = window.d3;
   var TRAIL_COLORS = ["#ffff55", "#55ffff", "#ff55ff", "#ff5555", "#55ff55", "#ffaa00", "#7f7fff", "#ffffff", "#ff9ecf", "#aaff00"];
-  var HUB = d32.interpolateRgbBasis(["#1d6b36", "#2fd35a", "#a8ff4d", "#ffe14d", "#ffaa00"]);
+  var HUB = d3.interpolateRgbBasis(["#1d6b36", "#2fd35a", "#a8ff4d", "#ffe14d", "#ffaa00"]);
   var MAXV = 30;
   var MAXT = 20;
   var radius = (v) => 2.3 + Math.min(1.7 * Math.sqrt(v), 8.5 * Math.sqrt(v / MAXV));
@@ -338,11 +548,11 @@
   }
   function createGraph(canvas, handlers) {
     const ctx = canvas.getContext("2d");
-    let W2 = 1, H = 1, dpr = 1;
-    let T = d32.zoomIdentity, ax = 1, ay = 1, kFit = 1;
+    let W = 1, H = 1, dpr = 1;
+    let T = d3.zoomIdentity, ax = 1, ay = 1, kFit = 1;
     const zr = () => T.k / kFit;
-    const style = { link: "#39ff88", label: "#c6ffd8", labelBg: "#010a04", labelStart: "#fff", cursor: "#ffaa00", font: "monospace", weight: "400", upper: false };
-    let skin2 = { shape: "square", hollow: false, glow: true, edge: "plain", bend: 0.12, labelSize: 15, walker: false };
+    const style = { link: "#39ff88", label: "#c6ffd8", labelBg: "#010a04", labelStart: "#fff", cursor: "#ffaa00", before: "#4da3ff", after: "#ffaa00", font: "monospace", weight: "400", upper: false };
+    let skin = { shape: "square", hollow: false, glow: true, edge: "plain", bend: 0.12, labelSize: 15, walker: false };
     const view = { density: 1, fade: true, focus: null };
     let nodes = [], nodeBy = /* @__PURE__ */ new Map(), adj = /* @__PURE__ */ new Map();
     let visArticles = /* @__PURE__ */ new Map(), visNodes = [], sorted = [], visMaxDeg = 1, spanMs = 30 * DAY, nowMs = Date.now();
@@ -350,7 +560,7 @@
     let quad = null, drawn = [];
     let over = null, cursor = null, hoverNode = null, hoverEdge = null;
     let drawMs = 0, simLeft = 0, pinnedFresh = false, lastInteract = 0, dirty = true, raf = 0, lastFrame = 0;
-    const sim = d32.forceSimulation().stop().force("link", d32.forceLink().id((d) => d.title).distance((l) => 22 + 90 / (1 + 0.7 * Math.log2(1 + l.total))).strength((l) => Math.min(1, 0.1 + 0.15 * Math.log2(1 + l.total)))).force("charge", d32.forceManyBody().theta(0.9).distanceMax(520)).force("collide", d32.forceCollide((n) => radius(n.visits) + 4).iterations(1)).force("x", d32.forceX().strength(0.03)).force("y", d32.forceY().strength(0.03));
+    const sim = d3.forceSimulation().stop().force("link", d3.forceLink().id((d) => d.title).distance((l) => 22 + 90 / (1 + 0.7 * Math.log2(1 + l.total))).strength((l) => Math.min(1, 0.1 + 0.15 * Math.log2(1 + l.total)))).force("charge", d3.forceManyBody().theta(0.9).distanceMax(520)).force("collide", d3.forceCollide((n) => radius(n.visits) + 4).iterations(1)).force("x", d3.forceX().strength(0.03)).force("y", d3.forceY().strength(0.03));
     function runSim(alpha, ticks) {
       sim.alpha(alpha);
       simLeft = Math.max(simLeft, ticks);
@@ -433,13 +643,13 @@
     }
     function setVisible(visible) {
       visArticles = visible.articles;
-      const focusSet2 = view.focus;
-      visNodes = nodes.filter((n) => visArticles.has(n.title) && (!focusSet2 || focusSet2.has(n.title)));
+      const focusSet = view.focus;
+      visNodes = nodes.filter((n) => visArticles.has(n.title) && (!focusSet || focusSet.has(n.title)));
       const deg = /* @__PURE__ */ new Map();
       const ls = [];
       let tMin = Infinity, tMax = -Infinity;
       for (const l of visible.links.values()) {
-        if (focusSet2 && !(focusSet2.has(l.a) && focusSet2.has(l.b))) continue;
+        if (focusSet && !(focusSet.has(l.a) && focusSet.has(l.b))) continue;
         ls.push(l);
         deg.set(l.a, (deg.get(l.a) || 0) + l.total);
         deg.set(l.b, (deg.get(l.b) || 0) + l.total);
@@ -461,14 +671,14 @@
       dirty = true;
       kick();
     }
-    function recency(last) {
+    function recency2(last) {
       if (!view.fade || !last) return 1;
       const tau = Math.max(30 * DAY, spanMs / 5);
       return 0.28 + 0.72 * Math.exp(-Math.max(0, nowMs - last) / tau);
     }
     function rescore(ls = sorted) {
       for (const l of ls) {
-        l.rec = recency(l.last);
+        l.rec = recency2(l.last);
         l.score = l.total * (0.25 + 0.75 * l.rec);
       }
       sorted = [...ls].sort((p, q) => q.score - p.score);
@@ -476,22 +686,22 @@
       for (const l of sorted) l.strong = l.total >= 3 && l.score >= strongCut;
     }
     function rebuildQuad() {
-      quad = d32.quadtree(visNodes, (n) => n.x, (n) => n.y);
+      quad = d3.quadtree(visNodes, (n) => n.x, (n) => n.y);
     }
     const sx = (x) => T.x + T.k * ax * x;
     const sy = (y) => T.y + T.k * ay * y;
     const lx = (px) => (px - T.x) / (T.k * ax);
     const ly = (py) => (py - T.y) / (T.k * ay);
     function ctrlPt(x1, y1, x2, y2, extra = 0) {
-      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, bend = len * skin2.bend + extra;
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, bend = len * skin.bend + extra;
       return [(x1 + x2) / 2 - dy / len * bend, (y1 + y2) / 2 + dx / len * bend];
     }
     function resize() {
       const r = canvas.getBoundingClientRect();
       dpr = Math.min(2, window.devicePixelRatio || 1);
-      W2 = Math.max(1, r.width);
+      W = Math.max(1, r.width);
       H = Math.max(1, r.height);
-      canvas.width = Math.round(W2 * dpr);
+      canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
       dirty = true;
       kick();
@@ -514,19 +724,19 @@
     }
     function draw(now) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W2, H);
+      ctx.clearRect(0, 0, W, H);
       drawn = [];
       if (!visNodes.length) return;
       const k = zr(), rs = Math.max(0.7, Math.min(2.2, Math.sqrt(k)));
       const lit = over?.nodes || null;
       const dimF = over ? 0.13 : 1;
       const M = 60;
-      const inView2 = (x, y) => x > -M && x < W2 + M && y > -M && y < H + M;
+      const inView = (x, y) => x > -M && x < W + M && y > -M && y < H + M;
       const budget = Math.round(380 * view.density * Math.min(10, Math.max(1, Math.pow(k, 1.25))));
       const wsc = Math.max(0.7, Math.min(1.6, Math.pow(k, 0.35)));
       const major = /* @__PURE__ */ new Set();
-      const dash = skin2.edge === "dotted" ? [1, 7] : skin2.edge === "blocks" ? [4, 4] : null;
-      ctx.lineCap = skin2.edge === "blocks" ? "butt" : "round";
+      const dash = skin.edge === "dotted" ? [1, 7] : skin.edge === "blocks" ? [4, 4] : null;
+      ctx.lineCap = skin.edge === "blocks" ? "butt" : "round";
       ctx.strokeStyle = style.link;
       let count = 0;
       for (const l of sorted) {
@@ -534,14 +744,14 @@
         const A = nodeBy.get(l.a), B = nodeBy.get(l.b);
         if (!A || !B) continue;
         const x1 = sx(A.x), y1 = sy(A.y), x2 = sx(B.x), y2 = sy(B.y);
-        if (!inView2(x1, y1) && !inView2(x2, y2)) continue;
+        if (!inView(x1, y1) && !inView(x2, y2)) continue;
         count++;
         const [cx, cy] = ctrlPt(x1, y1, x2, y2);
         const w = widthOf(l.total) * wsc, a = alphaOf(l.total) * l.rec * dimF;
         drawn.push({ l, x1, y1, cx, cy, x2, y2, w });
         major.add(l.a);
         major.add(l.b);
-        if (l.strong && skin2.glow !== false && !over) {
+        if (l.strong && skin.glow !== false && !over) {
           ctx.globalAlpha = a * 0.16;
           ctx.lineWidth = w * 3 + 5;
           ctx.setLineDash([]);
@@ -553,7 +763,7 @@
         ctx.globalAlpha = a;
         ctx.lineWidth = w;
         if (dash) ctx.setLineDash(dash.map((d) => d * Math.max(1, w / 2)));
-        else if (skin2.edge === "pulse" && l.strong) {
+        else if (skin.edge === "pulse" && l.strong) {
           ctx.setLineDash([2, 12]);
           ctx.lineDashOffset = -(now / 60) % 14;
         } else ctx.setLineDash([]);
@@ -578,12 +788,12 @@
           major.add(d.l.b);
         }
       }
-      if (over) drawLanes(now, rs);
+      if (over) drawPaths(rs);
       const nodeBudget = Math.round(160 * view.density * Math.min(12, Math.max(1, k * k)));
       const inViewNodes = [];
       for (const n of visNodes) {
         const x = sx(n.x), y = sy(n.y);
-        if (inView2(x, y)) inViewNodes.push([n, x, y]);
+        if (inView(x, y)) inViewNodes.push([n, x, y]);
       }
       inViewNodes.sort((p, q) => q[0].visits - p[0].visits);
       const shown = [];
@@ -598,7 +808,7 @@
         ctx.globalAlpha = over ? 0.05 : 0.22;
         ctx.fillRect(x - 1, y - 1, 2, 2);
       }
-      const hollow = !!skin2.hollow;
+      const hollow = !!skin.hollow;
       for (const [n, x, y] of shown) {
         const isLit = !lit || lit.has(n.title);
         const col = HUB(Math.log1p(n.deg) / Math.log1p(visMaxDeg));
@@ -606,7 +816,7 @@
         ctx.globalAlpha = isLit ? 1 : 0.16;
         ctx.save();
         ctx.translate(x, y);
-        const p = shapeP2D(skin2.shape, r);
+        const p = shapeP2D(skin.shape, r);
         if (hollow) {
           ctx.strokeStyle = col;
           ctx.lineWidth = n.isStart ? 3 : 1.6;
@@ -618,18 +828,40 @@
           ctx.lineWidth = n.isStart ? 2 : 1;
           ctx.stroke(p);
         }
-        if (n.title === hoverNode || n.title === over?.focus) {
+        if (over && isLit) {
+          ctx.globalAlpha = 1;
+          if (over.ends.has(n.title)) {
+            ctx.strokeStyle = style.after;
+            ctx.lineWidth = 2.5;
+            ctx.stroke(shapeP2D(skin.shape, r + 3.5));
+          }
+          if (over.starts.has(n.title)) {
+            ctx.strokeStyle = style.before;
+            ctx.lineWidth = 2.5;
+            ctx.stroke(shapeP2D(skin.shape, r + (over.ends.has(n.title) ? 7 : 3.5)));
+          }
+          if (n.title === over.anchor) {
+            ctx.globalAlpha = 0.18;
+            ctx.fillStyle = style.labelStart;
+            ctx.fill(shapeP2D(skin.shape, r + 11));
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = style.labelStart;
+            ctx.lineWidth = 3;
+            ctx.stroke(shapeP2D(skin.shape, r + 6));
+          }
+        }
+        if (n.title === hoverNode) {
           ctx.globalAlpha = 1;
           ctx.strokeStyle = style.labelStart;
-          ctx.lineWidth = 2.5;
-          ctx.stroke(shapeP2D(skin2.shape, r + 3));
+          ctx.lineWidth = 2;
+          ctx.stroke(shapeP2D(skin.shape, r + 3));
         }
         if (n.title === cursor && Math.floor(now / 500) % 2 === 0) {
           ctx.globalAlpha = 1;
           ctx.strokeStyle = style.cursor;
           ctx.lineWidth = 3;
           ctx.setLineDash([4, 3]);
-          ctx.stroke(shapeP2D(skin2.shape, r + 5));
+          ctx.stroke(shapeP2D(skin.shape, r + 5));
           ctx.setLineDash([]);
         }
         ctx.restore();
@@ -652,7 +884,7 @@
           ctx.fillText(String(num), bx, by + 1);
         }
         ctx.textAlign = "start";
-        if (skin2.walker && over.walk?.length) drawWalker(now);
+        if (skin.walker && over.walk?.length) drawWalker(now);
       }
       drawLabels(shown, lit);
       ctx.globalAlpha = 1;
@@ -665,65 +897,57 @@
       const [cx, cy] = ctrlPt(x1, y1, x2, y2, extra);
       return lane.from < lane.to ? [x1, y1, cx, cy, x2, y2] : [x2, y2, cx, cy, x1, y1];
     }
-    function drawLanes(now, rs) {
-      const off = -(now / 35) % 12;
-      for (const lane of over.lanes) {
-        const p = lanePath(lane, lane.extra);
+    function rampColor(p, mode) {
+      if (mode === "trail") return d3.interpolateRgb(style.before, style.after)(p);
+      if (p <= 0.5) return d3.interpolateRgb(style.labelBg, style.before)(0.28 + 0.72 * (p / 0.5));
+      return d3.interpolateRgb(style.labelBg, style.after)(0.28 + 0.72 * (1 - (p - 0.5) / 0.5));
+    }
+    function drawPaths(rs) {
+      const arrows = over.segs.length < 500;
+      ctx.lineCap = "round";
+      ctx.setLineDash([]);
+      for (const s of over.segs) {
+        const p = lanePath(s, s.extra);
         if (!p) continue;
-        const [x1, y1, cx, cy, x2, y2] = p, col = lane.color, w = (1.4 + 1.1 * Math.log2(1 + lane.count)) * Math.min(1.4, rs);
-        ctx.strokeStyle = col;
-        if (over.lanes.length < 400) {
-          ctx.globalAlpha = 0.22;
-          ctx.lineWidth = w * 3.5;
-          ctx.setLineDash([]);
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(cx, cy, x2, y2);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = 0.95;
+        const [x1, y1, cx, cy, x2, y2] = p;
+        const g = ctx.createLinearGradient(x1, y1, x2, y2);
+        g.addColorStop(0, s.c0);
+        g.addColorStop(1, s.c1);
+        const w = (0.9 + 3.6 * s.rec) * Math.min(1.5, rs);
+        ctx.globalAlpha = 0.28 + 0.67 * s.rec;
+        ctx.strokeStyle = g;
         ctx.lineWidth = w;
-        ctx.setLineDash(style.laneDash ? [6, 6] : []);
-        ctx.lineDashOffset = off;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.quadraticCurveTo(cx, cy, x2, y2);
         ctx.stroke();
-        const u = 0.58, mx = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, my = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
-        const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy), an = Math.atan2(ty, tx);
-        ctx.save();
-        ctx.translate(mx, my);
-        ctx.rotate(an);
-        ctx.fillStyle = col;
-        ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.moveTo(6, 0);
-        ctx.lineTo(-5, -4.5);
-        ctx.lineTo(-5, 4.5);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      ctx.setLineDash([]);
-      ctx.lineDashOffset = 0;
-      if (over.edgeKey) {
-        const d = drawn.find((e) => e.l.key === over.edgeKey) || (() => {
-          const [a, b] = over.edgeKey.split("\0");
-          const A = nodeBy.get(a), B = nodeBy.get(b);
-          if (!A || !B) return null;
-          const x1 = sx(A.x), y1 = sy(A.y), x2 = sx(B.x), y2 = sy(B.y), [cx, cy] = ctrlPt(x1, y1, x2, y2);
-          return { x1, y1, cx, cy, x2, y2, w: 3 };
-        })();
-        if (d) {
-          ctx.strokeStyle = style.cursor;
-          ctx.globalAlpha = 0.35;
-          ctx.lineWidth = d.w + 12;
+        if (arrows && s.rec > 0.2 && Math.hypot(x2 - x1, y2 - y1) > 40) {
+          const u = 0.6, mx = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, my = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
+          const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy), a = 3 + w;
+          ctx.save();
+          ctx.translate(mx, my);
+          ctx.rotate(Math.atan2(ty, tx));
+          ctx.fillStyle = s.c1;
           ctx.beginPath();
-          ctx.moveTo(d.x1, d.y1);
-          ctx.quadraticCurveTo(d.cx, d.cy, d.x2, d.y2);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          ctx.lineWidth = d.w + 3;
+          ctx.moveTo(a, 0);
+          ctx.lineTo(-a * 0.8, -a * 0.7);
+          ctx.lineTo(-a * 0.8, a * 0.7);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      if (over.edgeKey) {
+        const [a, b] = over.edgeKey.split("\0");
+        const A = nodeBy.get(a), B = nodeBy.get(b);
+        if (A && B) {
+          const x1 = sx(A.x), y1 = sy(A.y), x2 = sx(B.x), y2 = sy(B.y), [cx, cy] = ctrlPt(x1, y1, x2, y2);
+          ctx.strokeStyle = style.labelStart;
+          ctx.globalAlpha = 0.25;
+          ctx.lineWidth = 14;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo(cx, cy, x2, y2);
           ctx.stroke();
         }
       }
@@ -731,7 +955,7 @@
     function drawWalker(now) {
       const steps = over.walk, dur = Math.max(4e3, steps.length * 1100), ph = now % dur / dur * steps.length;
       const i = Math.floor(ph), u = ph - i, st = steps[i];
-      const p = lanePath({ from: st.from, to: st.to }, 0);
+      const p = lanePath(st, st.extra);
       if (!p) return;
       const [x1, y1, cx, cy, x2, y2] = p;
       const x = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, y = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
@@ -748,13 +972,13 @@
     }
     function drawLabels(shown, lit) {
       const k = zr();
-      const size = skin2.labelSize || 14;
+      const size = skin.labelSize || 14;
       const font = `${style.weight} ${size}px ${style.font}`;
       ctx.font = font;
       ctx.textBaseline = "middle";
       ctx.lineJoin = "round";
-      const limit = Math.round(26 * view.density * Math.min(8, Math.max(1, Math.pow(k, 1.15)))) + (lit ? 30 : 0);
-      const cands = shown.filter(([n]) => !lit || lit.has(n.title)).map(([n, x, y]) => [n, x, y, (n.title === cursor || n.title === hoverNode || n.title === over?.focus ? 1e9 : 0) + n.visits * (1 + 0.5 * (n.isStart ? 1 : 0))]).sort((p, q) => q[3] - p[3]);
+      const limit = Math.round(26 * view.density * Math.min(8, Math.max(1, Math.pow(k, 1.15)))) + (lit ? 24 : 0);
+      const cands = shown.filter(([n]) => !lit || lit.has(n.title)).map(([n, x, y]) => [n, x, y, (n.title === cursor || n.title === hoverNode ? 1e9 : 0) + (over?.prio.get(n.title) || 0) + n.visits * (1 + 0.5 * (n.isStart ? 1 : 0))]).sort((p, q) => q[3] - p[3]);
       const placed = [];
       let count = 0;
       for (const [n, x, y] of cands) {
@@ -774,10 +998,23 @@
       }
     }
     function animating() {
-      return simLeft > 0 || !!over || !!cursor || skin2.edge === "pulse";
+      return simLeft > 0 || !!cursor || skin.edge === "pulse" || !!(over?.walk && skin.walker);
+    }
+    let paused = false;
+    function pause(p) {
+      paused = p;
+      if (!p) {
+        dirty = true;
+        kick();
+      }
     }
     function frame(now) {
       raf = 0;
+      if (paused) {
+        simSlice();
+        if (simLeft > 0) raf = requestAnimationFrame(frame);
+        return;
+      }
       simSlice();
       const interactive = now - lastInteract < 400 || simLeft > 0;
       if (dirty || animating() && (interactive || now - lastFrame > 33)) {
@@ -827,7 +1064,7 @@
       const r = canvas.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     };
-    const zoom = d32.zoom().scaleExtent([0.08, 24]).filter((e) => {
+    const zoom = d3.zoom().scaleExtent([0.08, 24]).filter((e) => {
       if (e.type === "wheel") return true;
       if (e.button || e.ctrlKey) return false;
       if (e.type === "mousedown" || e.type === "touchstart") return !nodeAt(...pos(e.touches?.[0] || e));
@@ -838,7 +1075,7 @@
       dirty = true;
       kick();
     });
-    const sel = d32.select(canvas).call(zoom).on("dblclick.zoom", null);
+    const sel = d3.select(canvas).call(zoom).on("dblclick.zoom", null);
     let drag = null, suppressClick = false, hoverRaf = 0, lastMove = null;
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button) return;
@@ -932,28 +1169,41 @@
         kick();
         return;
       }
-      const trails = new Set(spec.steps.map((s) => s.trailId));
-      const mono = trails.size > 24;
-      const lanes = /* @__PURE__ */ new Map();
-      for (const s of spec.steps) {
-        const pk = s.from < s.to ? s.from + "\0" + s.to : s.to + "\0" + s.from;
-        const key = mono ? `${pk}|${s.from}` : `${pk}|${s.trailId}|${s.from}`;
-        if (!lanes.has(key)) lanes.set(key, { pk, trailId: s.trailId, from: s.from, to: s.to, count: 0 });
-        lanes.get(key).count++;
+      const paths = [...spec.paths || []].sort((p, q) => p.t - q.t);
+      const perPair = /* @__PURE__ */ new Map(), segs = [];
+      for (const p of paths) for (const sg of p.segs) {
+        const pk = sg.from < sg.to ? sg.from + "\0" + sg.to : sg.to + "\0" + sg.from;
+        const idx = perPair.get(pk) || 0;
+        perPair.set(pk, idx + 1);
+        segs.push({ ...sg, pk, idx, rec: p.rec, trailId: p.trailId });
       }
-      const byPair = d32.group([...lanes.values()], (l) => l.pk);
-      const list = [];
-      for (const [, arr] of byPair) arr.forEach((l, i) => list.push({ ...l, extra: (i - (arr.length - 1) / 2) * Math.min(6, 30 / arr.length), color: mono ? style.cursor : spec.colorOf(l.trailId) }));
-      list.sort((p, q) => q.count - p.count);
-      const capped = list.slice(0, 900);
-      const ns = new Set(capped.flatMap((l) => [l.from, l.to]));
-      if (spec.focus) ns.add(spec.focus);
-      if (spec.edgeKey) for (const t of spec.edgeKey.split("\0")) ns.add(t);
-      over = { ...spec, lanes: capped, nodes: ns, walk: spec.numbers ? [...spec.steps].sort((p, q) => p.order - q.order) : null };
+      for (const sg of segs) {
+        const n = perPair.get(sg.pk);
+        sg.extra = (sg.idx - (n - 1) / 2) * Math.min(4, 24 / n);
+        sg.c0 = rampColor(sg.p0, spec.mode);
+        sg.c1 = rampColor(sg.p1, spec.mode);
+      }
+      const nodes2 = /* @__PURE__ */ new Set(), starts = /* @__PURE__ */ new Set(), ends = /* @__PURE__ */ new Set(), prio = /* @__PURE__ */ new Map();
+      for (const p of spec.paths || []) {
+        if (!p.segs.length) continue;
+        const froms = new Set(p.segs.map((sg) => sg.from)), tos = new Set(p.segs.map((sg) => sg.to));
+        for (const sg of p.segs) {
+          nodes2.add(sg.from);
+          nodes2.add(sg.to);
+          if (!tos.has(sg.from)) starts.add(sg.from);
+          if (!froms.has(sg.to)) ends.add(sg.to);
+        }
+      }
+      if (spec.anchor) nodes2.add(spec.anchor);
+      if (spec.edgeKey) for (const t of spec.edgeKey.split("\0")) nodes2.add(t);
+      for (const t of starts) prio.set(t, 1e6);
+      for (const t of ends) prio.set(t, (prio.get(t) || 0) + 1e5);
+      if (spec.anchor) prio.set(spec.anchor, 1e9);
+      over = { ...spec, spec, segs, nodes: nodes2, starts, ends, prio, walk: spec.mode === "trail" ? [...segs].sort((p, q) => p.p0 - q.p0) : null };
       dirty = true;
       kick();
     }
-    function setCursor(t) {
+    function setCursor2(t) {
       cursor = t;
       dirty = true;
       kick();
@@ -968,14 +1218,15 @@
       style.font = v("--font-label", "monospace");
       style.weight = v("--label-weight", "400");
       style.upper = v("--label-case", "none") === "uppercase";
-      style.laneDash = v("--lane-dash", "6 6") !== "none";
+      style.before = v("--path-before", "#4da3ff");
+      style.after = v("--path-after", style.cursor);
     }
     function setPalette(s) {
-      skin2 = { shape: "square", hollow: false, glow: true, edge: "plain", bend: 0.12, labelSize: 14, walker: false, ...s };
-      HUB = d32.interpolateRgbBasis(s.hub);
+      skin = { shape: "square", hollow: false, glow: true, edge: "plain", bend: 0.12, labelSize: 14, walker: false, ...s };
+      HUB = d3.interpolateRgbBasis(s.hub);
       TRAIL_COLORS.splice(0, TRAIL_COLORS.length, ...s.trails);
       readStyle();
-      if (over) setHighlight(over);
+      if (over) setHighlight(over.spec);
       dirty = true;
       kick();
       document.fonts?.ready.then(() => {
@@ -1011,29 +1262,59 @@
     function fit(animate = true) {
       const b = coreBox(visNodes.length ? visNodes : nodes);
       if (!b) return;
-      const padX = 70, padY = 40, vw = Math.max(50, W2 - padX * 2 - 60), vh = Math.max(50, H - padY * 2);
-      const bw = Math.max(1, b[2] - b[0]), bh = Math.max(1, b[3] - b[1]);
+      const padX = 70, padY = 40, vw = Math.max(50, W - padX * 2 - 60), vh = Math.max(50, H - padY * 2);
+      let bw = b[2] - b[0], bh = b[3] - b[1];
+      if (bw < 240) {
+        b[0] -= (240 - bw) / 2;
+        b[2] += (240 - bw) / 2;
+        bw = 240;
+      }
+      if (bh < 160) {
+        b[1] -= (160 - bh) / 2;
+        b[3] += (160 - bh) / 2;
+        bh = 160;
+      }
       const want = vw / vh / (bw / bh);
+      const maxStretch = visNodes.length < 30 ? 1 : visNodes.length < 120 ? 1.6 : 2.4;
       if (want >= 1) {
-        ax = Math.min(2.4, want);
+        ax = Math.min(maxStretch, want);
         ay = 1;
       } else {
         ax = 1;
-        ay = Math.min(2.4, 1 / want);
+        ay = Math.min(maxStretch, 1 / want);
       }
-      const k = Math.min(vw / (bw * ax), vh / (bh * ay));
+      const k = Math.max(0.08, Math.min(24, Math.min(vw / (bw * ax), vh / (bh * ay))));
       kFit = k;
-      const t = d32.zoomIdentity.translate(W2 / 2 - 30 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
+      const t = d3.zoomIdentity.translate(W / 2 - 30 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
       (animate ? sel.transition().duration(550) : sel).call(zoom.transform, t);
     }
     function focusOn(titles, padLeft = 0) {
       const list = [...titles].map((t2) => nodeBy.get(t2)).filter(Boolean);
       if (!list.length) return;
-      const b = bbox(list), vw = Math.max(150, W2 - padLeft - 220), vh = Math.max(100, H - 120);
+      const b = bbox(list), vw = Math.max(150, W - padLeft - 220), vh = Math.max(100, H - 120);
       const bw = Math.max(40, b[2] - b[0]), bh = Math.max(40, b[3] - b[1]);
       const k = Math.max(0.15, Math.min(6, Math.min(vw / (bw * ax), vh / (bh * ay))));
-      const t = d32.zoomIdentity.translate(padLeft + (W2 - padLeft) / 2 - 40 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
+      const t = d3.zoomIdentity.translate(padLeft + (W - padLeft) / 2 - 40 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
       sel.transition().duration(600).call(zoom.transform, t);
+    }
+    function reveal(titles) {
+      const list = [...titles].map((t2) => nodeBy.get(t2)).filter((n) => n && Number.isFinite(n.x));
+      if (!list.length) return;
+      const m = 50, mR = 160;
+      if (!list.some((n) => {
+        const x = sx(n.x), y = sy(n.y);
+        return x < m || x > W - mR || y < m || y > H - m;
+      })) return;
+      let x0 = (m - T.x) / (T.k * ax), x1 = (W - mR - T.x) / (T.k * ax), y0 = (m - T.y) / (T.k * ay), y1 = (H - m - T.y) / (T.k * ay);
+      for (const n of list) {
+        x0 = Math.min(x0, n.x);
+        x1 = Math.max(x1, n.x);
+        y0 = Math.min(y0, n.y);
+        y1 = Math.max(y1, n.y);
+      }
+      const k = Math.max(0.08, Math.min(T.k, (W - m - mR) / ((x1 - x0) * ax), (H - 2 * m) / ((y1 - y0) * ay)));
+      const t = d3.zoomIdentity.translate(m + (W - m - mR) / 2 - k * ax * (x0 + x1) / 2, H / 2 - k * ay * (y0 + y1) / 2).scale(k);
+      sel.transition().duration(500).call(zoom.transform, t);
     }
     function settleAndFit() {
       if (simLeft > 0 && nodes.length < 400) {
@@ -1044,6 +1325,15 @@
         simSlice(0);
       }
       fit(false);
+    }
+    function ensureVisible(title) {
+      const n = nodeBy.get(title);
+      if (!n) return;
+      const x = sx(n.x), y = sy(n.y), m = 70;
+      if (x > m && x < W - m && y > m && y < H - m) return;
+      const dx = x < m ? m + 40 - x : x > W - m ? W - m - 40 - x : 0;
+      const dy = y < m ? m + 40 - y : y > H - m ? H - m - 40 - y : 0;
+      sel.transition().duration(450).call(zoom.transform, T.translate(dx / T.k, dy / T.k));
     }
     function getPositions() {
       const out = {};
@@ -1079,15 +1369,20 @@
     }
     resize();
     return {
+      pause,
+      zoomBy: (f) => sel.transition().duration(250).call(zoom.scaleBy, f),
+      ensureVisible,
+      nodeCount: () => nodes.length,
       update,
       reset,
       setVisible,
       setPalette,
       setHighlight,
-      setCursor,
+      setCursor: setCursor2,
       setView,
       fit,
       focusOn,
+      reveal,
       settleAndFit,
       getPositions,
       relayout,
@@ -1109,11 +1404,11 @@
     };
   }
 
-  // src/effects.js
+  // src/views/effects.js
   var rand = (a, b) => a + Math.random() * (b - a);
   function createEffects(canvas) {
     const ctx = canvas.getContext("2d");
-    let fx2 = { type: "none" }, parts = [], w = 0, h = 0, dpr = 1, raf = 0, last = 0, t0 = performance.now();
+    let fx3 = { type: "none" }, parts = [], w = 0, h = 0, dpr = 1, raf = 0, last = 0, t0 = performance.now();
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     function resize() {
       const r = canvas.getBoundingClientRect();
@@ -1129,19 +1424,19 @@
     new ResizeObserver(resize).observe(canvas);
     function seed() {
       const n = (k) => Math.round(k * (w * h) / (1e3 * 700));
-      switch (fx2.type) {
+      switch (fx3.type) {
         case "stars":
         case "nebula":
-          parts = Array.from({ length: n(fx2.type === "nebula" ? 260 : 170) }, () => ({ x: rand(0, w), y: rand(0, h), s: Math.random() < 0.12 ? 2 : 1, p: rand(0, 6.3), v: rand(0.4, 1.6), c: Math.random() < 0.25 ? fx2.c2 : fx2.c1 }));
+          parts = Array.from({ length: n(fx3.type === "nebula" ? 260 : 170) }, () => ({ x: rand(0, w), y: rand(0, h), s: Math.random() < 0.12 ? 2 : 1, p: rand(0, 6.3), v: rand(0.4, 1.6), c: Math.random() < 0.25 ? fx3.c2 : fx3.c1 }));
           break;
         case "rain":
-          parts = Array.from({ length: n(150) }, () => ({ x: rand(0, w), y: rand(-h, h), l: rand(8, 26), v: rand(260, 520), c: Math.random() < 0.2 ? fx2.c2 : fx2.c1 }));
+          parts = Array.from({ length: n(150) }, () => ({ x: rand(0, w), y: rand(-h, h), l: rand(8, 26), v: rand(260, 520), c: Math.random() < 0.2 ? fx3.c2 : fx3.c1 }));
           break;
         case "bubbles":
           parts = Array.from({ length: n(45) }, () => ({ x: rand(0, w), y: rand(0, h), r: rand(3, 16), v: rand(12, 40), p: rand(0, 6.3) }));
           break;
         case "sparkles":
-          parts = Array.from({ length: n(34) }, () => ({ x: rand(0, w), y: rand(0, h), r: rand(4, 11), p: rand(0, 6.3), v: rand(0.6, 1.4), c: Math.random() < 0.5 ? fx2.c1 : fx2.c2 }));
+          parts = Array.from({ length: n(34) }, () => ({ x: rand(0, w), y: rand(0, h), r: rand(4, 11), p: rand(0, 6.3), v: rand(0.6, 1.4), c: Math.random() < 0.5 ? fx3.c1 : fx3.c2 }));
           break;
         case "dust":
           parts = Array.from({ length: n(80) }, () => ({ x: rand(0, w), y: rand(0, h), r: rand(0.8, 2.8), vx: rand(-6, 6), vy: rand(-5, 3), a: rand(0.08, 0.3) }));
@@ -1159,10 +1454,10 @@
     function draw(now) {
       const t = (now - t0) / 1e3;
       ctx.clearRect(0, 0, w, h);
-      const c1 = fx2.c1 || "#fff", c2 = fx2.c2 || c1;
-      switch (fx2.type) {
+      const c1 = fx3.c1 || "#fff", c2 = fx3.c2 || c1;
+      switch (fx3.type) {
         case "nebula": {
-          for (const [x, y, r, c, a] of [[0.25, 0.3, 0.55, c2, 0.16], [0.75, 0.65, 0.5, c1, 0.12], [0.55, 0.15, 0.35, fx2.c3 || c2, 0.1]]) {
+          for (const [x, y, r, c, a] of [[0.25, 0.3, 0.55, c2, 0.16], [0.75, 0.65, 0.5, c1, 0.12], [0.55, 0.15, 0.35, fx3.c3 || c2, 0.1]]) {
             const g = ctx.createRadialGradient(x * w, y * h, 0, x * w, y * h, r * Math.max(w, h));
             g.addColorStop(0, hexA(c, a));
             g.addColorStop(1, hexA(c, 0));
@@ -1228,7 +1523,7 @@
         case "grid": {
           const hy = h * 0.64;
           const sun = ctx.createLinearGradient(0, hy - h * 0.3, 0, hy);
-          sun.addColorStop(0, fx2.c3 || "#ffcf3f");
+          sun.addColorStop(0, fx3.c3 || "#ffcf3f");
           sun.addColorStop(1, c2);
           ctx.save();
           ctx.beginPath();
@@ -1386,12 +1681,12 @@
     }
     function start() {
       cancelAnimationFrame(raf);
-      if (fx2.type !== "none" && !reduced && !document.hidden) raf = requestAnimationFrame(loop);
+      if (fx3.type !== "none" && !reduced && !document.hidden) raf = requestAnimationFrame(loop);
     }
     document.addEventListener("visibilitychange", start);
     return {
       set(next) {
-        fx2 = next && next.type ? next : { type: "none" };
+        fx3 = next && next.type ? next : { type: "none" };
         resize();
         start();
       }
@@ -1406,6 +1701,953 @@
       return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
     }
     return c;
+  }
+
+  // src/skins.js
+  var VGA = ["#ffff55", "#55ffff", "#ff55ff", "#ff5555", "#55ff55", "#ffaa00", "#7f7fff", "#ffffff", "#ff9ecf", "#aaff00"];
+  var CATS = [
+    ["plain", "Plain"],
+    ["retro", "Retro computing"],
+    ["future", "Futuristic"],
+    ["ai", "AI"],
+    ["y2k", "Millennium / Y2K"],
+    ["console", "90s console games"],
+    ["synth", "Synthwave"],
+    ["minimal", "Minimal"]
+  ];
+  var SKINS = [
+    {
+      id: "plain",
+      name: "Plain",
+      cat: "plain",
+      blurb: "Clean and quiet. Follows your light or dark setting.",
+      chrome: "flat",
+      hub: ["#d3d8e0", "#a3adbd", "#6b778b", "#38404d"],
+      trails: ["#2f6fdb", "#e07a2f", "#2a9d8f", "#d1495b", "#8e6cc9", "#c79a1c", "#3d8b40", "#d4628f", "#5d6b7a", "#b5651d"],
+      dark: { hub: ["#3b404a", "#5d6576", "#8f99ab", "#d9dee7"], trails: ["#7aa2f7", "#f0a35e", "#4fd1c5", "#f2777a", "#b794f6", "#ecc94b", "#68d391", "#f687b3", "#a0aec0", "#ed8936"] },
+      shape: "circle",
+      glow: false,
+      bend: 0.12,
+      labelSize: 12.5,
+      sound: { wave: "sine", f: 880 }
+    },
+    // ---------------- retro computing ----------------
+    {
+      id: "desktop95",
+      name: "Desktop 95",
+      cat: "retro",
+      blurb: "Beveled windows and a green phosphor CRT.",
+      chrome: "bevel",
+      hub: ["#1d6b36", "#2fd35a", "#a8ff4d", "#ffe14d", "#ffaa00"],
+      trails: VGA,
+      shape: "square",
+      sound: { wave: "square", f: 880 }
+    },
+    {
+      id: "mono91",
+      name: "Mono '91",
+      cat: "retro",
+      blurb: "1-bit black & white desktop with pinstripe title bars.",
+      chrome: "onebit",
+      hub: ["#bbbbbb", "#777777", "#000000"],
+      trails: ["#dd0806", "#0000d4", "#1fb714", "#f20884", "#ff6403", "#4700a5", "#02abea", "#562c05", "#c9a400", "#90713a"],
+      shape: "square",
+      glow: false,
+      sound: { wave: "sine", f: 660 }
+    },
+    {
+      id: "amber",
+      name: "Amber Terminal",
+      cat: "retro",
+      blurb: "A DOS box in warm amber with double-line borders.",
+      chrome: "terminal",
+      hub: ["#5a3a00", "#b37400", "#ffb000", "#ffd27a", "#fff2cc"],
+      trails: ["#ffffff", "#ff5f1f", "#ffe066", "#7fff00", "#00e5ff", "#ff4fd8", "#ffb000", "#ff9e80", "#b2ff59", "#80d8ff"],
+      shape: "square",
+      sound: { wave: "square", f: 440 }
+    },
+    {
+      id: "vector",
+      name: "Vector Arcade",
+      cat: "retro",
+      blurb: "1979 vector monitor: glowing lines, hollow ships, a high score.",
+      chrome: "terminal",
+      hub: ["#3d7a8a", "#7cf9ff", "#ffffff"],
+      trails: ["#ff5ad6", "#7cf9ff", "#ffff66", "#66ff99", "#ff7a5c", "#b48cff", "#ffffff", "#5cc8ff", "#ffb35c", "#c8ff5c"],
+      shape: "tri",
+      hollow: true,
+      bend: 0,
+      labelSize: 13,
+      fx: { type: "stars", c1: "#cfefff", c2: "#ff5ad6" },
+      sound: { wave: "square", f: 660 }
+    },
+    {
+      id: "teletext",
+      name: "Teletext",
+      cat: "retro",
+      blurb: "Chunky 8-colour TV text pages and a news ticker.",
+      chrome: "terminal",
+      hub: ["#0000ff", "#00ffff", "#00ff00", "#ffff00", "#ff0000"],
+      trails: ["#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff", "#ff0000", "#00ff00", "#ffff00"],
+      shape: "square",
+      edge: "blocks",
+      bend: 0,
+      glow: false,
+      labelSize: 14,
+      sound: { wave: "square", f: 990 }
+    },
+    {
+      id: "homecomputer",
+      name: "8-bit Home",
+      cat: "retro",
+      blurb: "Blue-on-blue 8-bit home computer with tape-loading stripes.",
+      chrome: "flat",
+      hub: ["#6c5eb5", "#a59cf2", "#eeee77", "#ffffff"],
+      trails: ["#eeee77", "#ff7777", "#77ff77", "#77ddff", "#ffaa55", "#ff77ff", "#ffffff", "#bbbbbb", "#aaffee", "#ffcc99"],
+      shape: "square",
+      glow: false,
+      labelSize: 9,
+      sound: { wave: "triangle", f: 520 }
+    },
+    // ---------------- futuristic ----------------
+    {
+      id: "holo",
+      name: "Holo HUD",
+      cat: "future",
+      blurb: "Translucent sci-fi cockpit with a radar sweep.",
+      chrome: "neon",
+      hub: ["#0b5e6e", "#1fb8c9", "#4df3ff", "#e6fdff"],
+      trails: ["#ffcf4d", "#4df3ff", "#ff6b9d", "#7dff9a", "#b18cff", "#ff9a4d", "#ffffff", "#4dd2ff", "#e6ff4d", "#ff4d4d"],
+      shape: "hex",
+      hollow: true,
+      fx: { type: "radar", c1: "#4df3ff" },
+      labelSize: 13,
+      sound: { wave: "sine", f: 1320 }
+    },
+    {
+      id: "starchart",
+      name: "Star Chart",
+      cat: "future",
+      blurb: "Articles are stars, trails are constellations.",
+      chrome: "flat",
+      hub: ["#6a7fdb", "#a9c1ff", "#ffffff", "#ffe7a3"],
+      trails: ["#ffe7a3", "#8fd3ff", "#ff9fd2", "#a7ffb5", "#c3a6ff", "#ffb38a", "#ffffff", "#7fe0ff", "#fff59d", "#ff8a8a"],
+      shape: "star",
+      bend: 0,
+      fx: { type: "nebula", c1: "#7b5cff", c2: "#2d9bff", c3: "#ff5cc8" },
+      sound: { wave: "sine", f: 784 }
+    },
+    {
+      id: "bioneural",
+      name: "Bio-Neural",
+      cat: "future",
+      blurb: "The brain, literally: organic curves and travelling signals.",
+      chrome: "flat",
+      hub: ["#3a0d4d", "#7b2cbf", "#c77dff", "#ff9de2", "#ffffff"],
+      trails: ["#7df9d8", "#ff9de2", "#ffd36e", "#8ab4ff", "#c77dff", "#ff7a8a", "#b5ff7d", "#ffffff", "#7dd3ff", "#ffb37d"],
+      shape: "circle",
+      edge: "pulse",
+      glow: false,
+      bend: 0.28,
+      fx: { type: "dust", c1: "#c77dff" },
+      sound: { wave: "sine", f: 392 }
+    },
+    // ---------------- AI ----------------
+    {
+      id: "latent",
+      name: "Latent Space",
+      cat: "ai",
+      blurb: "Calm AI-lab look: an embedding plot in soft pastels.",
+      chrome: "flat",
+      hub: ["#c9d6ff", "#9fb4ff", "#7c6cf0", "#f08cae", "#f5b76c"],
+      trails: ["#6d5df5", "#f0568c", "#18a999", "#f5a524", "#3b82f6", "#a855f7", "#ef4444", "#14b8a6", "#64748b", "#84cc16"],
+      shape: "circle",
+      glow: false,
+      bend: 0.1,
+      labelSize: 13,
+      fx: { type: "dust", c1: "#6d5df5" },
+      sound: { wave: "sine", f: 1046 }
+    },
+    {
+      id: "training",
+      name: "Training Run",
+      cat: "ai",
+      blurb: "A dark ML dashboard: epochs, steps and a falling loss.",
+      chrome: "flat",
+      hub: ["#1f6feb", "#58a6ff", "#3fb950", "#d2a8ff"],
+      trails: ["#3fb950", "#58a6ff", "#d2a8ff", "#f0883e", "#ff7b72", "#79c0ff", "#e3b341", "#56d4dd", "#a5d6ff", "#7ee787"],
+      shape: "circle",
+      glow: false,
+      labelSize: 12,
+      fx: { type: "matrix", c1: "#3fb950" },
+      sound: { wave: "triangle", f: 1200 }
+    },
+    {
+      id: "sentinel",
+      name: "Sentinel",
+      cat: "ai",
+      blurb: "A calm machine watches you browse. Its red eye follows you.",
+      chrome: "flat",
+      hub: ["#4a0000", "#a31515", "#ff3b3b", "#ffb3b3"],
+      trails: ["#ff3b3b", "#ffffff", "#ff8a3b", "#ffd23b", "#ff3bb5", "#b53bff", "#3bd8ff", "#ff6b6b", "#ffb3b3", "#e0e0e0"],
+      shape: "circle",
+      hollow: true,
+      fx: { type: "scan", c1: "#ff3b3b" },
+      sound: { wave: "sine", f: 220 }
+    },
+    // ---------------- millennium ----------------
+    {
+      id: "aqua",
+      name: "Aqua Bubble",
+      cat: "y2k",
+      blurb: "Glossy gel buttons, sky blue and rising bubbles.",
+      chrome: "gloss",
+      hub: ["#9fd3ff", "#4aa3ff", "#1f6fd1", "#ff8a00"],
+      trails: ["#ff8a00", "#1f6fd1", "#18b24a", "#e0245e", "#8e44ad", "#00a3a3", "#f1c40f", "#34495e", "#d35400", "#2ecc71"],
+      shape: "circle",
+      glow: false,
+      labelSize: 13,
+      fx: { type: "bubbles", c1: "#ffffff" },
+      sound: { wave: "sine", f: 1568 }
+    },
+    {
+      id: "chrome",
+      name: "Y2K Chrome",
+      cat: "y2k",
+      blurb: "Liquid silver, iridescent sparkles and a millennium countdown.",
+      chrome: "gloss",
+      hub: ["#7ef9ff", "#b388ff", "#ff8ad8", "#fff59d", "#ffffff"],
+      trails: ["#7ef9ff", "#ff8ad8", "#fff59d", "#b388ff", "#69f0ae", "#ff9e80", "#ffffff", "#84ffff", "#ea80fc", "#ffd180"],
+      shape: "spark",
+      fx: { type: "sparkles", c1: "#ffffff", c2: "#b388ff" },
+      sound: { wave: "triangle", f: 1760 }
+    },
+    {
+      id: "geocities",
+      name: "GeoCities",
+      cat: "y2k",
+      blurb: "Starfield tiles, rainbow bars, a hit counter. Sign my guestbook!",
+      chrome: "bevel",
+      hub: ["#00ffff", "#00ff00", "#ffff00", "#ff00ff"],
+      trails: ["#ff00ff", "#00ff00", "#ffff00", "#00ffff", "#ff0000", "#ff9900", "#ffffff", "#0099ff", "#99ff00", "#ff66cc"],
+      shape: "star",
+      glow: false,
+      fx: { type: "stars", c1: "#ffffff", c2: "#ffff00" },
+      sound: { wave: "square", f: 1200 }
+    },
+    {
+      id: "mediaplayer",
+      name: "Media Player",
+      cat: "y2k",
+      blurb: "Oddly shaped player skin with a green LCD. Trails are tracks.",
+      chrome: "gloss",
+      hub: ["#00662a", "#00cc55", "#00ff66", "#ffcc00"],
+      trails: ["#ffcc00", "#00ff66", "#ff5c5c", "#5cc8ff", "#ff9a00", "#c77dff", "#ffffff", "#a8ff60", "#ff7ad9", "#60ffe0"],
+      shape: "circle",
+      labelSize: 16,
+      sound: { wave: "sawtooth", f: 660 }
+    },
+    // ---------------- console ----------------
+    {
+      id: "rpg16",
+      name: "16-bit RPG",
+      cat: "console",
+      blurb: "Blue dialog boxes, a \u25B6 cursor, quests and XP.",
+      chrome: "console",
+      hub: ["#3048d8", "#7f8cff", "#ffffff", "#ffe14d"],
+      trails: ["#ffe14d", "#ff6b6b", "#6bff9a", "#6bd4ff", "#ff9a3b", "#d68bff", "#ffffff", "#ffb3e6", "#b3ff6b", "#3bffd8"],
+      shape: "diamond",
+      sound: { wave: "square", f: 988 }
+    },
+    {
+      id: "handheld",
+      name: "Handheld '89",
+      cat: "console",
+      blurb: "Four shades of green on a dot-matrix screen.",
+      chrome: "console",
+      hub: ["#8bac0f", "#306230", "#0f380f"],
+      trails: ["#0f380f", "#8e2a5c", "#2d4fb3", "#9a5b00", "#306230", "#5c2a8e", "#1f6f6f", "#7a1f1f", "#3b3b3b", "#4f6f00"],
+      shape: "square",
+      glow: false,
+      labelSize: 9,
+      sound: { wave: "square", f: 1046 }
+    },
+    {
+      id: "polygon",
+      name: "Polygon Era",
+      cat: "console",
+      blurb: "Late-90s 3D: wobbly polygons and memory cards.",
+      chrome: "console",
+      hub: ["#3a3fd8", "#8fa0ff", "#ff5a5a", "#ffcf3f"],
+      trails: ["#ffcf3f", "#ff5a5a", "#5ad8ff", "#7dff7d", "#ff8aff", "#ff9a3f", "#ffffff", "#b38aff", "#3fffd2", "#d8ff3f"],
+      shape: "tri",
+      glow: false,
+      sound: { wave: "triangle", f: 740 }
+    },
+    {
+      id: "fighter",
+      name: "Fighter Select",
+      cat: "console",
+      blurb: "Trails as a character-select grid. Hover = VS splash.",
+      chrome: "console",
+      hub: ["#7a3d00", "#ff7a00", "#ffde00", "#ff1e1e"],
+      trails: ["#ffde00", "#ff1e1e", "#1ea0ff", "#1eff6a", "#ff7a00", "#c81eff", "#ffffff", "#ff1e9a", "#1effe0", "#a0ff1e"],
+      shape: "square",
+      labelSize: 12,
+      sound: { wave: "sawtooth", f: 330 }
+    },
+    {
+      id: "overworld",
+      name: "Overworld Map",
+      cat: "console",
+      blurb: "Levels on a grassy map, dotted paths, a walking marker.",
+      chrome: "console",
+      hub: ["#e74c3c", "#f39c12", "#ffe14d"],
+      trails: ["#e74c3c", "#2980b9", "#8e44ad", "#d35400", "#16a085", "#c0392b", "#2c3e50", "#f1c40f", "#27ae60", "#e84393"],
+      shape: "circle",
+      glow: false,
+      edge: "dotted",
+      walker: true,
+      fx: { type: "clouds", c1: "#0b3d0b" },
+      sound: { wave: "square", f: 1318 }
+    },
+    // ---------------- synthwave ----------------
+    {
+      id: "outrun",
+      name: "Outrun Sunset",
+      cat: "synth",
+      blurb: "Neon pink sunset over an endless grid.",
+      chrome: "neon",
+      hub: ["#5a189a", "#9d4edd", "#ff2fd0", "#ff6c11", "#fff200"],
+      trails: ["#2de2e6", "#ff2fd0", "#fff200", "#ff6c11", "#00ff9f", "#ff3864", "#b388ff", "#ffffff", "#7df9ff", "#f9c80e"],
+      shape: "diamond",
+      fx: { type: "grid", c1: "#ff2fd0", c2: "#ff2a6d", c3: "#ffcf3f" },
+      sound: { wave: "sawtooth", f: 440 }
+    },
+    {
+      id: "vaporwave",
+      name: "Vaporwave",
+      cat: "synth",
+      blurb: "Pastel \uFF50\uFF49\uFF4E\uFF4B \uFF41\uFF4E\uFF44 \uFF54\uFF45\uFF41\uFF4C, 98-style dialogs, VHS glitches.",
+      chrome: "bevel",
+      hub: ["#b967ff", "#ff71ce", "#01cdfe", "#05ffa1", "#fffb96"],
+      trails: ["#05ffa1", "#ff71ce", "#fffb96", "#01cdfe", "#b967ff", "#ff9a8b", "#ffffff", "#9bf6ff", "#ffc6ff", "#caffbf"],
+      shape: "diamond",
+      fx: { type: "vhs", c1: "#ff71ce", c2: "#01cdfe" },
+      sound: { wave: "sine", f: 523 }
+    },
+    {
+      id: "neonrain",
+      name: "Neon Rain",
+      cat: "synth",
+      blurb: "Cyberpunk hazard tape, glitchy titles and neon rain.",
+      chrome: "neon",
+      hub: ["#ff003c", "#ff6b00", "#fcee0a", "#00f0ff"],
+      trails: ["#fcee0a", "#00f0ff", "#ff003c", "#ff6bff", "#00ff9c", "#ff9a00", "#ffffff", "#9a7bff", "#5cffe9", "#ffd000"],
+      shape: "diamond",
+      fx: { type: "rain", c1: "#00f0ff", c2: "#ff003c" },
+      sound: { wave: "sawtooth", f: 880 }
+    },
+    // ---------------- minimal ----------------
+    {
+      id: "swiss",
+      name: "Swiss Paper",
+      cat: "minimal",
+      blurb: "White paper, black rules, one red accent. Straight lines only.",
+      chrome: "flat",
+      hub: ["#bbbbbb", "#555555", "#111111", "#e30613"],
+      trails: ["#e30613", "#111111", "#0057b8", "#f2a900", "#00875a", "#7a3e9d", "#d9480f", "#495057", "#0b7285", "#5c940d"],
+      shape: "circle",
+      glow: false,
+      bend: 0,
+      labelSize: 12,
+      sound: { wave: "sine", f: 880 }
+    },
+    {
+      id: "midnight",
+      name: "Midnight Mono",
+      cat: "minimal",
+      blurb: "Quiet dark mode: thin lines, soft greys, no noise.",
+      chrome: "flat",
+      hub: ["#3f3f46", "#71717a", "#d4d4d8", "#ffffff"],
+      trails: ["#9b8afb", "#5eead4", "#fda4af", "#fcd34d", "#93c5fd", "#c4b5fd", "#86efac", "#fdba74", "#f9a8d4", "#a5b4fc"],
+      shape: "circle",
+      glow: false,
+      bend: 0.1,
+      labelSize: 12,
+      sound: { wave: "sine", f: 660 }
+    },
+    {
+      id: "zen",
+      name: "Zen Ink",
+      cat: "minimal",
+      blurb: "Sumi ink on rice paper with a red seal.",
+      chrome: "flat",
+      hub: ["#c9c1ae", "#7d776a", "#1b1a17"],
+      trails: ["#b7282e", "#1b1a17", "#2b4c7e", "#4f6b3a", "#8a5a2b", "#5b3f74", "#c2703d", "#3f6e6e", "#7a7a7a", "#9c2f5a"],
+      shape: "circle",
+      glow: false,
+      bend: 0.22,
+      labelSize: 14,
+      sound: { wave: "sine", f: 330 }
+    }
+  ];
+  var skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
+
+  // src/appearance.js
+  var graph = null;
+  var fx = null;
+  var darkQuery = matchMedia("(prefers-color-scheme: dark)");
+  function resolvedTheme() {
+    const t = app.settings.theme;
+    return t === "system" ? darkQuery.matches ? "dark" : "light" : t;
+  }
+  function initAppearance(g, f) {
+    graph = g;
+    fx = f;
+    darkQuery.addEventListener("change", () => {
+      if (app.settings.theme === "system") applySkin(app.settings.skin, { persist: false });
+    });
+    applySkin(app.settings.skin, { persist: false });
+  }
+  function applySkin(id, { persist = true } = {}) {
+    const skin = skinById(id);
+    app.skin = skin;
+    const html2 = document.documentElement;
+    html2.dataset.skin = skin.id;
+    html2.dataset.chrome = skin.chrome || "bevel";
+    html2.dataset.theme = resolvedTheme();
+    const pal = skin.dark && html2.dataset.theme === "dark" ? { ...skin, ...skin.dark } : skin;
+    app.colors = pal.trails.slice();
+    graph?.setPalette(pal);
+    fx?.set(skin.fx);
+    if (persist) setSetting("skin", skin.id);
+    emit("skin");
+  }
+  function setTheme(theme) {
+    setSetting("theme", theme);
+    applySkin(app.settings.skin, { persist: false });
+  }
+
+  // src/ui.js
+  var $ = (id) => document.getElementById(id);
+  var esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  var plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+  function fmtDate(t, withYear = true) {
+    return new Date(t).toLocaleDateString(void 0, { day: "numeric", month: "short", ...withYear ? { year: "numeric" } : {} });
+  }
+  function fmtDateTime(t) {
+    return new Date(t).toLocaleString(void 0, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function fmtAgo(t) {
+    const d = Date.now() - t;
+    if (d < 6e4) return "just now";
+    if (d < 36e5) return `${Math.round(d / 6e4)} min ago`;
+    if (d < 864e5) return `${Math.round(d / 36e5)} h ago`;
+    const days = Math.round(d / 864e5);
+    return days < 60 ? plural(days, "day") + " ago" : fmtDate(t);
+  }
+  var wikiUrl = (title) => `https://${app.state.lang || "en"}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`;
+  var toastT;
+  function toast(text, ms = 2600) {
+    const el = $("toast");
+    if (!el || !text) return;
+    el.textContent = text;
+    el.classList.add("on");
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove("on"), ms);
+  }
+  var actx;
+  function blip(mult = 1) {
+    if (!app.settings.sound) return;
+    try {
+      actx || (actx = new AudioContext());
+      const sd = app.skin?.sound || { wave: "sine", f: 880 }, o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+      o.type = sd.wave;
+      o.frequency.setValueAtTime(sd.f * mult, now);
+      o.frequency.exponentialRampToValueAtTime(sd.f * mult * 1.5, now + 0.08);
+      g.gain.setValueAtTime(0.05, now);
+      g.gain.exponentialRampToValueAtTime(1e-4, now + 0.14);
+      o.connect(g).connect(actx.destination);
+      o.start(now);
+      o.stop(now + 0.15);
+    } catch {
+    }
+  }
+  function confirmClick(btn, label, fn) {
+    btn.onclick = () => {
+      if (btn.dataset.armed) {
+        delete btn.dataset.armed;
+        btn.textContent = btn.dataset.label;
+        fn();
+        return;
+      }
+      btn.dataset.label = btn.textContent;
+      btn.dataset.armed = "1";
+      btn.textContent = label;
+      setTimeout(() => {
+        if (btn.dataset.armed) {
+          delete btn.dataset.armed;
+          btn.textContent = btn.dataset.label;
+        }
+      }, 3e3);
+    };
+  }
+  function stepsHTML(tr, shape, { cursorId = null, clickable = true } = {}) {
+    return shape.lines.map(({ v, n, depth, side }) => `<li class="step${side ? " side" : ""}${v.id === cursorId ? " cur" : ""}${clickable ? "" : " static"}" data-v="${v.id}" data-a="${esc(v.article)}" style="padding-left:${6 + depth * 16}px" title="${esc(v.article)}"><span class="n">${n}</span><span class="t">${esc(v.article)}</span></li>`).join("");
+  }
+
+  // src/panels/record.js
+  function initRecord({ showLeft }) {
+    function render() {
+      const v = cursorVisit();
+      const tr = app.cur && trailOf(app.cur.trailId);
+      const steps = $("steps");
+      steps.innerHTML = tr ? stepsHTML(tr, trailShape(tr), { cursorId: app.cur.visitId }) : "";
+      steps.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
+      $("reclabel").innerHTML = v ? `Next page after <em>${esc(v.article)}</em>` : app.state.trails.length ? "First page of a new trail" : "First page";
+      $("next").placeholder = v ? "Paste the link you clicked, or type its title" : "Paste a Wikipedia link or type a title";
+      $("newtrail").disabled = !tr;
+      $("undo").disabled = !canUndo();
+      $("rechint").textContent = tr ? "Click a step to continue from there." : "Start with the page where you began reading.";
+      hint();
+    }
+    function renderTitles() {
+      $("titles").innerHTML = [...app.D.articles.keys()].sort().map((t) => `<option value="${esc(t)}">`).join("");
+    }
+    function msg(text, warn = false) {
+      $("msg").textContent = text || "";
+      $("msg").classList.toggle("warn", warn);
+    }
+    function hint() {
+      const t = normTitle($("next").value), a = t && app.D.articles.get(t);
+      msg(a ? `You've been here before: ${plural(a.visits, "visit")} in ${plural(a.trails.size, "trail")}.` : "");
+    }
+    function add() {
+      const raw = $("next").value, title = normTitle(raw);
+      if (!title) {
+        $("next").focus();
+        return;
+      }
+      const v = cursorVisit();
+      if (v && v.article === title) {
+        msg("That is the page you are on.", true);
+        return;
+      }
+      snapshot();
+      const lang = langFromUrl(raw);
+      if (lang && !app.state.trails.length) app.state.lang = lang;
+      const visit = { id: uid(), article: title, parent: v ? v.id : null, t: Date.now() };
+      if (!v) {
+        const t = { id: uid(), name: "", created: (/* @__PURE__ */ new Date()).toISOString(), visits: [visit] };
+        app.state.trails.push(t);
+        app.cur = { trailId: t.id, visitId: visit.id };
+      } else {
+        trailOf(app.cur.trailId).visits.push(visit);
+        app.cur = { trailId: app.cur.trailId, visitId: visit.id };
+      }
+      $("next").value = "";
+      commit({ added: true });
+      blip();
+      $("next").focus();
+    }
+    $("add").onclick = add;
+    $("next").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") add();
+    });
+    $("next").addEventListener("input", hint);
+    $("newtrail").onclick = () => {
+      setCursor(null);
+      $("next").focus();
+    };
+    $("undo").onclick = () => {
+      if (undo()) toast("Undone");
+    };
+    $("steps").addEventListener("click", (e) => {
+      const li = e.target.closest(".step");
+      if (!li || !app.cur) return;
+      setCursor({ trailId: app.cur.trailId, visitId: li.dataset.v });
+      $("next").focus();
+    });
+    on("data", () => {
+      render();
+      renderTitles();
+    });
+    on("cursor", render);
+    on("dirty", () => {
+      $("undo").disabled = !canUndo();
+    });
+    return {
+      /** Continue an existing trail from one of its pages (default: its latest page). */
+      continueTrail(trailId, visitId) {
+        const t = trailOf(trailId);
+        if (!t) return;
+        showLeft();
+        setCursor({ trailId, visitId: visitId || t.visits[t.visits.length - 1].id });
+        $("next").focus();
+      },
+      /** Start a new trail whose first page is this article. */
+      startAt(title) {
+        showLeft();
+        snapshot();
+        const t = { id: uid(), name: "", created: (/* @__PURE__ */ new Date()).toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
+        app.state.trails.push(t);
+        app.cur = { trailId: t.id, visitId: t.visits[0].id };
+        commit({ added: true });
+        $("next").focus();
+      }
+    };
+  }
+
+  // src/panels/trails.js
+  function initTrails() {
+    let limit = 150;
+    const box = $("trails");
+    function render() {
+      const q = $("tfilter").value.trim().toLowerCase();
+      let list = [...app.state.trails].reverse().filter(inRange);
+      const total = list.length;
+      if (q) list = list.filter((t2) => trailLabel(t2).toLowerCase().includes(q) || t2.visits.some((v) => v.article.toLowerCase().includes(q)));
+      $("tcount").textContent = app.state.trails.length ? `(${q ? `${list.length} of ` : ""}${total})` : "";
+      const sel = app.sel?.kind === "trail" ? app.sel.id : null, rec = app.cur?.trailId;
+      const shown = list.slice(0, limit);
+      box.innerHTML = shown.map((t2) => `<div class="item${t2.id === sel ? " on" : ""}" data-t="${t2.id}">
+        <span class="swatch" style="background:${colorOf(t2.id)}"></span>
+        <div class="tx"><div class="nm">${esc(trailLabel(t2))}</div><div class="mt">${plural(t2.visits.length, "page")} \xB7 ${fmtDate(t2.created, false)}</div></div>
+        ${t2.id === rec ? '<span class="tag">recording</span>' : ""}
+      </div>`).join("") + (list.length > limit ? `<button class="btn small more" id="tmore">Show ${Math.min(150, list.length - limit)} more</button>` : "") + (!list.length ? `<div class="none">${q ? "No trail matches." : app.range ? "No trails in this period." : "No trails yet. Record your first one above."}</div>` : "");
+      $("tmore")?.addEventListener("click", () => {
+        limit += 150;
+        render();
+      });
+    }
+    box.addEventListener("click", (e) => {
+      const r = e.target.closest(".item");
+      if (r) select({ kind: "trail", id: r.dataset.t }, { zoom: true });
+    });
+    box.addEventListener("mouseover", (e) => {
+      const r = e.target.closest(".item");
+      setHover(r ? { kind: "trail", id: r.dataset.t } : null);
+    });
+    box.addEventListener("mouseleave", () => setHover(null));
+    let t;
+    $("tfilter").addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        limit = 150;
+        render();
+      }, 120);
+    });
+    for (const ev of ["data", "range", "select", "cursor", "skin"]) on(ev, render);
+    return { render };
+  }
+
+  // src/panels/details.js
+  var LEGEND = `<div class="legend-line"><span class="lg lg-before"></span>how you got here <span class="lg lg-after"></span>where you went next<br><span class="explain">Thicker and brighter = more recent.</span></div>`;
+  function initDetails({ record: record2, focusArticle: focusArticle2, loadTest }) {
+    const box = $("details");
+    let showAll = false;
+    function render() {
+      const s = app.sel;
+      if (!s) return overview();
+      if (s.kind === "article") return article(s.id);
+      if (s.kind === "edge") return edge(s.id);
+      if (s.kind === "trail") return trail(s.id);
+    }
+    function overview() {
+      $("dtitle").textContent = "Overview";
+      if (!app.state.trails.length) {
+        box.innerHTML = `<h3>Welcome to Wiki Trails</h3>
+        <p>Keep a map of how you wander through Wikipedia.</p>
+        <section><h4>How it works</h4>
+          <p>1. In <b>Record</b>, paste the Wikipedia page you started on.</p>
+          <p>2. Each time you click a link, paste the next page. If you went back, click an earlier step first.</p>
+          <p>3. Click any article on the map to see every trail that went through it.</p></section>
+        <section><h4>Just looking?</h4><div class="actions">
+          <button class="btn" data-test="wikispeedia-1000">Try 30 days of example trails</button>
+          <button class="btn" data-test="wikispeedia-2years">Try 2 years</button></div>
+          <p class="explain">Real reading trails from the Wikispeedia study.</p></section>`;
+        box.querySelectorAll("[data-test]").forEach((b) => b.onclick = () => loadTest(b.dataset.test));
+        return;
+      }
+      const DV = app.DV, clicks = [...DV.links.values()].reduce((n, l) => n + l.total, 0);
+      const trails = [...app.state.trails].filter((t) => !app.range || DV.articles.has(t.visits[0].article)).reverse();
+      const top = [...DV.articles.values()].sort((p, q) => q.visits - p.visits).slice(0, 8);
+      const span = timeSpan(app.state);
+      box.innerHTML = `<div class="stats"><div><b>${DV.articles.size}</b><span>articles</span></div><div><b>${clicks}</b><span>clicks</span></div><div><b>${app.range ? new Set([...DV.articles.values()].flatMap((a) => [...a.trails])).size : app.state.trails.length}</b><span>trails</span></div></div>
+      <p class="explain">${app.range ? `Showing ${fmtDate(app.range[0])} \u2013 ${fmtDate(app.range[1])}.` : span ? `From ${fmtDate(span[0])} to ${fmtDate(span[1])}.` : ""} Click any article on the map to see every trail that went through it.</p>
+      <section><h4>Most visited</h4>${top.map((a) => `<div class="lrow" data-a="${esc(a.title)}"><span class="l">${esc(a.title)}</span><span class="c">${a.visits}\xD7 \xB7 ${fmtAgo(a.last)}</span></div>`).join("")}</section>
+      <section><h4>Latest trails</h4>${trails.slice(0, 6).map((t) => `<div class="lrow" data-t="${t.id}"><span class="l">${esc(trailLabel(t))}</span><span class="c">${fmtDate(t.created, false)}</span></div>`).join("")}</section>`;
+    }
+    function article(title) {
+      const a = app.DV.articles.get(title) || app.D.articles.get(title);
+      $("dtitle").textContent = "Article";
+      if (!a) {
+        box.innerHTML = '<p class="explain">Not in this period.</p>';
+        return;
+      }
+      const seen = [];
+      for (const id of a.trails) {
+        const ti = app.D.trailIndex.get(id);
+        if (!ti) continue;
+        for (const v of ti.trail.visits) {
+          if (v.article !== title) continue;
+          const t = visitTime(ti.trail, v);
+          if (app.range && (t < app.range[0] || t > app.range[1])) continue;
+          const from = v.parent != null ? ti.byId.get(v.parent).article : null;
+          const next = (ti.children.get(v.id) || []).map((cid) => ti.byId.get(cid).article);
+          seen.push({ t, trail: ti.trail, from, next });
+        }
+      }
+      seen.sort((p, q) => q.t - p.t);
+      const inc = /* @__PURE__ */ new Map(), out = /* @__PURE__ */ new Map();
+      for (const l of app.DV.links.values()) {
+        if (l.a === title) {
+          if (l.ab) out.set(l.b, l.ab);
+          if (l.ba) inc.set(l.b, l.ba);
+        }
+        if (l.b === title) {
+          if (l.ba) out.set(l.a, l.ba);
+          if (l.ab) inc.set(l.a, l.ab);
+        }
+      }
+      const list = (m) => [...m].sort((p, q) => q[1] - p[1]).slice(0, 8).map(([t, n]) => `<div class="lrow" data-a="${esc(t)}"><span class="l">${esc(t)}</span><span class="c">${n}\xD7</span></div>`).join("") || '<p class="explain">None.</p>';
+      const shownSeen = showAll ? seen : seen.slice(0, 12);
+      const focused = app.focus?.title === title;
+      box.innerHTML = `<h3>${esc(title)}</h3>
+      <div class="sub">You saw this page ${plural(seen.length, "time")}${seen.length ? `, last on ${fmtDateTime(seen[0].t)}` : ""}${seen.length > 1 ? `, first on ${fmtDate(seen[seen.length - 1].t)}` : ""}.</div>
+      ${seen.length ? LEGEND : ""}
+      <div class="actions">
+        <button class="btn small" id="d-start">Start a trail here</button>
+        <button class="btn small" id="d-focus">${focused ? "Show the whole map" : "Only its neighbourhood"}</button>
+        <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia \u2197</a>
+      </div>
+      <section><h4>When you saw it</h4>${shownSeen.map((s) => `<div class="lrow" data-t="${s.trail.id}" title="Show this trail">
+          <span class="l"><span class="when">${fmtDateTime(s.t)}</span><br><span class="explain">${s.from ? `from ${esc(s.from)}` : "start of the trail"}${s.next.length ? ` \u2192 ${esc(s.next.join(", "))}` : " \xB7 end of the trail"}</span></span></div>`).join("")}
+        ${seen.length > shownSeen.length ? `<button class="btn small more" id="d-all">Show all ${seen.length}</button>` : ""}</section>
+      <section><h4>You came from</h4>${list(inc)}</section>
+      <section><h4>You went on to</h4>${list(out)}</section>`;
+      $("d-start").onclick = () => record2.startAt(title);
+      $("d-focus").onclick = () => focusArticle2(focused ? null : title);
+      $("d-all")?.addEventListener("click", () => {
+        showAll = true;
+        render();
+      });
+    }
+    function edge(key) {
+      const l = app.DV.links.get(key) || app.D.links.get(key);
+      $("dtitle").textContent = "Connection";
+      if (!l) {
+        box.innerHTML = '<p class="explain">Not in this period.</p>';
+        return;
+      }
+      const uses = [];
+      for (const id of l.trails) {
+        const ti = app.D.trailIndex.get(id);
+        if (!ti) continue;
+        for (const v of ti.trail.visits) {
+          if (v.parent == null) continue;
+          const from = ti.byId.get(v.parent).article;
+          if (from === l.a && v.article === l.b || from === l.b && v.article === l.a) uses.push({ t: visitTime(ti.trail, v), trail: ti.trail, from, to: v.article });
+        }
+      }
+      uses.sort((p, q) => q.t - p.t);
+      box.innerHTML = `<h3><a class="alink" data-a="${esc(l.a)}">${esc(l.a)}</a> \u2194 <a class="alink" data-a="${esc(l.b)}">${esc(l.b)}</a></h3>
+      <div class="sub">Clicked ${plural(l.total, "time")}${uses.length ? `, last on ${fmtDateTime(uses[0].t)}` : ""}.</div>
+      ${LEGEND}
+      <section><h4>Directions</h4><div class="dirbar"><span>${esc(l.a)} \u2192 ${esc(l.b)}</span><b>${l.ab}\xD7</b><span>${esc(l.b)} \u2192 ${esc(l.a)}</span><b>${l.ba}\xD7</b></div></section>
+      <section><h4>When you clicked it</h4>${uses.slice(0, showAll ? 1e9 : 12).map((u) => `<div class="lrow" data-t="${u.trail.id}"><span class="l"><span class="when">${fmtDateTime(u.t)}</span><br><span class="explain">${esc(u.from)} \u2192 ${esc(u.to)} \xB7 ${esc(trailLabel(u.trail))}</span></span></div>`).join("")}
+        ${uses.length > 12 && !showAll ? `<button class="btn small more" id="d-all">Show all ${uses.length}</button>` : ""}</section>`;
+      $("d-all")?.addEventListener("click", () => {
+        showAll = true;
+        render();
+      });
+    }
+    function trail(id) {
+      const tr = trailOf(id);
+      $("dtitle").textContent = "Trail";
+      if (!tr) return overview();
+      const sh = trailShape(tr);
+      const t0 = visitTime(tr, tr.visits[0]), t1 = visitTime(tr, tr.visits[tr.visits.length - 1]);
+      const mins = Math.round((t1 - t0) / 6e4);
+      box.innerHTML = `<h3 id="d-name">${esc(trailLabel(tr))}</h3>
+      <div class="sub">${fmtDateTime(t0)} \xB7 ${plural(tr.visits.length, "page")}${sh.branches.length ? ` \xB7 went back ${plural(sh.branches.length, "time")}` : ""}${mins > 0 ? ` \xB7 ${mins} min` : ""}</div>
+      <div class="legend-line"><span class="lg lg-trail"></span>from the start (blue) to the end (orange)</div>
+      <div class="actions">
+        <button class="btn small" id="d-cont">Continue this trail</button>
+        <button class="btn small" id="d-rename">Rename</button>
+        <button class="btn small danger" id="d-del">Delete</button>
+      </div>
+      <section><h4>Steps</h4><ol class="steps">${stepsHTML(tr, sh, { cursorId: app.cur?.trailId === tr.id ? app.cur.visitId : null })}</ol>
+      <p class="explain">Indented steps are pages you opened and then went back from.</p></section>`;
+      $("d-cont").onclick = () => record2.continueTrail(tr.id);
+      $("d-rename").onclick = () => {
+        const h = $("d-name");
+        h.innerHTML = `<input class="renamer" value="${esc(trailLabel(tr))}">`;
+        const inp = h.querySelector("input");
+        inp.focus();
+        inp.select();
+        let done = false;
+        const finish = (save) => {
+          if (done) return;
+          done = true;
+          if (save) {
+            snapshot();
+            tr.name = inp.value.trim();
+            commit();
+          } else render();
+        };
+        inp.onkeydown = (e) => {
+          if (e.key === "Enter") finish(true);
+          if (e.key === "Escape") finish(false);
+        };
+        inp.onblur = () => finish(true);
+      };
+      confirmClick($("d-del"), "Click again to delete", () => {
+        snapshot();
+        app.state.trails = app.state.trails.filter((t) => t.id !== tr.id);
+        if (app.cur?.trailId === tr.id) app.cur = null;
+        app.sel = null;
+        commit();
+        toast("Trail deleted. Undo brings it back.");
+      });
+    }
+    box.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-a]");
+      if (a && !e.target.closest(".btn")) return select({ kind: "article", id: a.dataset.a }, { zoom: true });
+      const t = e.target.closest("[data-t]");
+      if (t) return select({ kind: "trail", id: t.dataset.t }, { zoom: true });
+    });
+    on("select", () => {
+      showAll = false;
+      render();
+    });
+    for (const ev of ["data", "range", "focus", "cursor"]) on(ev, render);
+    return { render };
+  }
+
+  // src/panels/search.js
+  function initSearch() {
+    const input = $("search"), box = $("results");
+    let items = [], active = 0;
+    function run() {
+      const q = input.value.trim().toLowerCase();
+      if (!q) {
+        box.hidden = true;
+        items = [];
+        return;
+      }
+      const arts = [...app.D.articles.values()].filter((a) => a.title.toLowerCase().includes(q)).sort((p, q2) => (p.title.toLowerCase().startsWith(q) ? 0 : 1) - (q2.title.toLowerCase().startsWith(q) ? 0 : 1) || q2.visits - p.visits).slice(0, 7);
+      const trails = [...app.state.trails].reverse().filter((t) => trailLabel(t).toLowerCase().includes(q)).slice(0, 5);
+      items = [...arts.map((a) => ({ kind: "article", id: a.title })), ...trails.map((t) => ({ kind: "trail", id: t.id }))];
+      active = 0;
+      let i = 0;
+      box.innerHTML = (arts.length ? `<h4>Articles</h4>${arts.map((a) => `<button data-i="${i++}">${esc(a.title)}<small>${plural(a.visits, "visit")}</small></button>`).join("")}` : "") + (trails.length ? `<h4>Trails</h4>${trails.map((t) => `<button data-i="${i++}">${esc(trailLabel(t))}<small>${fmtDate(t.created, false)}</small></button>`).join("")}` : "") + (!items.length ? '<div class="none">Nothing found.</div>' : "");
+      box.hidden = false;
+      mark();
+    }
+    function mark() {
+      box.querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.i === active));
+    }
+    function choose(i) {
+      const it = items[i];
+      if (!it) return;
+      select(it, { zoom: true, force: true });
+      input.value = "";
+      box.hidden = true;
+      input.blur();
+    }
+    input.addEventListener("input", run);
+    input.addEventListener("focus", run);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        active = Math.min(items.length - 1, active + 1);
+        mark();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        active = Math.max(0, active - 1);
+        mark();
+      } else if (e.key === "Enter") choose(active);
+      else if (e.key === "Escape") {
+        input.value = "";
+        box.hidden = true;
+        input.blur();
+      }
+    });
+    box.addEventListener("mousedown", (e) => {
+      const b = e.target.closest("button[data-i]");
+      if (b) {
+        e.preventDefault();
+        choose(+b.dataset.i);
+      }
+    });
+    input.addEventListener("blur", () => setTimeout(() => {
+      box.hidden = true;
+    }, 120));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) {
+        e.preventDefault();
+        input.focus();
+      }
+    });
+  }
+
+  // src/panels/timeline.js
+  var d32 = window.d3;
+  function initTimeline() {
+    let brush = null, x = null, silent = false;
+    function markSeg() {
+      document.querySelectorAll("#rangeseg button").forEach((b) => b.classList.toggle("on", b.dataset.range === app.rangeName));
+      $("tllabel").textContent = app.range ? `${fmtDate(app.range[0])} \u2013 ${fmtDate(app.range[1])}` : "All time";
+    }
+    function render() {
+      const svg = d32.select("#tlsvg"), node = svg.node(), w = node.clientWidth || 600, h = node.clientHeight || 38;
+      svg.selectAll("*").remove();
+      const span = timeSpan(app.state);
+      $("timeline").hidden = !span;
+      if (!span) return;
+      const days = (span[1] - span[0]) / 864e5;
+      const binMs = days > 400 ? 7 * 864e5 : days > 3 ? 864e5 : 36e5;
+      const t0 = span[0] - binMs / 2, t1 = Math.max(span[1], span[0] + 12 * binMs);
+      const bins = /* @__PURE__ */ new Map();
+      for (const tr of app.state.trails) for (const v of tr.visits) {
+        if (v.parent == null) continue;
+        const b = Math.floor((visitTime(tr, v) - t0) / binMs);
+        bins.set(b, (bins.get(b) || 0) + 1);
+      }
+      x = d32.scaleTime().domain([t0, t1 + binMs]).range([4, w - 4]);
+      const mx = Math.max(1, ...bins.values()), y = d32.scaleSqrt().domain([0, mx]).range([0, h - 15]);
+      const bw = Math.max(1, x(t0 + binMs) - x(t0) - 0.5);
+      svg.append("g").selectAll("rect").data([...bins]).join("rect").attr("class", "bar").attr("x", ([b]) => x(t0 + b * binMs)).attr("width", bw).attr("y", ([, c]) => h - 13 - y(c)).attr("height", ([, c]) => Math.max(1, y(c)));
+      svg.append("g").attr("class", "axis").attr("transform", `translate(0,${h - 13})`).call(d32.axisBottom(x).ticks(Math.max(2, Math.floor(w / 110))).tickSize(3));
+      brush = d32.brushX().extent([[0, 0], [w, h - 13]]).on("end", (e) => {
+        if (silent) return;
+        if (!e.selection) return setRange(null, "all");
+        setRange(e.selection.map((px) => +x.invert(px)), "custom");
+      });
+      const g = svg.append("g").attr("class", "brush").call(brush);
+      if (app.range) {
+        silent = true;
+        g.call(brush.move, [Math.max(4, x(app.range[0])), Math.min(w - 4, x(app.range[1]))]);
+        silent = false;
+      }
+      markSeg();
+    }
+    function preset(name) {
+      const span = timeSpan(app.state);
+      if (name === "all" || !span) setRange(null, "all");
+      else setRange([Math.max(span[0], span[1] - +name * 864e5), span[1] + 1], name);
+      render();
+    }
+    document.querySelectorAll("#rangeseg button").forEach((b) => b.onclick = () => preset(b.dataset.range));
+    new ResizeObserver(() => {
+      clearTimeout(window.__tlT);
+      window.__tlT = setTimeout(render, 150);
+    }).observe($("tlsvg"));
+    on("data", render);
+    on("range", markSeg);
+    return { render };
   }
 
   // src/example.js
@@ -1447,1701 +2689,451 @@
     };
   }
 
-  // src/skins.js
-  var pad = (n, w = 6) => String(n).padStart(w, "0");
-  var VGA = ["#ffff55", "#55ffff", "#ff55ff", "#ff5555", "#55ff55", "#ffaa00", "#7f7fff", "#ffffff", "#ff9ecf", "#aaff00"];
-  var CATS = [
-    ["retro", "Retro computing"],
-    ["future", "Futuristic"],
-    ["ai", "AI"],
-    ["y2k", "Millennium / Y2K"],
-    ["console", "90s console games"],
-    ["synth", "Synthwave"],
-    ["minimal", "Minimal"]
-  ];
-  var SKINS = [
-    // ---------------- retro computing ----------------
-    {
-      id: "desktop95",
-      name: "Desktop 95",
-      cat: "retro",
-      blurb: "Beveled windows and a green phosphor CRT.",
-      chrome: "bevel",
-      hub: ["#1d6b36", "#2fd35a", "#a8ff4d", "#ffe14d", "#ffaa00"],
-      trails: VGA,
-      shape: "square",
-      boot: ["WIKITRAILS BIOS v2.0  (C) 1996 Hyperlink Systems", "", "Memory test: 640K OK"],
-      sound: { wave: "square", f: 880 }
-    },
-    {
-      id: "mono91",
-      name: "Mono '91",
-      cat: "retro",
-      blurb: "1-bit black & white desktop with pinstripe title bars.",
-      chrome: "onebit",
-      hub: ["#bbbbbb", "#777777", "#000000"],
-      trails: ["#dd0806", "#0000d4", "#1fb714", "#f20884", "#ff6403", "#4700a5", "#02abea", "#562c05", "#c9a400", "#90713a"],
-      shape: "square",
-      glow: false,
-      boot: ["Welcome to Wiki Trails.", "", "Extensions: Hyperlinks, Curiosity"],
-      sound: { wave: "sine", f: 660 }
-    },
-    {
-      id: "amber",
-      name: "Amber Terminal",
-      cat: "retro",
-      blurb: "A DOS box in warm amber with double-line borders.",
-      chrome: "terminal",
-      hub: ["#5a3a00", "#b37400", "#ffb000", "#ffd27a", "#fff2cc"],
-      trails: ["#ffffff", "#ff5f1f", "#ffe066", "#7fff00", "#00e5ff", "#ff4fd8", "#ffb000", "#ff9e80", "#b2ff59", "#80d8ff"],
-      shape: "square",
-      boot: ["C:\\> WIKITRLS.COM /AMBER", "", "HIMEM is testing extended memory... done."],
-      sound: { wave: "square", f: 440 }
-    },
-    {
-      id: "vector",
-      name: "Vector Arcade",
-      cat: "retro",
-      blurb: "1979 vector monitor: glowing lines, hollow ships, a high score.",
-      chrome: "terminal",
-      hub: ["#3d7a8a", "#7cf9ff", "#ffffff"],
-      trails: ["#ff5ad6", "#7cf9ff", "#ffff66", "#66ff99", "#ff7a5c", "#b48cff", "#ffffff", "#5cc8ff", "#ffb35c", "#c8ff5c"],
-      shape: "tri",
-      hollow: true,
-      bend: 0,
-      labelSize: 13,
-      fx: { type: "stars", c1: "#cfefff", c2: "#ff5ad6" },
-      boot: ["INSERT COIN", "", "1 PLAYER   1 CREDIT"],
-      sound: { wave: "square", f: 660 },
-      stats: (i) => `SCORE ${pad(i.clicks * 10)}   NODES ${i.articles}   WAVES ${i.trails}`,
-      banner: (h) => h.topIn ? `ROUTE BONUS \xD7${h.topInCount}  via ${h.topIn}` : null,
-      milestone: (a, b) => Math.floor(b / 100) > Math.floor(a / 100) ? "EXTRA LIFE!" : null
-    },
-    {
-      id: "teletext",
-      name: "Teletext",
-      cat: "retro",
-      blurb: "Chunky 8-colour TV text pages and a news ticker.",
-      chrome: "terminal",
-      hub: ["#0000ff", "#00ffff", "#00ff00", "#ffff00", "#ff0000"],
-      trails: ["#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff", "#ff0000", "#00ff00", "#ffff00"],
-      shape: "square",
-      edge: "blocks",
-      bend: 0,
-      glow: false,
-      labelSize: 14,
-      ui: ["ticker"],
-      titles: { builder: "TRAIL BUILDER", trails: "INDEX", brain: "WIKI TRAILS" },
-      boot: ["P100  CEEFAX-ISH  100 " + (/* @__PURE__ */ new Date()).toDateString().slice(4).toUpperCase(), "", "SEARCHING FOR PAGE 101..."],
-      sound: { wave: "square", f: 990 },
-      stats: (i) => `P101  ${i.articles} ARTICLES  ${i.clicks} CLICKS  ${i.trails} TRAILS`,
-      ticker: (i) => `WIKI TRAILS NEWS ... ${i.clicks} CLICKS RECORDED ... ${i.top ? `TOP STORY: ${i.top.a.toUpperCase()} \u2194 ${i.top.b.toUpperCase()} \xD7${i.top.total}` : "NO TOP STORY YET"} ... WEATHER: CURIOUS WITH A CHANCE OF RABBIT HOLES ...`
-    },
-    {
-      id: "homecomputer",
-      name: "8-bit Home",
-      cat: "retro",
-      blurb: "Blue-on-blue 8-bit home computer with tape-loading stripes.",
-      chrome: "flat",
-      hub: ["#6c5eb5", "#a59cf2", "#eeee77", "#ffffff"],
-      trails: ["#eeee77", "#ff7777", "#77ff77", "#77ddff", "#ffaa55", "#ff77ff", "#ffffff", "#bbbbbb", "#aaffee", "#ffcc99"],
-      shape: "square",
-      glow: false,
-      labelSize: 9,
-      boot: ["**** WIKI BASIC V2 ****", "64K RAM SYSTEM  38911 BASIC BYTES FREE", "READY.", 'LOAD "TRAILS",8,1'],
-      sound: { wave: "triangle", f: 520 },
-      stats: (i) => `READY. ${i.articles} ARTICLES  ${i.clicks} CLICKS`
-    },
-    // ---------------- futuristic ----------------
-    {
-      id: "holo",
-      name: "Holo HUD",
-      cat: "future",
-      blurb: "Translucent sci-fi cockpit with a radar sweep.",
-      chrome: "neon",
-      hub: ["#0b5e6e", "#1fb8c9", "#4df3ff", "#e6fdff"],
-      trails: ["#ffcf4d", "#4df3ff", "#ff6b9d", "#7dff9a", "#b18cff", "#ff9a4d", "#ffffff", "#4dd2ff", "#e6ff4d", "#ff4d4d"],
-      shape: "hex",
-      hollow: true,
-      fx: { type: "radar", c1: "#4df3ff" },
-      labelSize: 13,
-      boot: ["HUD INITIALISING", "", "SENSOR ARRAY ....... ONLINE", "LINK MAPPER ........ ONLINE"],
-      sound: { wave: "sine", f: 1320 },
-      stats: (i) => `SYS NOMINAL \xB7 ${i.articles} NODES \xB7 ${i.clicks} LINK EVENTS \xB7 ${i.trails} SORTIES`,
-      banner: (h) => `TARGET LOCK: ${h.title}`
-    },
-    {
-      id: "starchart",
-      name: "Star Chart",
-      cat: "future",
-      blurb: "Articles are stars, trails are constellations.",
-      chrome: "flat",
-      hub: ["#6a7fdb", "#a9c1ff", "#ffffff", "#ffe7a3"],
-      trails: ["#ffe7a3", "#8fd3ff", "#ff9fd2", "#a7ffb5", "#c3a6ff", "#ffb38a", "#ffffff", "#7fe0ff", "#fff59d", "#ff8a8a"],
-      shape: "star",
-      bend: 0,
-      fx: { type: "nebula", c1: "#7b5cff", c2: "#2d9bff", c3: "#ff5cc8" },
-      words: { trail: "constellation", trails: "constellations", Trails: "Constellations", article: "star", articles: "stars" },
-      titles: { builder: "Plot a course", trails: "Constellations", brain: "Star chart" },
-      boot: ["Aligning telescope\u2026", "", "Catalogue loaded."],
-      sound: { wave: "sine", f: 784 },
-      stats: (i) => `${i.articles} stars \xB7 ${i.trails} constellations \xB7 ${i.clicks} jumps`
-    },
-    {
-      id: "bioneural",
-      name: "Bio-Neural",
-      cat: "future",
-      blurb: "The brain, literally: organic curves and travelling signals.",
-      chrome: "flat",
-      hub: ["#3a0d4d", "#7b2cbf", "#c77dff", "#ff9de2", "#ffffff"],
-      trails: ["#7df9d8", "#ff9de2", "#ffd36e", "#8ab4ff", "#c77dff", "#ff7a8a", "#b5ff7d", "#ffffff", "#7dd3ff", "#ffb37d"],
-      shape: "circle",
-      edge: "pulse",
-      glow: false,
-      bend: 0.28,
-      fx: { type: "dust", c1: "#c77dff" },
-      words: { trail: "thought", trails: "thoughts", Trails: "Thoughts", article: "neuron", articles: "neurons", click: "signal", clicks: "signals" },
-      titles: { builder: "New thought", trails: "Thoughts", brain: "Cortex" },
-      boot: ["Growing dendrites\u2026", "", "Synapses firing."],
-      sound: { wave: "sine", f: 392 },
-      stats: (i) => `${i.articles} neurons \xB7 ${i.clicks} signals \xB7 ${i.trails} thoughts`
-    },
-    // ---------------- AI ----------------
-    {
-      id: "latent",
-      name: "Latent Space",
-      cat: "ai",
-      blurb: "Calm AI-lab look: an embedding plot in soft pastels.",
-      chrome: "flat",
-      hub: ["#c9d6ff", "#9fb4ff", "#7c6cf0", "#f08cae", "#f5b76c"],
-      trails: ["#6d5df5", "#f0568c", "#18a999", "#f5a524", "#3b82f6", "#a855f7", "#ef4444", "#14b8a6", "#64748b", "#84cc16"],
-      shape: "circle",
-      glow: false,
-      bend: 0.1,
-      labelSize: 13,
-      fx: { type: "dust", c1: "#6d5df5" },
-      titles: { builder: "New sample", trails: "Samples", brain: "Embedding view" },
-      boot: ["Loading weights\u2026", "", "Projecting to 2D."],
-      sound: { wave: "sine", f: 1046 },
-      stats: (i) => `n=${i.articles} \xB7 edges=${i.clicks} \xB7 samples=${i.trails}`
-    },
-    {
-      id: "training",
-      name: "Training Run",
-      cat: "ai",
-      blurb: "A dark ML dashboard: epochs, steps and a falling loss.",
-      chrome: "flat",
-      hub: ["#1f6feb", "#58a6ff", "#3fb950", "#d2a8ff"],
-      trails: ["#3fb950", "#58a6ff", "#d2a8ff", "#f0883e", "#ff7b72", "#79c0ff", "#e3b341", "#56d4dd", "#a5d6ff", "#7ee787"],
-      shape: "circle",
-      glow: false,
-      labelSize: 12,
-      fx: { type: "matrix", c1: "#3fb950" },
-      ui: ["spark"],
-      words: { trail: "run", trails: "runs", Trails: "Runs", click: "step", clicks: "steps" },
-      titles: { builder: "train.py", trails: "runs/", brain: "tensorboard" },
-      boot: ["$ python train.py --data wiki", "", "cuda: available"],
-      sound: { wave: "triangle", f: 1200 },
-      stats: (i) => `epoch ${i.trails} \xB7 step ${i.clicks} \xB7 loss ${(2.4 / Math.log(i.clicks + 3)).toFixed(4)} \xB7 nodes ${i.articles}`,
-      milestone: (a, b) => Math.floor(b / 250) > Math.floor(a / 250) ? "checkpoint saved" : null
-    },
-    {
-      id: "sentinel",
-      name: "Sentinel",
-      cat: "ai",
-      blurb: "A calm machine watches you browse. Its red eye follows you.",
-      chrome: "flat",
-      hub: ["#4a0000", "#a31515", "#ff3b3b", "#ffb3b3"],
-      trails: ["#ff3b3b", "#ffffff", "#ff8a3b", "#ffd23b", "#ff3bb5", "#b53bff", "#3bd8ff", "#ff6b6b", "#ffb3b3", "#e0e0e0"],
-      shape: "circle",
-      hollow: true,
-      fx: { type: "scan", c1: "#ff3b3b" },
-      ui: ["eye"],
-      titles: { builder: "INPUT", trails: "OBSERVATION LOG", brain: "SENTINEL // MONITOR" },
-      boot: ["SENTINEL ONLINE.", "", "Good morning. I have been expecting you."],
-      sound: { wave: "sine", f: 220 },
-      stats: (i) => `MONITORING ${i.articles} SUBJECTS \xB7 ${i.clicks} EVENTS LOGGED`,
-      hover: (a) => `I see you are interested in ${a.title}. You have been here ${a.visits} time${a.visits === 1 ? "" : "s"}.`
-    },
-    // ---------------- millennium ----------------
-    {
-      id: "aqua",
-      name: "Aqua Bubble",
-      cat: "y2k",
-      blurb: "Glossy gel buttons, sky blue and rising bubbles.",
-      chrome: "gloss",
-      hub: ["#9fd3ff", "#4aa3ff", "#1f6fd1", "#ff8a00"],
-      trails: ["#ff8a00", "#1f6fd1", "#18b24a", "#e0245e", "#8e44ad", "#00a3a3", "#f1c40f", "#34495e", "#d35400", "#2ecc71"],
-      shape: "circle",
-      glow: false,
-      labelSize: 13,
-      fx: { type: "bubbles", c1: "#ffffff" },
-      boot: ["Starting up\u2026", "", "Welcome"],
-      sound: { wave: "sine", f: 1568 }
-    },
-    {
-      id: "chrome",
-      name: "Y2K Chrome",
-      cat: "y2k",
-      blurb: "Liquid silver, iridescent sparkles and a millennium countdown.",
-      chrome: "gloss",
-      hub: ["#7ef9ff", "#b388ff", "#ff8ad8", "#fff59d", "#ffffff"],
-      trails: ["#7ef9ff", "#ff8ad8", "#fff59d", "#b388ff", "#69f0ae", "#ff9e80", "#ffffff", "#84ffff", "#ea80fc", "#ffd180"],
-      shape: "spark",
-      fx: { type: "sparkles", c1: "#ffffff", c2: "#b388ff" },
-      boot: ["MILLENNIUM EDITION", "", "Y2K compliant \u2713"],
-      sound: { wave: "triangle", f: 1760 },
-      stats: (i) => `${1e3 - i.clicks % 1e3} clicks to the next millennium \xB7 ${i.articles} articles`,
-      milestone: (a, b) => Math.floor(b / 1e3) > Math.floor(a / 1e3) ? "HAPPY NEW MILLENNIUM!" : null
-    },
-    {
-      id: "geocities",
-      name: "GeoCities",
-      cat: "y2k",
-      blurb: "Starfield tiles, rainbow bars, a hit counter. Sign my guestbook!",
-      chrome: "bevel",
-      hub: ["#00ffff", "#00ff00", "#ffff00", "#ff00ff"],
-      trails: ["#ff00ff", "#00ff00", "#ffff00", "#00ffff", "#ff0000", "#ff9900", "#ffffff", "#0099ff", "#99ff00", "#ff66cc"],
-      shape: "star",
-      glow: false,
-      fx: { type: "stars", c1: "#ffffff", c2: "#ffff00" },
-      ui: ["ticker"],
-      titles: { builder: "~*~ Add a trail ~*~", trails: "My Trails!!!", brain: "My Wiki Trails Homepage!!!" },
-      boot: ["Connecting at 56k...", "", "KRRRRRSHHHHH pong pong"],
-      sound: { wave: "square", f: 1200 },
-      stats: (i) => `You are visitor #${pad(i.clicks)}!`,
-      ticker: () => "\u{1F6A7} UNDER CONSTRUCTION \u{1F6A7}  Welcome to my Wiki Trails homepage!!!  Best viewed in 800\xD7600  \u2728 Sign my guestbook \u2728  \u{1F6A7}",
-      milestone: (a, b) => Math.floor(b / 100) > Math.floor(a / 100) ? `${b}th VISITOR!!!` : null
-    },
-    {
-      id: "mediaplayer",
-      name: "Media Player",
-      cat: "y2k",
-      blurb: "Oddly shaped player skin with a green LCD. Trails are tracks.",
-      chrome: "gloss",
-      hub: ["#00662a", "#00cc55", "#00ff66", "#ffcc00"],
-      trails: ["#ffcc00", "#00ff66", "#ff5c5c", "#5cc8ff", "#ff9a00", "#c77dff", "#ffffff", "#a8ff60", "#ff7ad9", "#60ffe0"],
-      shape: "circle",
-      labelSize: 16,
-      ui: ["eq"],
-      words: { trail: "track", trails: "tracks", Trails: "Playlist", clicks: "beats", click: "beat" },
-      titles: { builder: "NOW RECORDING", trails: "PLAYLIST", brain: "VISUALIZER" },
-      boot: ["It really whips.", "", "Loading visualizer plug-in\u2026"],
-      sound: { wave: "sawtooth", f: 660 },
-      stats: (i) => `\u25B6 ${i.trails} tracks \xB7 ${i.clicks} beats \xB7 ${Math.floor(i.clicks / 60)}:${String(i.clicks % 60).padStart(2, "0")}`
-    },
-    // ---------------- console ----------------
-    {
-      id: "rpg16",
-      name: "16-bit RPG",
-      cat: "console",
-      blurb: "Blue dialog boxes, a \u25B6 cursor, quests and XP.",
-      chrome: "console",
-      hub: ["#3048d8", "#7f8cff", "#ffffff", "#ffe14d"],
-      trails: ["#ffe14d", "#ff6b6b", "#6bff9a", "#6bd4ff", "#ff9a3b", "#d68bff", "#ffffff", "#ffb3e6", "#b3ff6b", "#3bffd8"],
-      shape: "diamond",
-      words: { trail: "quest", trails: "quests", Trails: "Quests", click: "XP", clicks: "XP" },
-      titles: { builder: "Quest log", trails: "Quests", brain: "World map" },
-      boot: ["Long ago, in a land of hyperlinks\u2026", "", "NEW GAME"],
-      sound: { wave: "square", f: 988 },
-      stats: (i) => `LV ${1 + Math.floor(i.clicks / 50)}   XP ${i.clicks % 50}/50   QUESTS ${i.trails}   PLACES ${i.articles}`,
-      banner: (h) => `A wild ${h.title.toUpperCase()} appeared!`,
-      milestone: (a, b) => Math.floor(b / 50) > Math.floor(a / 50) ? `LEVEL UP! LV ${1 + Math.floor(b / 50)}` : null
-    },
-    {
-      id: "handheld",
-      name: "Handheld '89",
-      cat: "console",
-      blurb: "Four shades of green on a dot-matrix screen.",
-      chrome: "console",
-      hub: ["#8bac0f", "#306230", "#0f380f"],
-      trails: ["#0f380f", "#8e2a5c", "#2d4fb3", "#9a5b00", "#306230", "#5c2a8e", "#1f6f6f", "#7a1f1f", "#3b3b3b", "#4f6f00"],
-      shape: "square",
-      glow: false,
-      labelSize: 9,
-      boot: ["WIKI TRAILS", "", "PRESS START"],
-      sound: { wave: "square", f: 1046 }
-    },
-    {
-      id: "polygon",
-      name: "Polygon Era",
-      cat: "console",
-      blurb: "Late-90s 3D: wobbly polygons and memory cards.",
-      chrome: "console",
-      hub: ["#3a3fd8", "#8fa0ff", "#ff5a5a", "#ffcf3f"],
-      trails: ["#ffcf3f", "#ff5a5a", "#5ad8ff", "#7dff7d", "#ff8aff", "#ff9a3f", "#ffffff", "#b38aff", "#3fffd2", "#d8ff3f"],
-      shape: "tri",
-      glow: false,
-      menu: { export: "Save to Memory Card\u2026", import: "Load from Memory Card\u2026" },
-      boot: ["", "", "Licensed by Nobody in Particular"],
-      sound: { wave: "triangle", f: 740 },
-      stats: (i) => `MEMORY CARD 1 \xB7 ${Math.max(0, 15 - Math.ceil(i.trails / 12))} BLOCKS FREE \xB7 ${i.clicks} clicks`
-    },
-    {
-      id: "fighter",
-      name: "Fighter Select",
-      cat: "console",
-      blurb: "Trails as a character-select grid. Hover = VS splash.",
-      chrome: "console",
-      hub: ["#7a3d00", "#ff7a00", "#ffde00", "#ff1e1e"],
-      trails: ["#ffde00", "#ff1e1e", "#1ea0ff", "#1eff6a", "#ff7a00", "#c81eff", "#ffffff", "#ff1e9a", "#1effe0", "#a0ff1e"],
-      shape: "square",
-      labelSize: 12,
-      words: { trails: "fighters", Trails: "Select your trail" },
-      titles: { builder: "NEW CHALLENGER", trails: "SELECT YOUR TRAIL", brain: "ARENA" },
-      boot: ["", "ROUND 1", "FIGHT!"],
-      sound: { wave: "sawtooth", f: 330 },
-      stats: (i) => `ROUND ${i.trails} \xB7 ${i.top ? `COMBO \xD7${i.top.total}` : "NO COMBO"} \xB7 ${i.clicks} HITS`,
-      banner: (h) => h.topIn ? `${h.topIn} VS ${h.title}` : `??? VS ${h.title}`,
-      milestone: (a, b) => Math.floor(b / 10) > Math.floor(a / 10) ? `${b} HIT COMBO!` : null
-    },
-    {
-      id: "overworld",
-      name: "Overworld Map",
-      cat: "console",
-      blurb: "Levels on a grassy map, dotted paths, a walking marker.",
-      chrome: "console",
-      hub: ["#e74c3c", "#f39c12", "#ffe14d"],
-      trails: ["#e74c3c", "#2980b9", "#8e44ad", "#d35400", "#16a085", "#c0392b", "#2c3e50", "#f1c40f", "#27ae60", "#e84393"],
-      shape: "circle",
-      glow: false,
-      edge: "dotted",
-      walker: true,
-      fx: { type: "clouds", c1: "#0b3d0b" },
-      words: { trail: "adventure", trails: "adventures", Trails: "Adventures", article: "level", articles: "levels" },
-      titles: { builder: "Next level", trails: "Adventures", brain: "World 1" },
-      boot: ["WORLD 1-1", "", "\xD7 3"],
-      sound: { wave: "square", f: 1318 },
-      stats: (i) => `WORLD ${1 + Math.floor(i.trails / 20)} \xB7 ${i.articles} levels \xB7 \u2605 ${i.clicks}`,
-      banner: (h) => `${h.title}: cleared ${h.a.visits}\xD7`
-    },
-    // ---------------- synthwave ----------------
-    {
-      id: "outrun",
-      name: "Outrun Sunset",
-      cat: "synth",
-      blurb: "Neon pink sunset over an endless grid.",
-      chrome: "neon",
-      hub: ["#5a189a", "#9d4edd", "#ff2fd0", "#ff6c11", "#fff200"],
-      trails: ["#2de2e6", "#ff2fd0", "#fff200", "#ff6c11", "#00ff9f", "#ff3864", "#b388ff", "#ffffff", "#7df9ff", "#f9c80e"],
-      shape: "diamond",
-      fx: { type: "grid", c1: "#ff2fd0", c2: "#ff2a6d", c3: "#ffcf3f" },
-      boot: ["NEON//TRAILS  OS 1984", "", "Charging flux capacitor... 1.21 GW"],
-      sound: { wave: "sawtooth", f: 440 }
-    },
-    {
-      id: "vaporwave",
-      name: "Vaporwave",
-      cat: "synth",
-      blurb: "Pastel \uFF50\uFF49\uFF4E\uFF4B \uFF41\uFF4E\uFF44 \uFF54\uFF45\uFF41\uFF4C, 98-style dialogs, VHS glitches.",
-      chrome: "bevel",
-      hub: ["#b967ff", "#ff71ce", "#01cdfe", "#05ffa1", "#fffb96"],
-      trails: ["#05ffa1", "#ff71ce", "#fffb96", "#01cdfe", "#b967ff", "#ff9a8b", "#ffffff", "#9bf6ff", "#ffc6ff", "#caffbf"],
-      shape: "diamond",
-      fx: { type: "vhs", c1: "#ff71ce", c2: "#01cdfe" },
-      titles: { builder: "\uFF34\uFF32\uFF21\uFF29\uFF2C\u3000\u30D3\u30EB\u30C0\u30FC", trails: "\u30C8\u30EC\u30A4\u30EB\u3000\uFF46\uFF4F\uFF4C\uFF44\uFF45\uFF52", brain: "\uFF22\uFF32\uFF21\uFF29\uFF2E\uFF0E\uFF25\uFF38\uFF25\u3000\u8133\u5185" },
-      boot: ["\uFF37\uFF29\uFF2B\uFF29\u3000\uFF34\uFF32\uFF21\uFF29\uFF2C\uFF33\u3000\uFF19\uFF18", "", "\uFF45\uFF4E\uFF4A\uFF4F\uFF59\u3000\uFF54\uFF48\uFF45\u3000\uFF41\uFF45\uFF53\uFF54\uFF48\uFF45\uFF54\uFF49\uFF43"],
-      sound: { wave: "sine", f: 523 }
-    },
-    {
-      id: "neonrain",
-      name: "Neon Rain",
-      cat: "synth",
-      blurb: "Cyberpunk hazard tape, glitchy titles and neon rain.",
-      chrome: "neon",
-      hub: ["#ff003c", "#ff6b00", "#fcee0a", "#00f0ff"],
-      trails: ["#fcee0a", "#00f0ff", "#ff003c", "#ff6bff", "#00ff9c", "#ff9a00", "#ffffff", "#9a7bff", "#5cffe9", "#ffd000"],
-      shape: "diamond",
-      fx: { type: "rain", c1: "#00f0ff", c2: "#ff003c" },
-      titles: { builder: "NETRUN // INPUT", trails: "DATA SHARDS", brain: "BRAIN.EXE // \u8133 \u30CD\u30AA\u30F3" },
-      boot: ["JACKING IN\u2026", "", "ICE: bypassed"],
-      sound: { wave: "sawtooth", f: 880 }
-    },
-    // ---------------- minimal ----------------
-    {
-      id: "swiss",
-      name: "Swiss Paper",
-      cat: "minimal",
-      blurb: "White paper, black rules, one red accent. Straight lines only.",
-      chrome: "flat",
-      hub: ["#bbbbbb", "#555555", "#111111", "#e30613"],
-      trails: ["#e30613", "#111111", "#0057b8", "#f2a900", "#00875a", "#7a3e9d", "#d9480f", "#495057", "#0b7285", "#5c940d"],
-      shape: "circle",
-      glow: false,
-      bend: 0,
-      labelSize: 12,
-      titles: { builder: "Add", trails: "Trails", brain: "Graph" },
-      boot: ["Wiki Trails"],
-      sound: { wave: "sine", f: 880 }
-    },
-    {
-      id: "midnight",
-      name: "Midnight Mono",
-      cat: "minimal",
-      blurb: "Quiet dark mode: thin lines, soft greys, no noise.",
-      chrome: "flat",
-      hub: ["#3f3f46", "#71717a", "#d4d4d8", "#ffffff"],
-      trails: ["#9b8afb", "#5eead4", "#fda4af", "#fcd34d", "#93c5fd", "#c4b5fd", "#86efac", "#fdba74", "#f9a8d4", "#a5b4fc"],
-      shape: "circle",
-      glow: false,
-      bend: 0.1,
-      labelSize: 12,
-      titles: { builder: "Add", trails: "Trails", brain: "Graph" },
-      boot: ["Wiki Trails"],
-      sound: { wave: "sine", f: 660 }
-    },
-    {
-      id: "zen",
-      name: "Zen Ink",
-      cat: "minimal",
-      blurb: "Sumi ink on rice paper with a red seal.",
-      chrome: "flat",
-      hub: ["#c9c1ae", "#7d776a", "#1b1a17"],
-      trails: ["#b7282e", "#1b1a17", "#2b4c7e", "#4f6b3a", "#8a5a2b", "#5b3f74", "#c2703d", "#3f6e6e", "#7a7a7a", "#9c2f5a"],
-      shape: "circle",
-      glow: false,
-      bend: 0.22,
-      labelSize: 14,
-      titles: { builder: "\u9053 \xB7 Path", trails: "\u8A18 \xB7 Trails", brain: "\u5FC3 \xB7 Mind" },
-      boot: ["\u4E00\u671F\u4E00\u4F1A"],
-      sound: { wave: "sine", f: 330 }
-    }
-  ];
-  var RENAMED = { win95: "desktop95", synth: "outrun", gameboy: "handheld", mac: "mono91" };
-  var KEY2 = "wiki-trails.skin";
-  var skinById = (id) => SKINS.find((s) => s.id === (RENAMED[id] || id)) || SKINS[0];
-  function savedSkin() {
+  // src/panels/menus.js
+  var SAVED_KEY = "wiki-trails.saved";
+  function initMenus({ graph: graph3 }) {
+    const fileMenu = $("filemenu");
+    let saved = { at: 0, clicks: 0, name: "" };
     try {
-      return skinById(localStorage.getItem(KEY2));
-    } catch {
-      return SKINS[0];
-    }
-  }
-  function rememberSkin(id) {
-    try {
-      localStorage.setItem(KEY2, id);
+      saved = { ...saved, ...JSON.parse(localStorage.getItem(SAVED_KEY)) };
     } catch {
     }
+    function saveDue() {
+      const since = totalClicks() - (saved.clicks || 0);
+      const days = saved.at ? (Date.now() - saved.at) / 864e5 : Infinity;
+      if (!app.state.trails.length || since <= 0) return false;
+      if (!saved.at) return totalClicks() >= 30;
+      return since >= 200 || days >= 7 && since >= 10;
+    }
+    function renderSaved() {
+      const since = Math.max(0, totalClicks() - (saved.clicks || 0)), due = saveDue();
+      $("savedinfo").textContent = !saved.at ? "Not saved to a file yet." : `Saved ${fmtAgo(saved.at)}${saved.name ? ` to ${saved.name}` : ""}${since ? ` \xB7 ${plural(since, "new click")} since` : ""}.`;
+      $("savedinfo").classList.toggle("due", due);
+      $("filebtn").classList.toggle("due-dot", due);
+      $("filebtn").title = due ? "Time to save your history to a file" : "Save, open, examples";
+    }
+    function closeMenus() {
+      fileMenu.hidden = true;
+    }
+    $("filebtn").onclick = (e) => {
+      e.stopPropagation();
+      fileMenu.hidden = !fileMenu.hidden;
+      renderSaved();
+    };
+    fileMenu.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("click", closeMenus);
+    async function doSave(saveAs = false) {
+      closeMenus();
+      try {
+        app.state.layout = graph3.getPositions();
+        const r = await saveToFile(app.state, { saveAs });
+        if (!r) return;
+        saved = { at: Date.now(), clicks: totalClicks(), name: r.name };
+        try {
+          localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
+        } catch {
+        }
+        renderSaved();
+        toast(r.how === "file" ? `Saved to ${r.name}. Ctrl+S updates the same file.` : `Downloaded ${r.name}. Open it any time with File \u2192 Open.`, 4e3);
+      } catch (err) {
+        toast(`Could not save: ${err.message}`);
+      }
+    }
+    let pending = null;
+    function askOpen(s, name) {
+      if (!app.state.trails.length) return applyOpen(s, "replace", name);
+      pending = { s, name };
+      const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
+      $("od-text").innerHTML = `<b>${esc(name || "This file")}</b> has ${plural(s.trails.length, "trail")} and ${plural(clicks, "click")}. You currently have ${plural(app.state.trails.length, "trail")}.`;
+      $("opendlg").hidden = false;
+      $("od-merge").focus();
+    }
+    function applyOpen(s, how, name) {
+      if (how === "merge") {
+        const m = merge(app.state, s);
+        snapshot();
+        app.state = m.state;
+        app.sel = null;
+        commit({ fresh: true });
+        toast(`Added ${plural(m.added, "new trail")} from ${name || "the file"}.`);
+      } else {
+        graph3.reset();
+        replaceState(s);
+        toast(`Opened ${name || "the file"}: ${plural(s.trails.length, "trail")}.`);
+      }
+      saved = { at: Date.now(), clicks: totalClicks(), name: name || "" };
+      try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
+      } catch {
+      }
+      renderSaved();
+    }
+    $("od-merge").onclick = () => {
+      $("opendlg").hidden = true;
+      if (pending) applyOpen(pending.s, "merge", pending.name);
+      pending = null;
+    };
+    $("od-replace").onclick = () => {
+      $("opendlg").hidden = true;
+      if (pending) applyOpen(pending.s, "replace", pending.name);
+      pending = null;
+    };
+    $("od-cancel").onclick = $("od-close").onclick = () => {
+      $("opendlg").hidden = true;
+      pending = null;
+    };
+    async function doOpen() {
+      closeMenus();
+      try {
+        const r = await pickFile();
+        if (r === "fallback") return $("import").click();
+        if (r) askOpen(r.state, r.name);
+      } catch (err) {
+        toast(`Could not open: ${err.message}`);
+      }
+    }
+    async function openFileObj(f) {
+      try {
+        askOpen(await readFile(f), f.name);
+      } catch (err) {
+        toast(`Could not open ${f.name}: ${err.message}`);
+      }
+    }
+    $("import").onchange = (e) => {
+      const f = e.target.files[0];
+      e.target.value = "";
+      if (f) openFileObj(f);
+    };
+    function loadDataScript(name) {
+      if (window.WIKI_TRAILS_DATA?.[name]) return Promise.resolve(window.WIKI_TRAILS_DATA[name]);
+      return new Promise((res, rej) => {
+        const el = document.createElement("script");
+        el.src = `data/${name}.js`;
+        el.onload = () => window.WIKI_TRAILS_DATA?.[name] ? res(window.WIKI_TRAILS_DATA[name]) : rej(new Error("empty"));
+        el.onerror = () => rej(new Error("not found"));
+        document.head.appendChild(el);
+      });
+    }
+    async function loadTest(name) {
+      closeMenus();
+      try {
+        const s = name === "small" ? exampleState() : validate(await loadDataScript(name));
+        graph3.reset();
+        replaceState(s);
+        toast(`Loaded ${plural(s.trails.length, "example trail")}${graph3.isSettling() ? ". Arranging the map\u2026" : "."}`);
+      } catch (err) {
+        toast(`Could not load the example (${err.message}).`);
+      }
+    }
+    $("m-save").onclick = () => doSave();
+    $("m-saveas").onclick = () => doSave(true);
+    $("m-open").onclick = doOpen;
+    document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => loadTest(b.dataset.example));
+    confirmClick($("m-clear"), "Click again to clear everything", () => {
+      closeMenus();
+      graph3.reset();
+      replaceState({ ...emptyState(), lang: app.state.lang });
+      toast("History cleared. Undo brings it back.");
+    });
+    document.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        doSave(e.shiftKey);
+      }
+      if (e.key === "o" || e.key === "O") {
+        e.preventDefault();
+        doOpen();
+      }
+    });
+    let depth = 0;
+    window.addEventListener("dragenter", (e) => {
+      if ([...e.dataTransfer?.types || []].includes("Files")) {
+        depth++;
+        $("dropzone").hidden = false;
+      }
+    });
+    window.addEventListener("dragleave", () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) $("dropzone").hidden = true;
+    });
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      depth = 0;
+      $("dropzone").hidden = true;
+      const f = e.dataTransfer?.files?.[0];
+      if (f) openFileObj(f);
+    });
+    on("data", renderSaved);
+    setInterval(renderSaved, 6e4);
+    const MOCK = `<svg viewBox="0 0 120 60" preserveAspectRatio="xMidYMid slice"><path class="ml" d="M18 40 Q40 10 62 28 T104 18" stroke-width="3"/><path class="ml" d="M18 40 L50 50 L62 28" stroke-width="1" opacity=".55"/><path class="ml" d="M62 28 L88 46" stroke-width="1.6" opacity=".8"/><circle class="mn2" cx="18" cy="40" r="4.5"/><circle class="mn" cx="62" cy="28" r="5.5"/><circle class="mn" cx="104" cy="18" r="3"/><circle class="mn" cx="50" cy="50" r="2.5"/><circle class="mn" cx="88" cy="46" r="3"/></svg>`;
+    function renderSkins() {
+      const theme = document.documentElement.dataset.theme;
+      $("skingrid").innerHTML = CATS.map(([c, label]) => `<div class="gal-cat">${label}</div><div class="gal-grid">${SKINS.filter((s) => s.cat === c).map((s) => `<button class="card${s.id === app.settings.skin ? " chosen" : ""}" data-skin="${s.id}" data-chrome="${s.chrome || "bevel"}" data-theme="${theme}" data-id="${s.id}">
+        <div class="mock-desk"><div class="mock-win"><div class="mock-title">${esc(s.name)}</div><div class="mock-screen">${MOCK}</div><div class="mock-row"><span class="mock-field"></span><span class="mock-btn">OK</span></div></div></div>
+        <div class="card-name">${esc(s.name)}</div><div class="card-sub">${esc(s.blurb)}</div></button>`).join("")}</div>`).join("");
+    }
+    function renderSettings() {
+      document.querySelectorAll("#themeseg button").forEach((b) => b.classList.toggle("on", b.dataset.theme === app.settings.theme));
+      $("density").value = app.settings.density;
+      $("fade").checked = app.settings.fade;
+      $("sound").checked = app.settings.sound;
+      $("lang").value = app.state.lang || "en";
+      renderSkins();
+    }
+    function openSettings() {
+      closeMenus();
+      renderSettings();
+      $("settings").hidden = false;
+    }
+    function closeSettings() {
+      $("settings").hidden = true;
+      if (app.skin.id !== app.settings.skin) applySkin(app.settings.skin, { persist: false });
+    }
+    $("settingsbtn").onclick = openSettings;
+    $("set-close").onclick = closeSettings;
+    $("set-done").onclick = closeSettings;
+    $("settings").addEventListener("click", (e) => {
+      if (e.target === $("settings")) closeSettings();
+    });
+    document.querySelectorAll("#themeseg button").forEach((b) => b.onclick = () => {
+      setTheme(b.dataset.theme);
+      renderSettings();
+    });
+    const grid = $("skingrid");
+    grid.addEventListener("mouseover", (e) => {
+      const c = e.target.closest(".card");
+      if (c && c.dataset.id !== app.skin.id) applySkin(c.dataset.id, { persist: false });
+    });
+    grid.addEventListener("mouseleave", () => {
+      if (app.skin.id !== app.settings.skin) applySkin(app.settings.skin, { persist: false });
+    });
+    grid.addEventListener("click", (e) => {
+      const c = e.target.closest(".card");
+      if (c) {
+        applySkin(c.dataset.id);
+        renderSkins();
+      }
+    });
+    $("density").oninput = () => {
+      setSetting("density", +$("density").value);
+      graph3.setView({ density: app.settings.density });
+    };
+    $("fade").onchange = () => {
+      setSetting("fade", $("fade").checked);
+      graph3.setView({ fade: app.settings.fade });
+    };
+    $("sound").onchange = () => setSetting("sound", $("sound").checked);
+    $("lang").onchange = () => {
+      app.state.lang = $("lang").value;
+      commit();
+    };
+    $("relayout").onclick = () => {
+      graph3.relayout();
+      toast("Arranging the map from scratch\u2026");
+      closeSettings();
+    };
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (!$("settings").hidden) closeSettings();
+        if (!$("opendlg").hidden) $("opendlg").hidden = true;
+      }
+    });
+    renderSaved();
+    return { loadTest, openSettings };
   }
 
   // src/main.js
-  var $ = (id) => document.getElementById(id);
-  var esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  var state = emptyState();
-  var D = derive(state);
-  var DV = D;
-  var range = null;
-  var focusTitle = null;
-  var cur = null;
-  var pinned = null;
-  var hovered = null;
-  var undoStack = [];
-  var graph = createGraph($("graph"), {
+  var html = document.documentElement;
+  function setPanel(side, open) {
+    app.settings[side] = open;
+    saveSettings();
+    html.dataset[side] = open ? "open" : "closed";
+  }
+  document.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => setPanel(b.dataset.close, false));
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => setPanel(b.dataset.open, true));
+  setPanel("left", app.settings.left);
+  setPanel("right", app.settings.right);
+  var rz;
+  var graph2 = createGraph($("graph"), {
     onHover: (t) => {
-      hovered = t ? { kind: "article", id: t } : null;
-      applyHighlight();
-      statusFor(t);
-      bannerFor(t);
+      setHover(t ? { kind: "article", id: t } : null);
+      showTip();
     },
     onEdgeHover: (l) => {
-      if (hovered?.kind === "article") return;
-      hovered = l ? { kind: "edge", id: l.key } : null;
-      applyHighlight();
-      if (l) status(`${l.a} \u2194 ${l.b}: clicked ${l.total}\xD7 (${l.ab}\xD7 \u2192 ${l.b}, ${l.ba}\xD7 \u2192 ${l.a})`);
+      if (app.hover?.kind === "article") return;
+      setHover(l ? { kind: "edge", id: l.key } : null);
+      showTip();
     },
-    onClick: (t) => clickArticle(t),
-    onEdgeClick: (l) => clickEdge(l),
-    onDblClick: (t) => setFocus(t),
-    onBackground: () => {
-      const had = pinned;
-      pinned = null;
-      closeCard();
-      applyHighlight();
-      renderTrails();
-      if (had) graph.fit(true);
+    onClick: (t) => {
+      select({ kind: "article", id: t });
+      revealSel(app.sel);
     },
+    onEdgeClick: (l) => {
+      select({ kind: "edge", id: l.key });
+      revealSel(app.sel);
+    },
+    onDblClick: (t) => focusArticle(t),
+    onBackground: () => select(null),
     onSettled: () => {
-      state.layout = graph.getPositions();
-      saveLocal(state);
+      app.state.layout = graph2.getPositions();
+      saveLocal(app.state);
     },
     onResize: () => {
-      clearTimeout(rzT);
-      rzT = setTimeout(() => graph.fit(false), 120);
+      clearTimeout(rz);
+      rz = setTimeout(() => graph2.fit(false), 120);
     }
   });
-  var rzT;
-  var colorOf = (trailId) => TRAIL_COLORS[(D.trailIndex.get(trailId)?.index ?? 0) % TRAIL_COLORS.length];
-  var trailOf = (id) => state.trails.find((t) => t.id === id);
-  var wikiUrl = (t) => `https://${state.lang}.wikipedia.org/wiki/${encodeURIComponent(t.replace(/ /g, "_"))}`;
-  function snapshot() {
-    const { layout, ...rest } = state;
-    undoStack.push(JSON.stringify({ state: rest, cur }));
-    let bytes = 0;
-    for (const u of undoStack) bytes += u.length;
-    while (undoStack.length > 1 && (undoStack.length > 100 || bytes > 24e6)) bytes -= undoStack.shift().length;
-    markDirty();
+  var fx2 = createEffects($("fx"));
+  initAppearance(graph2, fx2);
+  var tip = $("tip");
+  var mouse = [0, 0];
+  function placeTip() {
+    if (tip.hidden) return;
+    const r = $("stage").getBoundingClientRect();
+    let x = mouse[0] + 16, y = mouse[1] + 14;
+    if (x + tip.offsetWidth > r.width - 8) x = mouse[0] - tip.offsetWidth - 12;
+    if (y + tip.offsetHeight > r.height - 8) y = mouse[1] - tip.offsetHeight - 12;
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
   }
-  function commit({ refit = false } = {}) {
-    saveLocal(state);
-    D = derive(state);
-    DV = range ? derive(state, range) : D;
-    if (cur && !D.trailIndex.get(cur.trailId)?.byId.has(cur.visitId)) cur = null;
-    if (pinned?.kind === "trail" && !D.trailIndex.has(pinned.id)) pinned = null;
-    if (pinned?.kind === "article" && !D.articles.has(pinned.id)) {
-      pinned = null;
-      closeCard();
+  function showTip() {
+    const h = app.hover;
+    if (h?.kind === "article") {
+      const a = app.DV.articles.get(h.id) || app.D.articles.get(h.id);
+      if (!a) {
+        tip.hidden = true;
+        return;
+      }
+      tip.innerHTML = `<b>${esc(a.title)}</b> \xB7 ${plural(a.visits, "visit")} \xB7 last seen ${fmtDateTime(a.last)}`;
+    } else if (h?.kind === "edge") {
+      const l = app.DV.links.get(h.id) || app.D.links.get(h.id);
+      if (!l) {
+        tip.hidden = true;
+        return;
+      }
+      tip.innerHTML = `<b>${esc(l.a)} \u2194 ${esc(l.b)}</b> \xB7 ${plural(l.total, "click")} \xB7 last ${fmtDateTime(l.last)}`;
+    } else {
+      tip.hidden = true;
+      return;
     }
-    if (focusTitle && !D.articles.has(focusTitle)) setFocus(null, false);
-    if (focusTitle) {
-      focusSet = graph.neighbourhood(focusTitle, focusSet?.size >= 25 ? 1 : 2);
-      graph.setView({ focus: focusSet });
-    }
-    const firstLayout = graph.update(D, DV, state.layout);
-    if (firstLayout) refit = true;
-    renderTimeline();
-    graph.setCursor(cursorArticle());
-    renderAll();
-    applyHighlight();
-    if (refit) {
-      graph.settleAndFit();
-      if (graph.isSettling()) waitThenFit();
-    }
+    tip.hidden = false;
+    placeTip();
   }
-  function waitThenFit() {
+  $("graph").addEventListener("mousemove", (e) => {
+    const r = $("stage").getBoundingClientRect();
+    mouse = [e.clientX - r.left, e.clientY - r.top];
+    placeTip();
+  });
+  $("graph").addEventListener("mouseleave", () => {
+    tip.hidden = true;
+  });
+  function applyHighlight() {
+    graph2.setHighlight(specFor(app.hover || app.sel));
+  }
+  function titlesOf(sel) {
+    const sp = specFor(sel);
+    if (!sp) return /* @__PURE__ */ new Set();
+    const titles = new Set(sp.paths.flatMap((p) => p.segs.flatMap((s) => [s.from, s.to])));
+    if (sp.anchor) titles.add(sp.anchor);
+    if (sp.edgeKey) sp.edgeKey.split("\0").forEach((t) => titles.add(t));
+    return titles;
+  }
+  function zoomTo(sel) {
+    const t = titlesOf(sel);
+    if (t.size) graph2.focusOn(t);
+  }
+  function revealSel(sel) {
+    if (!sel) return;
+    const t = titlesOf(sel);
+    if (t.size) graph2.reveal(t);
+  }
+  function fitWhenSettled() {
+    graph2.settleAndFit();
     const iv = setInterval(() => {
-      if (!graph.isSettling()) {
+      if (!graph2.isSettling()) {
         clearInterval(iv);
-        graph.fit(true);
-        if (/Laying out|fresh layout/.test($("status").textContent)) status("Map ready.");
+        graph2.fit(true);
       }
     }, 200);
   }
-  function cursorArticle() {
-    return cur ? D.trailIndex.get(cur.trailId)?.byId.get(cur.visitId)?.article ?? null : null;
-  }
-  function refresh() {
-    DV = range ? derive(state, range) : D;
-    graph.setVisible(DV);
-    renderStats();
-    renderTimelineLabel();
-    applyHighlight();
-    if (pinned?.kind === "article") openCard(pinned.id);
-  }
-  function addLink() {
-    const raw = $("next").value;
-    const title = normTitle(raw);
+  function focusArticle(title) {
     if (!title) {
-      $("next").focus();
-      return;
-    }
-    const here = cursorArticle();
-    if (here === title) {
-      msg("You are already on that page.", true);
-      return;
-    }
-    const before = statInfo().clicks;
-    snapshot();
-    const lang = langFromUrl(raw);
-    if (lang && !state.trails.length) state.lang = lang;
-    if (!cur) {
-      const t = { id: uid(), name: "", created: (/* @__PURE__ */ new Date()).toISOString(), visits: [] };
-      const v = { id: uid(), article: title, parent: null, t: Date.now() };
-      t.visits.push(v);
-      state.trails.push(t);
-      cur = { trailId: t.id, visitId: v.id };
-    } else {
-      const v = { id: uid(), article: title, parent: cur.visitId, t: Date.now() };
-      trailOf(cur.trailId).visits.push(v);
-      cur = { trailId: cur.trailId, visitId: v.id };
-    }
-    const first = state.trails.length === 1 && trailOf(cur.trailId).visits.length <= 2;
-    $("next").value = "";
-    commit({ refit: first });
-    blip();
-    toast(skin.milestone?.(before, statInfo().clicks));
-    $("next").focus();
-  }
-  function stepBack() {
-    if (!cur) return;
-    const v = D.trailIndex.get(cur.trailId).byId.get(cur.visitId);
-    if (v.parent != null) {
-      cur = { trailId: cur.trailId, visitId: v.parent };
-      afterCursorMove();
-    }
-  }
-  function newTrail() {
-    cur = null;
-    afterCursorMove();
-    $("next").focus();
-  }
-  function afterCursorMove() {
-    graph.setCursor(cursorArticle());
-    renderBuilder();
-    renderTrails();
-  }
-  function undo() {
-    const s = undoStack.pop();
-    if (!s) return;
-    const o = JSON.parse(s);
-    state = { ...o.state, layout: graph.getPositions() };
-    cur = o.cur;
-    commit();
-  }
-  function lastVisit(trailId, title) {
-    const t = trailOf(trailId);
-    if (!t) return null;
-    for (let i = t.visits.length - 1; i >= 0; i--) if (t.visits[i].article === title) return t.visits[i];
-    return null;
-  }
-  function clickArticle(title) {
-    blip(0.75);
-    if (cur) {
-      const v = lastVisit(cur.trailId, title);
-      if (v) {
-        cur = { trailId: cur.trailId, visitId: v.id };
-        afterCursorMove();
-      }
-    }
-    pinned = { kind: "article", id: title };
-    openCard(title);
-    applyHighlight();
-    renderTrails();
-    zoomToPinned();
-  }
-  var focusSet = null;
-  var inView = (steps) => steps.filter((s) => DV.articles.has(s.from) && DV.articles.has(s.to) && (!focusSet || focusSet.has(s.from) && focusSet.has(s.to)));
-  function specFor(target) {
-    if (!target) return null;
-    if (target.kind === "edge") {
-      const [a2, b] = target.id.split("\0");
-      return { steps: inView(routesThrough(D, a2, b)), colorOf, numbers: null, edgeKey: target.id };
-    }
-    if (target.kind === "trail") {
-      const t = trailOf(target.id);
-      if (!t) return null;
-      const numbers2 = /* @__PURE__ */ new Map();
-      t.visits.forEach((v, i) => {
-        if (!numbers2.has(v.article)) numbers2.set(v.article, i + 1);
-      });
-      return { steps: inView(trailSteps(D, [t.id])), colorOf, numbers: numbers2, focus: t.visits[0].article };
-    }
-    const a = D.articles.get(target.id);
-    if (!a) return null;
-    const steps = inView([...trailSteps(D, [...a.starts]), ...routesTo(D, a.title)]);
-    const trails = new Set(steps.map((s) => s.trailId));
-    let numbers = null;
-    if (trails.size === 1) {
-      const t = trailOf([...trails][0]);
-      numbers = /* @__PURE__ */ new Map();
-      const lit = new Set(steps.flatMap((s) => [s.from, s.to]));
-      t.visits.forEach((v, i) => {
-        if (lit.has(v.article) && !numbers.has(v.article)) numbers.set(v.article, i + 1);
-      });
-    }
-    return { steps, colorOf, numbers, focus: a.title };
-  }
-  function applyHighlight() {
-    graph.setHighlight(specFor(hovered || pinned));
-  }
-  function zoomToPinned() {
-    const sp = specFor(pinned);
-    if (!sp) return;
-    const pad2 = $("card").style.display === "block" ? $("card").offsetWidth + 24 : 0;
-    graph.focusOn(new Set(sp.steps.flatMap((s) => [s.from, s.to]).concat(sp.focus ? [sp.focus] : []).concat(sp.edgeKey ? sp.edgeKey.split("\0") : [])), pad2);
-  }
-  function msg(t, warn = false) {
-    $("msg").textContent = t || "";
-    $("msg").classList.toggle("warn", warn);
-  }
-  function renderAll() {
-    renderStats();
-    renderBuilder();
-    renderTrails();
-    $("titles").innerHTML = [...D.articles.keys()].sort().map((t) => `<option value="${esc(t)}">`).join("");
-    $("empty").style.display = state.trails.length ? "none" : "flex";
-    $("lang").value = state.lang;
-    if (pinned?.kind === "article") openCard(pinned.id);
-    if (pinned?.kind === "edge") openEdgeCard(pinned.id);
-    renderSaved();
-  }
-  function statInfo() {
-    const clicks = [...DV.links.values()].reduce((s, l) => s + l.total, 0);
-    let top = null;
-    for (const l of DV.links.values()) if (!top || l.total > top.total) top = l;
-    const trails = range ? new Set([...DV.articles.values()].flatMap((a) => [...a.trails])).size : state.trails.length;
-    return { articles: DV.articles.size, clicks, trails, top: top && top.total > 1 ? top : null };
-  }
-  function renderStats() {
-    const i = statInfo();
-    $("stats").textContent = skin.stats ? skin.stats(i) : `${i.articles} ${W("articles")} \xB7 ${i.clicks} ${W("clicks")} \xB7 ${i.trails} ${W("trails")}` + (i.top ? ` \xB7 strongest: ${i.top.a} \u2194 ${i.top.b} \xD7${i.top.total}` : "");
-    $("ticker").firstElementChild.textContent = skin.ticker ? skin.ticker(i) : "";
-    if (skin.ui?.includes("eq")) $("eq").innerHTML = state.trails.slice(-16).map((t, k) => `<i style="height:${Math.min(18, 3 + t.visits.length * 1.4)}px;animation-delay:${k % 5 * -0.13}s"></i>`).join("");
-    if (skin.ui?.includes("spark")) {
-      const v = state.trails.slice(-40).map((t) => 1 / t.visits.length), mx = Math.max(...v, 1e-9);
-      $("spark").innerHTML = v.length > 1 ? `loss <svg width="90" height="16" viewBox="0 0 90 16"><polyline points="${v.map((n, k) => `${(k / (v.length - 1) * 88 + 1).toFixed(1)},${(15 - n / mx * 13).toFixed(1)}`).join(" ")}"/></svg>` : "";
-    }
-  }
-  function renderBuilder() {
-    const box = $("crumbs");
-    if (!cur) {
-      box.innerHTML = "";
-      $("qlabel").innerHTML = state.trails.length ? `Link 1: first page of a new ${esc(W("trail"))}` : "Link 1: first page";
-    } else {
-      const chain = chainTo(D.trailIndex.get(cur.trailId), cur.visitId);
-      box.innerHTML = chain.map((v, i) => `<span class="c${i === chain.length - 1 ? " cur" : ""}" data-v="${v.id}" title="${esc(v.article)}"><i>${i + 1}</i>${esc(v.article)}</span>`).join('<span class="sep">\u203A</span>');
-      box.querySelectorAll(".c").forEach((el) => el.onclick = () => {
-        cur = { trailId: cur.trailId, visitId: el.dataset.v };
-        afterCursorMove();
-        $("next").focus();
-      });
-      $("qlabel").innerHTML = `Link ${chain.length + 1}: what did you click on <em>${esc(chain[chain.length - 1].article)}</em>?`;
-    }
-    $("back").disabled = !cur || D.trailIndex.get(cur.trailId).byId.get(cur.visitId).parent == null;
-    $("newtrail").disabled = !cur;
-    $("undo").disabled = !undoStack.length;
-    hintKnown();
-  }
-  function hintKnown() {
-    const t = normTitle($("next").value);
-    const a = t && D.articles.get(t);
-    if (a) msg(`Already in your graph: ${a.visits} visit${a.visits === 1 ? "" : "s"} in ${a.trails.size} trail${a.trails.size === 1 ? "" : "s"}. It will link into the same article.`);
-    else msg("");
-  }
-  var armed = /* @__PURE__ */ new Set();
-  function renderTrails() {
-    $("tcount").textContent = `${state.trails.length} ${W("trails")}`;
-    const box = $("trails");
-    const q = $("tsearch").value.trim().toLowerCase();
-    let list = [...state.trails].reverse();
-    if (q) list = list.filter((t) => trailLabel(t).toLowerCase().includes(q) || t.visits.some((v) => v.article.toLowerCase().includes(q)));
-    const LIMIT = 150, more = list.length - LIMIT;
-    if (cur && !list.slice(0, LIMIT).some((t) => t.id === cur.trailId)) {
-      const ct = trailOf(cur.trailId);
-      if (ct) list = [ct, ...list];
-    }
-    list = list.slice(0, LIMIT);
-    box.innerHTML = list.map((t) => {
-      const ends = t.visits.filter((v) => !t.visits.some((w) => w.parent === v.id)).length;
-      const date = new Date(t.created).toLocaleDateString(void 0, { day: "numeric", month: "short" });
-      const cls = ["tr", cur?.trailId === t.id ? "active" : "", pinned?.kind === "trail" && pinned.id === t.id ? "pinned" : ""].join(" ");
-      return `<div class="${cls}" data-t="${t.id}">
-      <span class="sw" style="background:${colorOf(t.id)};color:${colorOf(t.id)}"></span>
-      <div class="tx"><div class="nm">${esc(trailLabel(t))}</div><div class="mt">${t.visits.length} pages \xB7 ${ends} end${ends === 1 ? "" : "s"} \xB7 ${date}</div></div>
-      <button class="ic" data-act="rename" title="Rename">\u270E</button>
-      <button class="ic${armed.has(t.id) ? " armed" : ""}" data-act="del" title="Delete">${armed.has(t.id) ? "Delete?" : "\xD7"}</button>
-    </div>`;
-    }).join("") + (more > 0 ? `<div class="tr more">${more} more ${esc(W("trails"))}: type in the search box to find them</div>` : "");
-    box.querySelectorAll(".tr[data-t]").forEach((row) => {
-      const id = row.dataset.t;
-      row.onmouseenter = () => {
-        hovered = { kind: "trail", id };
-        applyHighlight();
-      };
-      row.onmouseleave = () => {
-        hovered = null;
-        applyHighlight();
-      };
-      row.onclick = (e) => {
-        const act = e.target.dataset?.act;
-        if (act === "del") {
-          if (!armed.has(id)) {
-            armed.add(id);
-            renderTrails();
-            setTimeout(() => {
-              armed.delete(id);
-              renderTrails();
-            }, 2500);
-            return;
-          }
-          snapshot();
-          armed.delete(id);
-          state.trails = state.trails.filter((t2) => t2.id !== id);
-          if (cur?.trailId === id) cur = null;
-          hovered = null;
-          commit();
-          return;
-        }
-        if (act === "rename") {
-          startRename(row, id);
-          return;
-        }
-        if (e.target.tagName === "INPUT") return;
-        const t = trailOf(id);
-        cur = { trailId: id, visitId: t.visits[t.visits.length - 1].id };
-        pinned = { kind: "trail", id };
-        closeCard();
-        afterCursorMove();
-        applyHighlight();
-        zoomToPinned();
-        $("next").focus();
-      };
-    });
-  }
-  function startRename(row, id) {
-    const t = trailOf(id);
-    const nm = row.querySelector(".nm");
-    nm.innerHTML = `<input value="${esc(t.name || trailLabel(t))}">`;
-    const inp = nm.querySelector("input");
-    inp.focus();
-    inp.select();
-    let finished = false;
-    const done = (save) => {
-      if (finished) return;
-      finished = true;
-      if (save) {
-        snapshot();
-        t.name = inp.value.trim();
-        commit();
-      } else renderTrails();
-    };
-    inp.onkeydown = (e) => {
-      if (e.key === "Enter") done(true);
-      if (e.key === "Escape") done(false);
-    };
-    inp.onblur = () => done(true);
-  }
-  function openCard(title) {
-    const a = D.articles.get(title);
-    if (!a) return closeCard();
-    const out = [], inn = [];
-    for (const l of D.links.values()) {
-      if (l.a === title) {
-        if (l.ab) out.push([l.b, l.ab]);
-        if (l.ba) inn.push([l.b, l.ba]);
-      }
-      if (l.b === title) {
-        if (l.ba) out.push([l.a, l.ba]);
-        if (l.ab) inn.push([l.a, l.ab]);
-      }
-    }
-    const list = (arr) => arr.length ? `<ul>${arr.sort((x, y) => y[1] - x[1]).slice(0, 8).map(([t, n]) => `<li><a data-go="${esc(t)}">${esc(t)}</a><span class="w">\xD7${n}</span></li>`).join("")}</ul>` : "<ul><li>none</li></ul>";
-    const mode = a.starts.size ? `Start of ${a.starts.size} trail${a.starts.size === 1 ? "" : "s"}: showing every full journey from here, plus every route that led here.` : "Showing every route that led here.";
-    $("card").innerHTML = `<div class="title"><span class="ico ico-brain"></span><span class="tt">Properties: ${esc(title)}</span><button class="x" id="cx" aria-label="Close">\xD7</button></div>
-    <div class="inner">
-    <div class="meta"><b>${esc(title)}</b><br>${a.visits} visit${a.visits === 1 ? "" : "s"} \xB7 ${a.trails.size} trail${a.trails.size === 1 ? "" : "s"}</div>
-    <div class="mode">${mode}</div>
-    <fieldset><legend>You went on to</legend>${list(out)}</fieldset>
-    <fieldset><legend>You came from</legend>${list(inn)}</fieldset>
-    <div class="btns">
-      <button class="btn default" id="cont">${cur && lastVisit(cur.trailId, title) ? "Add next link from here" : "Start new trail here"}</button>
-      <a class="ext" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia</a>
-    </div></div>`;
-    $("card").style.display = "block";
-    $("cx").onclick = () => {
-      pinned = null;
-      closeCard();
-      applyHighlight();
-    };
-    $("card").querySelectorAll("[data-go]").forEach((el) => el.onclick = () => clickArticle(el.dataset.go));
-    $("cont").onclick = () => {
-      showBuilder();
-      if (cur && lastVisit(cur.trailId, title)) {
-        $("next").focus();
-        return;
-      }
-      snapshot();
-      const t = { id: uid(), name: "", created: (/* @__PURE__ */ new Date()).toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
-      state.trails.push(t);
-      cur = { trailId: t.id, visitId: t.visits[0].id };
-      commit();
-      $("next").focus();
-    };
-  }
-  function closeCard() {
-    $("card").style.display = "none";
-  }
-  $("add").onclick = addLink;
-  $("next").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") addLink();
-  });
-  $("next").addEventListener("input", hintKnown);
-  $("back").onclick = stepBack;
-  $("newtrail").onclick = newTrail;
-  $("undo").onclick = undo;
-  $("fit").onclick = () => graph.fit(true);
-  document.addEventListener("keydown", (e) => {
-    const typing = e.target.tagName === "INPUT" && e.target.value;
-    if ((e.ctrlKey || e.metaKey) && e.key === "z" && !typing) {
-      e.preventDefault();
-      undo();
-    }
-    if (e.altKey && e.key === "ArrowLeft") {
-      e.preventDefault();
-      stepBack();
-    }
-    if (e.key === "Escape" && focusTitle && !pinned) {
       setFocus(null);
       return;
     }
-    if (e.key === "Escape") {
-      closeStart();
-      const had = pinned;
-      pinned = null;
-      closeCard();
-      applyHighlight();
-      renderTrails();
-      if (had) graph.fit(true);
-    }
-  });
-  $("lang").onchange = () => {
-    state.lang = $("lang").value;
-    saveLocal(state);
-    if (pinned?.kind === "article") openCard(pinned.id);
-  };
-  $("tsearch").addEventListener("input", () => {
-    clearTimeout(window.__tsT);
-    window.__tsT = setTimeout(renderTrails, 120);
-  });
-  var loadExample = () => {
-    closeStart();
-    snapshot();
-    state = exampleState();
-    cur = null;
-    pinned = null;
-    range = null;
-    closeCard();
-    graph.reset();
-    commit({ refit: true });
-  };
-  function loadDataScript(src, name) {
-    const key = src.split("/").pop().replace(/\.js$/, "");
-    if (window[name]?.[key]) return Promise.resolve(window[name]);
-    return new Promise((res, rej) => {
-      const el = document.createElement("script");
-      el.src = src;
-      el.onload = () => window[name] ? res(window[name]) : rej(new Error("empty"));
-      el.onerror = () => rej(new Error("not found"));
-      document.head.appendChild(el);
-    });
+    let nb = graph2.neighbourhood(title, 1);
+    if (nb.size < 25) nb = graph2.neighbourhood(title, 2);
+    setFocus(title, nb);
+    select({ kind: "article", id: title });
   }
-  async function loadTestData(which = "wikispeedia-1000") {
-    closeStart();
-    status("Loading synapses\u2026");
-    try {
-      await loadDataScript(`data/${which}.js`, "WIKI_TRAILS_DATA");
-      const s = validate(window.WIKI_TRAILS_DATA[which]);
-      snapshot();
-      state = s;
-      cur = null;
-      pinned = null;
-      range = null;
-      setFocus(null, false);
-      closeCard();
-      setPreset("all", false);
-      graph.reset();
-      commit({ refit: true });
-      status(`Loaded ${s.trails.length} real human trails from Wikispeedia.${graph.isSettling() ? " Laying out the map\u2026" : ""}`);
-    } catch (err) {
-      status(`Could not load test data (${err.message}).`);
-    }
+  function renderFocusbar() {
+    const bar = $("focusbar");
+    bar.hidden = !app.focus;
+    if (app.focus) bar.innerHTML = `<span class="btn small primary" id="unfocus">Only around ${esc(app.focus.title)} \xB7 show everything \u2715</span>`;
+    $("unfocus")?.addEventListener("click", () => focusArticle(null));
   }
-  $("example").onclick = loadExample;
-  $("testdata").onclick = () => loadTestData("wikispeedia-1000");
-  $("testdata2").onclick = () => loadTestData("wikispeedia-2years");
-  $("example2").onclick = () => loadTestData("wikispeedia-1000");
-  var fx = createEffects($("fx"));
-  var skin = savedSkin();
-  var chosen = skin.id;
-  var W = (k) => skin.words?.[k] ?? k;
-  var DEFAULT_TITLES = { builder: "TRAILBLZ.EXE", trails: "Trails", brain: "BRAIN.EXE - C:\\WIKI\\TRAILS" };
-  function applySkin(id, { persist = true } = {}) {
-    skin = skinById(id);
-    const html = document.documentElement;
-    html.dataset.skin = skin.id;
-    html.dataset.chrome = skin.chrome || "bevel";
-    html.dataset.ui = (skin.ui || []).join(" ");
-    graph.setPalette(skin);
-    fx.set(skin.fx);
-    const t = { ...DEFAULT_TITLES, ...skin.titles || {} };
-    $("tt-builder").textContent = t.builder;
-    $("tt-trails").textContent = t.trails;
-    $("tt-brain").textContent = t.brain;
-    $("task-builder").textContent = t.builder;
-    $("task-brain").textContent = t.brain;
-    $("task-trails").textContent = t.trails;
-    $("lbl-export").textContent = skin.menu?.export || "Export JSON\u2026";
-    $("lbl-import").textContent = skin.menu?.import || "Import JSON\u2026";
-    $("skinname").textContent = skin.name;
-    $("newtrail").textContent = `New ${W("trail")}`;
-    if (persist) {
-      chosen = skin.id;
-      rememberSkin(skin.id);
-    }
-    $("banner").classList.remove("on");
-    renderStats();
-    renderBuilder();
-    renderTrails();
+  $("zoomin").onclick = () => graph2.zoomBy(1.5);
+  $("zoomout").onclick = () => graph2.zoomBy(1 / 1.5);
+  $("fit").onclick = () => graph2.fit(true);
+  on("data", (opts = {}) => {
+    const first = graph2.update(app.D, app.DV, app.state.layout);
+    graph2.setCursor(cursorVisit()?.article || null);
+    if (app.focus) graph2.setView({ focus: app.focus.set });
     applyHighlight();
-    markChosen();
-  }
-  var toastT;
-  function toast(t, sound = true) {
-    if (!t) return;
-    const el = $("toast");
-    el.textContent = t;
-    el.classList.remove("on");
-    void el.offsetWidth;
-    el.classList.add("on");
-    clearTimeout(toastT);
-    toastT = setTimeout(() => el.classList.remove("on"), 1700);
-    if (sound) blip(1.5);
-  }
-  function bannerFor(t) {
-    const el = $("banner");
-    const a = t && D.articles.get(t);
-    if (!a || !skin.banner) {
-      el.classList.remove("on");
-      return;
-    }
-    let topIn = null, topInCount = 0;
-    for (const l of D.links.values()) {
-      if (l.a === t && l.ba > topInCount) {
-        topIn = l.b;
-        topInCount = l.ba;
-      }
-      if (l.b === t && l.ab > topInCount) {
-        topIn = l.a;
-        topInCount = l.ab;
-      }
-    }
-    const txt = skin.banner({ title: t, a, topIn, topInCount });
-    if (!txt) {
-      el.classList.remove("on");
-      return;
-    }
-    el.textContent = txt;
-    el.classList.add("on");
-  }
-  $("stage").addEventListener("mousemove", (e) => {
-    if (!skin.ui?.includes("eye")) return;
-    const r = $("eye").getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1;
-    $("eye").firstElementChild.style.transform = `translate(${dx / d * Math.min(14, d / 20)}px, ${dy / d * Math.min(14, d / 20)}px)`;
-  });
-  var soundOn = false;
-  try {
-    soundOn = localStorage.getItem("wiki-trails.sound") === "1";
-  } catch {
-  }
-  $("sound").checked = soundOn;
-  $("sound").onchange = () => {
-    soundOn = $("sound").checked;
-    try {
-      localStorage.setItem("wiki-trails.sound", soundOn ? "1" : "0");
-    } catch {
-    }
-    blip();
-  };
-  var actx;
-  function blip(mult = 1) {
-    if (!soundOn) return;
-    try {
-      actx || (actx = new AudioContext());
-      const o = actx.createOscillator(), g = actx.createGain(), sd = skin.sound || { wave: "square", f: 880 }, now = actx.currentTime;
-      o.type = sd.wave;
-      o.frequency.setValueAtTime(sd.f * mult, now);
-      o.frequency.exponentialRampToValueAtTime(sd.f * mult * 1.5, now + 0.08);
-      g.gain.setValueAtTime(0.05, now);
-      g.gain.exponentialRampToValueAtTime(1e-4, now + 0.14);
-      o.connect(g).connect(actx.destination);
-      o.start(now);
-      o.stop(now + 0.15);
-    } catch {
-    }
-  }
-  var gal = $("gallery");
-  var MOCK = `<svg viewBox="0 0 120 60" preserveAspectRatio="xMidYMid slice"><path class="ml" d="M18 40 Q40 10 62 28 T104 18" stroke-width="3"/><path class="ml" d="M18 40 L50 50 L62 28" stroke-width="1" opacity=".55"/><path class="ml" d="M62 28 L88 46" stroke-width="1.6" opacity=".8"/><circle class="mn2" cx="18" cy="40" r="4.5"/><circle class="mn" cx="62" cy="28" r="5.5"/><circle class="mn" cx="104" cy="18" r="3"/><circle class="mn" cx="50" cy="50" r="2.5"/><circle class="mn" cx="88" cy="46" r="3"/></svg>`;
-  function buildGallery() {
-    $("gal-body").innerHTML = CATS.map(([c, label]) => `<div class="gal-cat">${label}</div><div class="gal-grid">${SKINS.filter((s) => s.cat === c).map((s) => `<button class="card" data-skin="${s.id}" data-chrome="${s.chrome || "bevel"}" data-id="${s.id}"><div class="mock-desk"><div class="mock-win"><div class="mock-title">${esc(s.titles?.brain || s.name)}</div><div class="mock-screen">${MOCK}</div><div class="mock-row"><span class="mock-field"></span><span class="mock-btn">OK</span></div></div></div><div class="card-name">${esc(s.name)}</div><div class="card-sub">${esc(s.blurb)}</div></button>`).join("")}</div>`).join("");
-    for (const c of $("gal-body").querySelectorAll(".card")) {
-      c.onmouseenter = () => {
-        stopShow();
-        applySkin(c.dataset.id, { persist: false });
-      };
-      c.onfocus = c.onmouseenter;
-      c.onclick = () => {
-        applySkin(c.dataset.id);
-        blip();
-      };
-      c.ondblclick = () => {
-        applySkin(c.dataset.id);
-        hideGallery();
-      };
-    }
-    $("gal-body").onmouseleave = () => {
-      if (skin.id !== chosen) applySkin(chosen, { persist: false });
-    };
-  }
-  function markChosen() {
-    for (const c of document.querySelectorAll(".card")) c.classList.toggle("chosen", c.dataset.id === chosen);
-    const cs = skinById(chosen);
-    $("gal-now").textContent = skin.id === chosen ? `Current: ${cs.name}` : `Trying: ${skin.name} (current: ${cs.name})`;
-  }
-  function openGallery() {
-    closeStart();
-    stopShow();
-    if (!$("gal-body").children.length) buildGallery();
-    markChosen();
-    gal.hidden = false;
-    gal.querySelector(".card.chosen")?.scrollIntoView({ block: "nearest" });
-  }
-  function hideGallery() {
-    gal.hidden = true;
-  }
-  function cancelGallery() {
-    hideGallery();
-    if (skin.id !== chosen) applySkin(chosen, { persist: false });
-  }
-  function flip(dir) {
-    const i = SKINS.findIndex((s) => s.id === skin.id);
-    applySkin(SKINS[(i + dir + SKINS.length) % SKINS.length].id);
-    blip();
-    document.querySelector(`.card[data-id="${skin.id}"]`)?.scrollIntoView({ block: "nearest" });
-  }
-  var showing = null;
-  function startShow() {
-    hideGallery();
-    const step = () => {
-      const i = SKINS.findIndex((s) => s.id === skin.id);
-      applySkin(SKINS[(i + 1) % SKINS.length].id, { persist: false });
-      toast(skin.name, false);
-      status(`Slideshow: ${skin.name}. Click or press any key to keep it.`);
-    };
-    step();
-    showing = setInterval(step, 3800);
-    setTimeout(() => {
-      document.addEventListener("pointerdown", keepShow, { once: true });
-      document.addEventListener("keydown", keepShow, { once: true });
-    }, 0);
-  }
-  function stopShow() {
-    if (showing) {
-      clearInterval(showing);
-      showing = null;
-    }
-  }
-  function keepShow() {
-    if (!showing) return;
-    stopShow();
-    applySkin(skin.id);
-    toast(`Kept: ${skin.name}`, false);
-    status("Ready.");
-  }
-  $("skinbtn").onclick = openGallery;
-  $("skins2").onclick = openGallery;
-  $("skinsmenu").onclick = openGallery;
-  $("gal-ok").onclick = () => {
-    applySkin(skin.id);
-    hideGallery();
-  };
-  $("galclose").onclick = cancelGallery;
-  $("gal-prev").onclick = () => flip(-1);
-  $("gal-next").onclick = () => flip(1);
-  $("gal-show").onclick = startShow;
-  $("gal-rand").onclick = () => {
-    let s;
-    do {
-      s = SKINS[Math.floor(Math.random() * SKINS.length)];
-    } while (s.id === skin.id);
-    applySkin(s.id);
-    blip();
-    document.querySelector(`.card[data-id="${s.id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  };
-  gal.addEventListener("click", (e) => {
-    if (e.target === gal) cancelGallery();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (!gal.hidden) {
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        flip(1);
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        flip(-1);
-      } else if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        cancelGallery();
-      } else if (e.key === "Enter") {
-        applySkin(skin.id);
-        hideGallery();
-      }
-      return;
-    }
-    if ((e.key === "s" || e.key === "S") && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.ctrlKey && !e.metaKey && !e.altKey) openGallery();
-  }, true);
-  applySkin(skin.id, { persist: false });
-  function closeStart() {
-    $("startmenu").hidden = true;
-    $("startbtn").classList.remove("pressed");
-    $("startbtn").setAttribute("aria-expanded", "false");
-  }
-  $("startbtn").onclick = (e) => {
-    e.stopPropagation();
-    const open = $("startmenu").hidden;
-    $("startmenu").hidden = !open;
-    $("startbtn").classList.toggle("pressed", open);
-    $("startbtn").setAttribute("aria-expanded", String(open));
-  };
-  $("startmenu").addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("click", closeStart);
-  $("export").addEventListener("click", closeStart);
-  $("import").addEventListener("change", closeStart);
-  var tickClock = () => {
-    $("clock").textContent = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-  tickClock();
-  setInterval(tickClock, 15e3);
-  function status(t) {
-    $("status").textContent = t;
-  }
-  function statusFor(t) {
-    const a = t && D.articles.get(t);
-    if (!a) {
-      status(cursorArticle() ? `Cursor: ${cursorArticle()}` : "Ready.");
-      return;
-    }
-    if (skin.hover) {
-      status(skin.hover(a));
-      return;
-    }
-    status(`${a.title}: ${a.visits} visit(s), ${a.trails.size} trail(s)${a.starts.size ? `, start of ${a.starts.size}` : ""}`);
-  }
-  function boot() {
-    let seen = false;
-    try {
-      seen = sessionStorage.getItem("wt-boot");
-      sessionStorage.setItem("wt-boot", "1");
-    } catch {
-    }
-    if (seen || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
-    const el = $("boot"), log = $("bootlog");
-    el.hidden = false;
-    const bios = ["bevel", "terminal"].includes(skin.chrome);
-    const lines = [...skin.boot, ...bios ? ['Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', ""] : [""], '<span class="ok">Starting Wiki Trails\u2026</span>'];
-    return new Promise((res) => {
-      let i = 0;
-      const done = () => {
-        clearInterval(iv);
-        el.hidden = true;
-        res();
-      };
-      const iv = setInterval(() => {
-        log.innerHTML += lines[i++] + "\n";
-        if (i >= lines.length) {
-          clearInterval(iv);
-          setTimeout(done, 450);
-        }
-      }, 140);
-      el.onclick = done;
-      document.addEventListener("keydown", done, { once: true });
-    });
-  }
-  var clearArmed = false;
-  $("clear").onclick = () => {
-    if (!clearArmed) {
-      clearArmed = true;
-      $("clear").lastChild.textContent = "Click again to clear";
+    $("empty").hidden = app.state.trails.length > 0;
+    if (first || opts.fresh) fitWhenSettled();
+    else if (opts.added) {
+      const t = cursorVisit()?.article;
       setTimeout(() => {
-        clearArmed = false;
-        $("clear").lastChild.textContent = "Clear all";
-      }, 2500);
-      return;
+        if (graph2.nodeCount() < 60) graph2.fit(true);
+        else if (t) graph2.ensureVisible(t);
+      }, graph2.nodeCount() < 60 ? 250 : 900);
     }
-    clearArmed = false;
-    $("clear").lastChild.textContent = "Clear all";
-    closeStart();
-    snapshot();
-    state = { ...emptyState(), lang: state.lang };
-    cur = null;
-    pinned = null;
-    range = null;
-    closeCard();
-    graph.reset();
-    commit({ refit: true });
-  };
-  var rz;
-  window.addEventListener("resize", () => {
-    clearTimeout(rz);
-    rz = setTimeout(() => graph.fit(false), 150);
   });
-  function clickEdge(l) {
-    blip(0.9);
-    pinned = { kind: "edge", id: l.key };
-    openEdgeCard(l.key);
+  on("select", (opts = {}) => {
     applyHighlight();
-    renderTrails();
-    zoomToPinned();
-  }
-  function openEdgeCard(key) {
-    const l = DV.links.get(key) || D.links.get(key);
-    if (!l) return closeCard();
-    const trails = [...l.trails || []].map(trailOf).filter(Boolean).sort((p, q) => Date.parse(q.created) - Date.parse(p.created));
-    const when = l.last ? new Date(l.last).toLocaleDateString(void 0, { day: "numeric", month: "short", year: "numeric" }) : "?";
-    $("card").innerHTML = `<div class="title"><span class="ico ico-brain"></span><span class="tt">Connection</span><button class="x" id="cx" aria-label="Close">\xD7</button></div>
-    <div class="inner">
-    <div class="meta"><b><a data-go="${esc(l.a)}">${esc(l.a)}</a> \u2194 <a data-go="${esc(l.b)}">${esc(l.b)}</a></b><br>clicked ${l.total}\xD7 \xB7 last on ${when}</div>
-    <div class="mode">${l.ab}\xD7 ${esc(l.a)} \u2192 ${esc(l.b)}<br>${l.ba}\xD7 ${esc(l.b)} \u2192 ${esc(l.a)}<br>Showing every route that used this connection.</div>
-    <fieldset><legend>In ${trails.length} ${esc(W(trails.length === 1 ? "trail" : "trails"))}</legend><ul>${trails.slice(0, 10).map((t) => `<li><a data-trail="${t.id}">${esc(trailLabel(t))}</a><span class="w">${new Date(t.created).toLocaleDateString(void 0, { day: "numeric", month: "short" })}</span></li>`).join("")}${trails.length > 10 ? `<li>\u2026and ${trails.length - 10} more</li>` : ""}</ul></fieldset>
-    </div>`;
-    $("card").style.display = "block";
-    $("cx").onclick = () => {
-      pinned = null;
-      closeCard();
-      applyHighlight();
-    };
-    $("card").querySelectorAll("[data-go]").forEach((el) => {
-      el.style.cursor = "pointer";
-      el.onclick = () => clickArticle(el.dataset.go);
-    });
-    $("card").querySelectorAll("[data-trail]").forEach((el) => el.onclick = () => {
-      pinned = { kind: "trail", id: el.dataset.trail };
-      closeCard();
-      applyHighlight();
-      renderTrails();
-      zoomToPinned();
-    });
-  }
-  function setFocus(title, refitView = true) {
-    focusTitle = title;
-    const chip = $("focuschip");
-    if (title) {
-      let nb = graph.neighbourhood(title, 1);
-      if (nb.size < 25) nb = graph.neighbourhood(title, 2);
-      focusSet = nb;
-      graph.setView({ focus: nb });
-      pinned = null;
-      hovered = null;
-      closeCard();
-      chip.hidden = false;
-      chip.innerHTML = `Focus: ${esc(title)} <b>\xD7</b>`;
-      status(`Focus: ${title} and its ${nb.size - 1} neighbours. Double-click another article to move, Esc to leave.`);
-    } else {
-      focusSet = null;
-      graph.setView({ focus: null });
-      chip.hidden = true;
-    }
-    graph.setVisible(DV);
+    if (opts.zoom && app.sel) zoomTo(app.sel);
+  });
+  on("hover", applyHighlight);
+  on("cursor", () => graph2.setCursor(cursorVisit()?.article || null));
+  on("range", () => {
+    graph2.setVisible(app.DV);
     applyHighlight();
-    if (refitView) graph.fit(true);
-  }
-  $("focuschip").onclick = () => setFocus(null);
-  var VKEY = "wiki-trails.view";
-  function saveView() {
-    try {
-      localStorage.setItem(VKEY, JSON.stringify({ density: +$("density").value, fade: $("fade").checked, max: !!document.documentElement.dataset.max }));
-    } catch {
-    }
-  }
-  function restoreView() {
-    let v = {};
-    try {
-      v = JSON.parse(localStorage.getItem(VKEY)) || {};
-    } catch {
-    }
-    if (v.density) $("density").value = v.density;
-    if (v.fade === false) $("fade").checked = false;
-    graph.setView({ density: +$("density").value, fade: $("fade").checked });
-    if (v.max) toggleMax(true);
-  }
-  $("density").oninput = () => {
-    graph.setView({ density: +$("density").value });
-    saveView();
-  };
-  $("fade").onchange = () => {
-    graph.setView({ fade: $("fade").checked });
-    saveView();
-  };
-  function toggleMax(on = !document.documentElement.dataset.max) {
-    if (on) document.documentElement.dataset.max = "1";
-    else delete document.documentElement.dataset.max;
-    $("maxbtn").classList.toggle("on", !!on);
-    $("maxbtn").textContent = on ? "\u26F6 Restore" : "\u26F6 Maximize";
-    saveView();
-  }
-  $("maxbtn").onclick = () => toggleMax();
-  document.querySelector("[data-maxbtn]").onclick = () => toggleMax();
-  var MINKEY = "wiki-trails.minimized";
-  var minimized = /* @__PURE__ */ new Set();
-  try {
-    minimized = new Set(JSON.parse(localStorage.getItem(MINKEY)) || []);
-  } catch {
-  }
-  function applyMin() {
-    for (const id of ["w-builder", "w-trails"]) $(id).hidden = minimized.has(id);
-    if (minimized.size === 2) document.documentElement.dataset.colEmpty = "1";
-    else delete document.documentElement.dataset.colEmpty;
-    document.querySelectorAll(".task[data-win]").forEach((b) => b.classList.toggle("on", !minimized.has(b.dataset.win)));
-    try {
-      localStorage.setItem(MINKEY, JSON.stringify([...minimized]));
-    } catch {
-    }
-  }
-  function setMin(id, on) {
-    if (on) minimized.add(id);
-    else minimized.delete(id);
-    applyMin();
-    blip(on ? 0.7 : 1.2);
-  }
-  document.querySelectorAll("[data-min]").forEach((b) => b.onclick = (e) => {
-    e.stopPropagation();
-    setMin(b.dataset.min, true);
+    graph2.fit(true);
   });
-  document.querySelectorAll(".task[data-win]").forEach((b) => b.onclick = () => {
-    const id = b.dataset.win;
-    if (id === "w-brain") {
-      if (document.documentElement.dataset.max) toggleMax(false);
-      return;
-    }
-    setMin(id, !minimized.has(id));
-    if (!minimized.has(id) && document.documentElement.dataset.max) toggleMax(false);
+  on("focus", () => {
+    graph2.setView({ focus: app.focus?.set || null });
+    graph2.setVisible(app.DV);
+    applyHighlight();
+    renderFocusbar();
+    graph2.fit(true);
   });
-  function showBuilder() {
-    if (minimized.has("w-builder")) setMin("w-builder", false);
-    if (document.documentElement.dataset.max) toggleMax(false);
-  }
-  applyMin();
-  $("relayout").onclick = () => {
-    graph.relayout();
-    status("Computing a fresh layout\u2026");
-    waitThenFit();
-  };
+  var record = initRecord({ showLeft: () => setPanel("left", true) });
+  var menus = initMenus({ graph: graph2 });
+  initTrails();
+  initDetails({ record, focusArticle, loadTest: menus.loadTest });
+  initSearch();
+  initTimeline();
+  document.querySelectorAll("[data-example]").forEach((b) => {
+    if (!b.onclick) b.onclick = () => menus.loadTest(b.dataset.example);
+  });
   document.addEventListener("keydown", (e) => {
-    if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.ctrlKey || e.metaKey || e.altKey || !gal.hidden) return;
-    if (e.key === "f" || e.key === "F") {
+    const typing = /INPUT|SELECT|TEXTAREA/.test(e.target.tagName);
+    if (e.key === "Escape" && !typing && $("settings").hidden) {
+      if (app.focus) focusArticle(null);
+      else if (app.sel) select(null);
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !(typing && e.target.value)) {
       e.preventDefault();
-      toggleMax();
+      if (undo()) toast("Undone");
     }
   });
-  var tlBrush = null;
-  var tlX = null;
-  var tlSilent = false;
-  function renderTimeline() {
-    const svg = d3.select("#tlsvg"), node = svg.node(), w = node.clientWidth || 600, h = node.clientHeight || 42;
-    svg.selectAll("*").remove();
-    const span = timeSpan(state);
-    if (!span) {
-      $("tllabel").textContent = "";
-      return;
-    }
-    const [t0, t1] = [span[0], Math.max(span[1], span[0] + 864e5)];
-    const days = (t1 - t0) / 864e5, binMs = (days > 400 ? 7 : 1) * 864e5;
-    const bins = /* @__PURE__ */ new Map();
-    for (const tr of state.trails) for (const v of tr.visits) {
-      if (v.parent == null) continue;
-      const b = Math.floor((visitTime(tr, v) - t0) / binMs);
-      bins.set(b, (bins.get(b) || 0) + 1);
-    }
-    tlX = d3.scaleTime().domain([t0, t1 + binMs]).range([4, w - 4]);
-    const mx = Math.max(1, ...bins.values()), y = d3.scaleSqrt().domain([0, mx]).range([0, h - 16]);
-    const bw = Math.max(1, tlX(t0 + binMs) - tlX(t0) - 0.5);
-    svg.append("g").selectAll("rect").data([...bins]).join("rect").attr("class", "bar").attr("x", ([b]) => tlX(t0 + b * binMs)).attr("width", bw).attr("y", ([, c]) => h - 14 - y(c)).attr("height", ([, c]) => Math.max(1, y(c)));
-    svg.append("g").attr("class", "axis").attr("transform", `translate(0,${h - 14})`).call(d3.axisBottom(tlX).ticks(Math.max(2, Math.floor(w / 110))).tickSize(3));
-    tlBrush = d3.brushX().extent([[0, 0], [w, h - 14]]).on("end", (e) => {
-      if (tlSilent) return;
-      if (!e.selection) {
-        setRange(null);
-        markPreset("all");
-        return;
-      }
-      const [a, b] = e.selection.map((px) => +tlX.invert(px));
-      setRange([a, b]);
-      markPreset(null);
-    });
-    const g = svg.append("g").attr("class", "brush").call(tlBrush);
-    if (range) {
-      tlSilent = true;
-      g.call(tlBrush.move, [Math.max(4, tlX(range[0])), Math.min(w - 4, tlX(range[1]))]);
-      tlSilent = false;
-    }
-    renderTimelineLabel();
-  }
-  function renderTimelineLabel() {
-    const f = (t) => new Date(t).toLocaleDateString(void 0, { day: "numeric", month: "short", year: "2-digit" });
-    $("tllabel").textContent = range ? `${f(range[0])} \u2013 ${f(range[1])}` : "All time";
-  }
-  function setRange(r) {
-    range = r;
-    refresh();
-  }
-  function markPreset(p) {
-    document.querySelectorAll(".tl-presets .mi").forEach((b) => b.classList.toggle("on", b.dataset.range === p));
-  }
-  function setPreset(p, apply = true) {
-    markPreset(p);
-    const span = timeSpan(state);
-    if (p === "all" || !span) range = null;
-    else range = [Math.max(span[0], span[1] - +p * 864e5), span[1] + 1];
-    if (apply) {
-      refresh();
-      renderTimeline();
-      graph.fit(true);
-    }
-  }
-  document.querySelectorAll(".tl-presets .mi").forEach((b) => b.onclick = () => setPreset(b.dataset.range));
-  new ResizeObserver(() => {
-    clearTimeout(window.__tlT);
-    window.__tlT = setTimeout(renderTimeline, 150);
-  }).observe($("tlsvg"));
-  var SKEY = "wiki-trails.saved";
-  var savedInfo = { at: 0, clicks: 0, name: "" };
-  try {
-    savedInfo = { ...savedInfo, ...JSON.parse(localStorage.getItem(SKEY)) };
-  } catch {
-  }
-  var unsaved = false;
-  function markDirty() {
-    unsaved = true;
-  }
-  function totalClicks() {
-    let n = 0;
-    for (const t of state.trails) n += t.visits.length - 1;
-    return n;
-  }
-  function renderSaved() {
-    const el = $("savedinfo"), tray = $("trayinfo");
-    const ago = savedInfo.at ? Date.now() - savedInfo.at : Infinity, days = Math.floor(ago / 864e5);
-    const since = Math.max(0, totalClicks() - (savedInfo.clicks || 0));
-    const due = state.trails.length > 0 && (since >= 200 || since > 0 && days >= 7 || !savedInfo.at && totalClicks() >= 30);
-    const when = !savedInfo.at ? "never saved to a file" : days >= 1 ? `saved ${days} day${days === 1 ? "" : "s"} ago` : ago < 36e5 ? `saved ${Math.max(1, Math.round(ago / 6e4))} min ago` : "saved today";
-    el.textContent = when + (since > 0 && savedInfo.at ? ` \xB7 ${since} new click${since === 1 ? "" : "s"}` : "");
-    el.classList.toggle("due", due);
-    tray.textContent = due ? "\u{1F4BE} Time to save" : "";
-    tray.classList.toggle("due", due);
-  }
-  async function doSave(saveAs = false) {
-    closeStart();
-    try {
-      state.layout = graph.getPositions();
-      const r = await saveToFile(state, { saveAs });
-      if (!r) return;
-      savedInfo = { at: Date.now(), clicks: totalClicks(), name: r.name };
-      try {
-        localStorage.setItem(SKEY, JSON.stringify(savedInfo));
-      } catch {
-      }
-      unsaved = false;
-      renderSaved();
-      status(r.how === "file" ? `Saved to ${r.name}. Ctrl+S updates the same file.` : `Downloaded ${r.name}. Keep it somewhere safe; open it with Open or by dropping it on the window.`);
-    } catch (err) {
-      status(`Could not save: ${err.message}`);
-    }
-  }
-  var pendingOpen = null;
-  function askOpen(s, name) {
-    if (!state.trails.length) return applyOpen(s, "replace", name);
-    pendingOpen = { s, name };
-    const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
-    $("od-text").innerHTML = `<b>${esc(name || "History file")}</b> has ${s.trails.length} trails and ${clicks} clicks. You currently have ${state.trails.length} trails.`;
-    $("opendlg").hidden = false;
-    $("od-merge").focus();
-  }
-  function applyOpen(s, how, name) {
-    snapshot();
-    if (how === "merge") {
-      const m = merge(state, s);
-      state = m.state;
-      status(`Merged ${name || "the file"}: ${m.added} new trails added.`);
-    } else {
-      state = s;
-      graph.reset();
-      status(`Opened ${name || "the file"}: ${s.trails.length} trails.`);
-    }
-    cur = null;
-    pinned = null;
-    closeCard();
-    range = null;
-    setFocus(null, false);
-    markPreset("all");
-    savedInfo = { at: Date.now(), clicks: totalClicks(), name: name || "" };
-    try {
-      localStorage.setItem(SKEY, JSON.stringify(savedInfo));
-    } catch {
-    }
-    commit({ refit: true });
-    renderSaved();
-  }
-  $("od-merge").onclick = () => {
-    $("opendlg").hidden = true;
-    if (pendingOpen) applyOpen(pendingOpen.s, "merge", pendingOpen.name);
-    pendingOpen = null;
-  };
-  $("od-replace").onclick = () => {
-    $("opendlg").hidden = true;
-    if (pendingOpen) applyOpen(pendingOpen.s, "replace", pendingOpen.name);
-    pendingOpen = null;
-  };
-  $("od-cancel").onclick = $("odclose").onclick = () => {
-    $("opendlg").hidden = true;
-    pendingOpen = null;
-  };
-  async function doOpen() {
-    closeStart();
-    try {
-      const r = await pickFile();
-      if (r === "fallback") return $("import").click();
-      if (r) askOpen(r.state, r.name);
-    } catch (err) {
-      status(`Could not open: ${err.message}`);
-    }
-  }
-  async function openFileObj(f) {
-    try {
-      askOpen(await readFile(f), f.name);
-    } catch (err) {
-      status(`Could not open ${f.name}: ${err.message}`);
-    }
-  }
-  $("import").onchange = (e) => {
-    const f = e.target.files[0];
-    e.target.value = "";
-    if (f) openFileObj(f);
-  };
-  $("savebtn").onclick = () => doSave();
-  $("export").onclick = () => doSave();
-  $("saveas").onclick = () => doSave(true);
-  $("openbtn").onclick = doOpen;
-  $("importbtn").onclick = doOpen;
-  $("trayinfo").onclick = () => doSave();
-  document.addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    if (e.key === "s" || e.key === "S") {
-      e.preventDefault();
-      doSave(e.shiftKey);
-    }
-    if (e.key === "o" || e.key === "O") {
-      e.preventDefault();
-      doOpen();
-    }
-  });
-  var dragDepth = 0;
-  window.addEventListener("dragenter", (e) => {
-    if ([...e.dataTransfer?.types || []].includes("Files")) {
-      dragDepth++;
-      $("dropzone").hidden = false;
-    }
-  });
-  window.addEventListener("dragleave", () => {
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (!dragDepth) $("dropzone").hidden = true;
-  });
-  window.addEventListener("dragover", (e) => e.preventDefault());
-  window.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dragDepth = 0;
-    $("dropzone").hidden = true;
-    const f = e.dataTransfer?.files?.[0];
-    if (f) openFileObj(f);
-  });
-  window.addEventListener("beforeunload", (e) => {
-  });
-  setInterval(renderSaved, 6e4);
   (async () => {
-    const booting = boot();
-    state = await loadLocal() || await loadPublished() || emptyState();
-    restoreView();
-    await (document.fonts?.ready ?? Promise.resolve());
-    await booting;
-    commit({ refit: true });
-    renderSaved();
+    graph2.setView({ density: app.settings.density, fade: app.settings.fade });
+    app.state = await loadLocal() || await loadPublished() || emptyState();
+    commit({ fresh: true });
     const rel = (p) => {
       if (!p) return null;
       const r = $("graph").getBoundingClientRect();
@@ -3149,14 +3141,12 @@
     };
     window.__wikiTrails = {
       // handy for debugging in the console (and for tests)
-      get state() {
-        return state;
-      },
-      settling: () => graph.isSettling(),
-      gstats: () => graph.stats(),
-      nodeXY: (t) => rel(graph.screenOf(t)),
-      drawMs: () => graph.drawMs(),
-      edgeXY: (i) => rel(graph.edgeMid(i))
+      app,
+      settling: () => graph2.isSettling(),
+      gstats: () => graph2.stats(),
+      drawMs: () => graph2.drawMs(),
+      nodeXY: (t) => rel(graph2.screenOf(t)),
+      edgeXY: (i) => rel(graph2.edgeMid(i))
     };
   })();
 })();

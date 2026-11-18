@@ -112,59 +112,82 @@ export function chainTo(trailInfo, visitId) {
   return out;
 }
 
-/** Directed steps {trailId, from, to, order} of whole trails. */
-export function trailSteps(d, trailIds) {
-  const steps = [];
-  for (const id of trailIds) {
-    const ti = d.trailIndex.get(id); if (!ti) continue;
-    ti.trail.visits.forEach((v, order) => {
+/**
+ * A trail as a path for drawing, relative to an "anchor" page (the article you clicked).
+ * Returns segments {from, to, p0, p1, before}: p runs 0 → 0.5 along the way in (start → anchor)
+ * and 0.5 → 1 along everything after it (including branches), so colour can show arrival vs. onward.
+ * Without an anchor, p simply runs 0 → 1 in click order (a whole trail).
+ */
+export function trailPath(ti, anchorId = null) {
+  const segs = [];
+  const vs = ti.trail.visits;
+  if (!anchorId) {
+    const n = Math.max(1, vs.length - 1);
+    vs.forEach((v, i) => {
       if (v.parent == null) return;
-      const from = ti.byId.get(v.parent).article;
-      if (from !== v.article) steps.push({ trailId: id, from, to: v.article, order });
+      const from = ti.byId.get(v.parent);
+      const i0 = vs.indexOf(from);
+      if (from.article !== v.article) segs.push({ from: from.article, to: v.article, p0: i0 / n, p1: i / n, before: false, vid: v.id });
     });
+    return segs;
   }
-  return steps;
+  const chain = chainTo(ti, anchorId);
+  const L = Math.max(1, chain.length - 1);
+  for (let i = 1; i < chain.length; i++) {
+    if (chain[i - 1].article !== chain[i].article) segs.push({ from: chain[i - 1].article, to: chain[i].article, p0: 0.5 * (i - 1) / L, p1: 0.5 * i / L, before: true, vid: chain[i].id });
+  }
+  // everything reached from the anchor, by depth
+  const depth = new Map([[anchorId, 0]]);
+  const after = [];
+  for (const v of vs) {
+    if (v.parent == null || !depth.has(v.parent)) continue;
+    depth.set(v.id, depth.get(v.parent) + 1);
+    after.push(v);
+  }
+  const maxD = Math.max(1, ...after.map((v) => depth.get(v.id)));
+  for (const v of after) {
+    const from = ti.byId.get(v.parent), d = depth.get(v.id);
+    if (from.article !== v.article) segs.push({ from: from.article, to: v.article, p0: 0.5 + 0.5 * (d - 1) / maxD, p1: 0.5 + 0.5 * d / maxD, before: false, vid: v.id });
+  }
+  return segs;
 }
 
-/** Every route (start -> ... -> article) that reached `title`, over all trails. */
-export function routesTo(d, title) {
-  const steps = [];
-  const seen = new Set();
-  for (const [id, ti] of d.trailIndex) {
-    for (const v of ti.trail.visits) {
-      if (v.article !== title) continue;
-      const chain = chainTo(ti, v.id);
-      for (let i = 1; i < chain.length; i++) {
-        const k = id + '|' + chain[i].id;
-        if (seen.has(k)) continue; seen.add(k);
-        if (chain[i - 1].article !== chain[i].article) steps.push({ trailId: id, from: chain[i - 1].article, to: chain[i].article, order: i });
-      }
-    }
+/**
+ * A trail as a sequence. The "main line" is the path from the start to the latest page;
+ * pages you opened and then went back from are side branches.
+ */
+export function trailShape(tr) {
+  const byId = new Map(tr.visits.map((v) => [v.id, v]));
+  const last = tr.visits[tr.visits.length - 1];
+  const main = [];
+  for (let v = last; v; v = v.parent == null ? null : byId.get(v.parent)) main.unshift(v);
+  const onMain = new Set(main.map((v) => v.id));
+  const children = new Map();
+  for (const v of tr.visits) if (v.parent != null) { if (!children.has(v.parent)) children.set(v.parent, []); children.get(v.parent).push(v); }
+  // side branches: each starts at a page off the main line whose parent is on the main line (or on another branch)
+  const branches = [];
+  for (const v of tr.visits) {
+    if (onMain.has(v.id) || v.parent == null || !onMain.has(v.parent)) continue;
+    const seq = [];
+    const walk = (x) => { seq.push(x); for (const c of children.get(x.id) || []) walk(c); };
+    walk(v);
+    branches.push({ from: byId.get(v.parent), visits: seq });
   }
-  return steps;
+  // the numbered list (click order) with indentation for side branches
+  const depth = new Map();
+  const lines = tr.visits.map((v, i) => {
+    let d = 0;
+    if (!onMain.has(v.id)) d = (depth.get(v.parent) || 0) + 1;
+    depth.set(v.id, d);
+    return { v, n: i + 1, depth: d, side: d > 0 };
+  });
+  return { main, branches, lines, onMain };
 }
 
-/** Every route that used the connection a↔b: the trails' steps up to and including that click. */
-export function routesThrough(d, a, b) {
-  const steps = [], seen = new Set();
-  for (const [id, ti] of d.trailIndex) {
-    for (const v of ti.trail.visits) {
-      if (v.parent == null) continue;
-      const from = ti.byId.get(v.parent).article;
-      if (!((from === a && v.article === b) || (from === b && v.article === a))) continue;
-      const chain = chainTo(ti, v.id);
-      for (let i = 1; i < chain.length; i++) {
-        const k = id + '|' + chain[i].id;
-        if (seen.has(k)) continue; seen.add(k);
-        if (chain[i - 1].article !== chain[i].article) steps.push({ trailId: id, from: chain[i - 1].article, to: chain[i].article, order: i });
-      }
-    }
-  }
-  return steps;
-}
-
+/** "Brain → Telephone" (start → where the trail is now), or the trail's own name. */
 export function trailLabel(tr) {
   if (tr.name) return tr.name;
   const first = tr.visits[0]?.article || 'Empty';
-  return `${first} trail`;
+  const last = tr.visits[tr.visits.length - 1]?.article;
+  return last && last !== first ? `${first} → ${last}` : first;
 }

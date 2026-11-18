@@ -1,52 +1,105 @@
 # Wiki Trails
 
-Map how you wander through Wikipedia. You record each trail by hand (first page, then the link you clicked, then the next…), and Wiki Trails draws all of them as one brain-like graph on a green phosphor CRT inside a Windows 95 desktop. Connections you use often grow thicker and glow, the way well-used pathways between neurons strengthen.
+Map how you wander through Wikipedia. You record each trail by hand: the page you started on, then each link you clicked. Wiki Trails draws all your trails as one calm, brain-like map. Connections you use often grow thicker, the way well-used pathways between neurons strengthen.
 
-![Wiki Trails 95: 1,000 real clicks](.github/screenshot.png)
+Click any article and every trail that went through it lights up from start to end. Blue shows how you got there and orange shows where you went next. More recent trails are thicker and brighter. The side panel lists each time you saw the page.
 
-![A pinned trail with step numbers](.github/screenshot-trail.png)
+![Clicking an article shows every trail through it](.github/screenshot.png)
 
-![Two years of browsing (20,000 clicks) still reads calmly](.github/two-years.png)
+## How it works
 
-![All 27 skins](.github/skins.png)
+The window has one map and two side panels, and both panels can be collapsed.
 
-![The skin gallery](.github/gallery.png)
+- **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one dot on the map, so arriving somewhere you have been before links into it.
+- **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with numbered steps.
+- **Map** (middle). Click an article, a connection or a trail to highlight it. Click the background or press <kbd>Esc</kbd> to clear it. Hover anything to see when you last saw it.
+- **Details** (right). Shows what you selected:
+  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it; click a visit to see that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there, show only its neighbourhood, or open it on Wikipedia.
+  - **A connection:** how often you clicked it in each direction, and when.
+  - **A trail:** its steps, with Continue, Rename and Delete.
 
-## Features
+![One trail, from the start (blue) to the end (orange)](.github/screenshot-trail.png)
 
-- **Guided trail builder.** Paste the first page's URL or type its title, then answer “Link 2”, “Link 3”, …
-- **Branching.** Click any earlier step, or that article in the graph, to go back and continue from there, just like the browser's back button.
-- **Revisits and loops are fine.** Every article is a single node, so landing on an article you already know links into it. Repeating the same click again strengthens that connection.
-- **Weighted connections.** The thickness and glow of a line come from the total number of clicks between those two articles, across all trails.
-- **“How did I get here?”** Hover any article to see every route that led to it, coloured by trail, with animated direction.
-- **Full journeys.** Hover a trail's start article, or a trail in the sidebar, to see that journey from start to every end, with step numbers.
-- **Pin and zoom.** Click an article or a trail to keep its highlight and zoom in to it; press <kbd>Esc</kbd> or click the background to zoom back out.
-- **Calm at any size.** Built to still feel like day one after years of use. At full zoom-out only the ~380 strongest connections are drawn, and zooming in reveals more in the area you are looking at. Labels never overlap, and the most important ones win. Sizes are relative to your busiest article, and connections you haven't used for a while fade (toggle *Fade old*). Use the **Density** slider to see more or less.
-- **Fills the window.** The map stretches to the window's shape. Each side window can be minimized to the taskbar (click it there to bring it back), and **Maximize** (<kbd>F</kbd>) hides both. The map is stable: article positions are saved, so it doesn't reshuffle from day to day. New articles settle next to the ones they came from, and *Re-layout* starts fresh.
-- **Time lens.** The timeline under the graph shows your clicks over time. Pick *30 days*, *1 year* or *All*, or drag a range. The map keeps its layout; it just shows that period.
-- **Focus mode.** Double-click an article to see only its neighbourhood; <kbd>Esc</kbd> goes back.
-- **Click a connection** to highlight every trail that used it and see how often you clicked it in each direction.
-- **History files.** **Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) and **Open** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop a file onto the window. In Chrome/Edge, Save remembers the file, so <kbd>Ctrl</kbd>+<kbd>S</kbd> just updates it; other browsers download a copy. Opening asks whether to **Merge** into your history or **Replace** it. The file includes the map layout, and the app reminds you when it's been a while since your last save.
-- **27 skins in 7 families.** Press <kbd>S</kbd>, or use the Skins button, to open the gallery. Hover a card to try a skin live, click to keep it, use <kbd>←</kbd>/<kbd>→</kbd> to flip through them, or press **Slideshow** to tour them all.
-  - *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
-  - *Futuristic:* Holo HUD (radar sweep) · Star Chart (constellations) · Bio-Neural (travelling signals)
-  - *AI:* Latent Space · Training Run (epochs, loss sparkline) · Sentinel (its red eye follows your cursor)
-  - *Millennium / Y2K:* Aqua Bubble · Y2K Chrome (millennium countdown) · GeoCities (hit counter, marquee) · Media Player (trails are tracks)
-  - *90s console games:* 16-bit RPG (quests, XP, level-ups) · Handheld '89 · Polygon Era (memory cards) · Fighter Select (VS splash) · Overworld Map (walking marker)
-  - *Synthwave:* Outrun Sunset (animated grid) · Vaporwave (VHS glitches) · Neon Rain
-  - *Minimal:* Swiss Paper · Midnight Mono · Zen Ink
+### Built to last for years
 
-  Each skin sets its own window chrome, fonts, node shape, line style, background effect, wording and little toys. Optional sound effects can be turned on in the Start menu.
-- **Test data.** Start → *Load test data* loads real human Wikispeedia trails: *30 days* (1,000 clicks) or *2 years* (20,000 clicks, 3,145 articles), to see how it feels after long use.
-- **Your data stays local.** Trails are stored in your browser (IndexedDB, so years of history fit), and you can save them to a file. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
+It should still feel like day one after years of use.
 
-## Run it locally
+- **Few lines at a time.** At full zoom-out only the ~380 strongest connections are drawn, and zooming in reveals more where you look.
+- **Readable labels.** Labels never overlap, and the most important ones win.
+- **Relative sizes.** Dot and line sizes are relative to your busiest article.
+- **Fading.** Connections you haven't used for a while fade.
+- **Stable layout.** Positions are saved, so the map doesn't reshuffle from day to day. New articles settle next to the page you came from.
 
-Just open `index.html` in your browser by double-clicking it. Nothing to install.
+The map stretches to fill the window. The **time lens** under the map shows your clicks over time: pick *30 days*, *1 year* or *All time*, or drag across the timeline to choose a range.
+
+![Two years of browsing: 20,000 clicks, 3,145 articles](.github/two-years.png)
+
+### Your data
+
+- **Stored locally.** Everything stays in your browser (IndexedDB, so years of history fit).
+- **Save to a file.** **File → Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes a history file. In Chrome and Edge it remembers the file, so later saves update it; other browsers download a copy. A dot on the File button reminds you when it's been a while.
+- **Open a file.** **File → Open** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop a file onto the window. You choose whether to add it to your history or replace your history with it.
+- **Undo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change.
+
+### Settings
+
+The ⚙ button opens Settings:
+
+- **Light or dark.** Follows your system by default.
+- **Look.** Plain is the default, and 27 optional looks are available. Hover a card to try one, click to keep it.
+- **Map density** and **fade old connections**.
+- **Re-arrange the map**, the Wikipedia language, and optional sounds.
+
+![Settings](.github/gallery.png)
+
+<details>
+<summary>All 28 looks</summary>
+
+![All looks](.github/skins.jpg)
+
+- *Plain*
+- *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
+- *Futuristic:* Holo HUD · Star Chart · Bio-Neural
+- *AI:* Latent Space · Training Run · Sentinel
+- *Millennium / Y2K:* Aqua Bubble · Y2K Chrome · GeoCities · Media Player
+- *90s console games:* 16-bit RPG · Handheld '89 · Polygon Era · Fighter Select · Overworld Map
+- *Synthwave:* Outrun Sunset · Vaporwave · Neon Rain
+- *Minimal:* Swiss Paper · Midnight Mono · Zen Ink
+
+Look names describe a style; they are not affiliated with any product.
+</details>
+
+### Keyboard
+
+| Key | Action |
+| --- | --- |
+| <kbd>/</kbd> | Find an article or trail |
+| <kbd>Esc</kbd> | Clear the selection or leave the neighbourhood view |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save history to a file (<kbd>Shift</kbd> for Save as) |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a history file |
+
+Double-click an article to show only its neighbourhood.
+
+### Try it with real data
+
+**File → Examples** loads real human trails from the Wikispeedia game: *30 days* (1,000 clicks) or *2 years* (20,000 clicks, 3,145 articles). The 2-year example shows how the map feels after long use. Loading it replaces your history, but you can undo that.
+
+## Run it
+
+Open `index.html` in your browser by double-clicking it. Nothing to install.
+
+### Host on GitHub Pages
+
+1. Push this repo to GitHub.
+2. Go to **Settings → Pages → Build and deployment → Source: Deploy from a branch**, then pick `main` and `/ (root)`.
+3. The site appears at `https://<user>.github.io/<repo>/`.
+
+To publish your own map, save your history with **File → Save as**, put the file at `data/trails.json`, and commit it. Visitors with no history of their own see that file. This only works on the hosted site: browsers don't allow reading it when the page is opened from disk. Your own browser keeps using its local history.
 
 ### Developing
 
-The code lives in `src/` as ES modules and is bundled into `js/app.js` (the bundle is committed, so the site needs no build on GitHub). After editing `src/`:
+The code lives in `src/` as ES modules and is bundled into `js/app.js`. The bundle is committed, so GitHub Pages needs no build step. After editing `src/`:
 
 ```bash
 npm install        # once, installs esbuild
@@ -54,32 +107,33 @@ npm run build      # or: npm run watch
 npm run serve      # optional: http://localhost:8000
 ```
 
-## Host on GitHub Pages
-
-1. Push this repo to GitHub.
-2. **Settings → Pages → Build and deployment → Source: Deploy from a branch**, then pick `main` and `/ (root)`.
-3. The site appears at `https://<user>.github.io/<repo>/`.
-
-### Publishing your own graph
-
-Visitors who have no local data see the file `data/trails.json`, if it exists (on the hosted site; browsers don't allow reading it when the page is opened from disk). To publish your graph:
-
-1. Click **Export JSON** in the app.
-2. Save the file as `data/trails.json` and commit it.
-
-Your own browser keeps using its local copy. If you want to start from the published file instead, use **Import JSON**.
-
-## Test data: real human trails
-
-`data/wikispeedia-1000.json` (and the same data as `data/wikispeedia-1000.js`, which the app loads so it also works from disk) holds 176 real human navigation paths (1,000 clicks, 401 articles, 36 back-steps) from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page. Most of the sample is from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections. The rest are random one-off games. In Wikispeedia a `<` means the player went back, which maps directly to Wiki Trails' branching.
-
-To regenerate the file or change its size:
-
-```bash
-python3 scripts/build_test_data.py path/to/paths_finished.tsv data/wikispeedia-1000.json 1000
+```
+index.html            page: top bar, three panels, Settings and Open dialogs
+js/app.js             bundled app (built from src/)
+css/style.css         layout and components; every colour is a CSS variable
+css/skins.css         plain light/dark, window styles, and the 27 optional looks
+src/main.js           wires the map, panels and keyboard together
+src/app.js            app state, selection, events, and the highlight for a selection
+src/model.js          data model: trails → articles and weighted connections
+src/storage.js        IndexedDB, history files (save/open/merge), data/trails.json
+src/appearance.js     light/dark and looks
+src/skins.js          the list of looks: map palette, dot shape, background effect
+src/ui.js             small helpers (dates, toasts, the steps list)
+src/panels/           record, trails, details, search, timeline, menus
+src/views/map.js      canvas map: draw budgets, labels, layout (d3-force), highlights
+src/views/effects.js  animated backgrounds for some looks
+src/example.js        tiny example
+data/                 Wikispeedia examples; your published trails.json goes here
+scripts/              build_test_data.py (Wikispeedia → Wiki Trails)
+vendor/d3.min.js      d3 v7.9.0
 ```
 
-Sources: Robert West and Jure Leskovec, *Human Wayfinding in Information Networks*, WWW 2012; Robert West, Joelle Pineau and Doina Precup, *Wikispeedia: An Online Game for Inferring Semantic Distances between Concepts*, IJCAI 2009. The article content comes from Wikipedia (CC BY-SA).
+#### Adding a look
+
+1. Add an entry to `SKINS` in `src/skins.js`: an `id`, a name, a family, a window style, map colours, a dot shape and an optional background effect.
+2. Add a `[data-skin="your-id"] { … }` block of CSS variables to `css/skins.css`.
+
+The Settings gallery picks it up automatically.
 
 ## Data format
 
@@ -92,45 +146,44 @@ Sources: Robert West and Jure Leskovec, *Human Wayfinding in Information Network
       "id": "k3j2…", "name": "", "created": "2026-11-18T09:00:00.000Z",
       "visits": [
         { "id": "a", "article": "Brain",   "parent": null, "t": 1763456400000 },
-        { "id": "b", "article": "Neuron",  "parent": "a" },
-        { "id": "c", "article": "Synapse", "parent": "b" },
-        { "id": "d", "article": "Axon",    "parent": "b" }
+        { "id": "b", "article": "Neuron",  "parent": "a",  "t": 1763456460000 },
+        { "id": "c", "article": "Synapse", "parent": "b",  "t": 1763456520000 },
+        { "id": "d", "article": "Axon",    "parent": "b",  "t": 1763456600000 }
       ]
     }
-  ]
+  ],
+  "layout": { "Brain": [12.5, -40.1] }
 }
 ```
 
-`t` is when you clicked (ms since 1970). A saved file may also contain `layout` (article → [x, y]) so the map looks the same after opening it. Each trail is a tree of visits. A visit's `parent` is the page you clicked from, so going back and branching just means attaching a new visit to an earlier one. Going back is not a click and adds no connection. Articles and weighted connections are derived from the visits: a connection's weight is the number of clicks between its two articles in either direction, counted over all trails.
+- **A trail is a tree of visits.** A visit's `parent` is the page you clicked from. Going back and branching means attaching a new visit to an earlier one; in the example, you read Synapse, went back to Neuron and clicked Axon.
+- **Going back is not a click** and adds no connection.
+- **`t`** is when you opened the page, in milliseconds since 1970.
+- **`layout`** is optional and keeps the map looking the same after you open the file.
+- **Derived data.** Articles and connections are computed from the visits. A connection's weight is the number of clicks between its two articles, in either direction, over all trails.
 
-## Project layout
+## Test data: Wikispeedia
 
+The examples are real human navigation paths from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page, and a `<` in their path means they went back, which maps directly to branching here. The timestamps are spread over 30 days or 2 years so the time lens has something to show.
+
+- `data/wikispeedia-1000.json` (also `.js`, so it loads from disk): 176 paths, 1,000 clicks, 401 articles. Most come from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections.
+- `data/wikispeedia-2years.js`: 3,700 paths, 20,005 clicks, 3,145 articles.
+
+To regenerate or resize them:
+
+```bash
+python3 scripts/build_test_data.py path/to/paths_finished.tsv data/wikispeedia-1000.json 1000
 ```
-index.html        page shell
-js/app.js         bundled app (built from src/ with esbuild)
-css/style.css     base layout; every visual reads a CSS variable (defaults = Desktop 95)
-css/skins.css     chrome presets (bevel, flat, neon, terminal, console, gloss, 1-bit) + 27 skins
-src/skins.js      skin list: graph palette, node shape, effects, wording, toys
-src/effects.js    animated background layer (stars, rain, radar, grid, bubbles, …)
-src/model.js      data model and derived graph (articles, weighted links, routes)
-src/graph.js      canvas renderer: draw budgets, label placement, layout (d3-force), highlights
-src/main.js       UI: builder, trail list, article card, import/export
-src/storage.js    IndexedDB, history files (save/open/merge), data/trails.json
-src/example.js    small example dataset
-data/             wikispeedia-1000.json test data; put your published trails.json here
-scripts/          build_test_data.py (Wikispeedia → Wiki Trails JSON)
-vendor/d3.min.js  d3 v7.9.0 (ISC licence, see vendor/d3.LICENSE)
-```
+
+Sources:
+
+- Robert West and Jure Leskovec, *Human Wayfinding in Information Networks*, WWW 2012.
+- Robert West, Joelle Pineau and Doina Precup, *Wikispeedia: An Online Game for Inferring Semantic Distances between Concepts*, IJCAI 2009.
+- Article content: Wikipedia (CC BY-SA).
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). d3 is © Mike Bostock, ISC licence. Fonts: Pixelify Sans and VT323 (SIL OFL) via Google Fonts. The look is inspired by Windows 95, and no Microsoft assets are used.
+MIT, see [LICENSE](LICENSE).
 
-## Adding a skin
-
-1. Add an entry to `SKINS` in `src/skins.js`: an `id`, a name, a family, a chrome preset, colours, a node shape and an optional effect.
-2. Add a `[data-skin="your-id"] { … }` block of CSS variables to `css/skins.css`, plus any `html[data-skin="your-id"] …` extras.
-
-The gallery picks it up automatically.
-
-Skin names describe a style; they are not affiliated with any product.
+- d3 is © Mike Bostock, ISC licence (see `vendor/d3.LICENSE`).
+- Fonts are loaded from Google Fonts under the SIL Open Font Licence: Inter and the fonts of the optional looks.

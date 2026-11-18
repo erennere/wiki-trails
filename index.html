@@ -1,167 +1,168 @@
 <!DOCTYPE html>
-<html lang="en" data-skin="desktop95" data-chrome="bevel">
+<html lang="en" data-skin="plain" data-chrome="flat" data-theme="light" data-left="open" data-right="open">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wiki Trails</title>
-<meta name="description" content="Map how you wander through Wikipedia: trails of clicks drawn as a brain-like graph, in 27 skins.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23031a0a'/%3E%3Crect x='2' y='3' width='3' height='3' fill='%23ffe14d'/%3E%3Crect x='11' y='2' width='3' height='3' fill='%2339ff88'/%3E%3Crect x='7' y='10' width='4' height='4' fill='%23ffaa00'/%3E%3Cpath d='M4 5L12 4M4 5L9 11M12 4L9 11' stroke='%2339ff88'/%3E%3C/svg%3E">
+<meta name="description" content="Keep a map of how you wander through Wikipedia: every trail of clicks, on one calm map.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 22 Q12 8 16 14 T26 9' fill='none' stroke='%232563d9' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='7' cy='22' r='4' fill='%232563d9'/%3E%3Ccircle cx='16' cy='14' r='3.5' fill='%23e8641c'/%3E%3Ccircle cx='26' cy='9' r='3' fill='%23e8641c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&family=Audiowide&family=Share+Tech+Mono&family=Major+Mono+Display&family=DotGothic16&family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700&family=Michroma&family=Nunito:wght@400;700&family=Comic+Neue:wght@400;700&family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&family=Bungee&family=Quicksand:wght@400;600;700&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&family=Audiowide&family=Share+Tech+Mono&family=Major+Mono+Display&family=DotGothic16&family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700&family=Michroma&family=Nunito:wght@400;700&family=Comic+Neue:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Bungee&family=Quicksand:wght@400;600;700&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/skins.css">
-<script>try{var s=localStorage.getItem("wiki-trails.skin"),m={win95:"desktop95",synth:"outrun",gameboy:"handheld",mac:"mono91"};if(s)document.documentElement.dataset.skin=m[s]||s}catch(e){}</script>
+<script>
+  // apply saved appearance before the first paint (no flash)
+  try {
+    var s = JSON.parse(localStorage.getItem('wiki-trails.settings')) || {}, h = document.documentElement;
+    var dark = (s.theme || 'system') === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : s.theme === 'dark';
+    h.dataset.theme = dark ? 'dark' : 'light';
+    if (s.skin) h.dataset.skin = s.skin;
+    if (s.left === false) h.dataset.left = 'closed';
+    if (s.right === false) h.dataset.right = 'closed';
+  } catch (e) {}
+</script>
 <script src="vendor/d3.min.js"></script>
 <script src="js/app.js" defer></script>
 </head>
 <body>
-<div id="boot" hidden><pre id="bootlog"></pre></div>
 
-<main class="desk">
-  <div class="col">
-    <section class="win" id="w-builder">
-      <div class="title"><span class="ico ico-pen"></span><span class="tt" id="tt-builder" data-page="100">TRAILBLZ.EXE</span><button class="minbtn" data-min="w-builder" title="Minimize to the taskbar">–</button><span class="tb"><i data-min="w-builder" title="Minimize">_</i><i>□</i><i data-min="w-builder" title="Minimize">×</i></span></div>
-      <div class="body">
-        <div id="crumbs"></div>
-        <label id="qlabel" for="next"></label>
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 22 Q12 8 16 14 T26 9" fill="none" stroke="var(--path-before)" stroke-width="3" stroke-linecap="round"/><circle cx="7" cy="22" r="4" fill="var(--path-before)"/><circle cx="16" cy="14" r="3.5" fill="var(--path-after)"/><circle cx="26" cy="9" r="3" fill="var(--path-after)"/></svg>
+    Wiki Trails
+  </div>
+  <div class="search">
+    <input id="search" type="search" placeholder="Find an article or trail   ( / )" autocomplete="off" aria-label="Find an article or trail">
+    <div class="results" id="results" hidden></div>
+  </div>
+  <span class="spacer"></span>
+  <div class="seg" id="rangeseg" role="group" aria-label="Time period">
+    <button data-range="30">30 days</button><button data-range="365">1 year</button><button data-range="all" class="on">All time</button>
+  </div>
+  <div class="menu">
+    <button class="btn" id="filebtn" aria-haspopup="true">File ▾</button>
+    <div class="dropdown" id="filemenu" hidden>
+      <button class="mi" id="m-save">Save history <small>Ctrl+S</small></button>
+      <button class="mi" id="m-saveas">Save as…</button>
+      <button class="mi" id="m-open">Open history… <small>Ctrl+O</small></button>
+      <div class="info" id="savedinfo"></div>
+      <hr>
+      <h4>Examples (real reading trails)</h4>
+      <button class="mi" data-example="wikispeedia-1000">30 days <small>1,000 clicks</small></button>
+      <button class="mi" data-example="wikispeedia-2years">2 years <small>20,000 clicks</small></button>
+      <button class="mi" data-example="small">A small one <small>6 trails</small></button>
+      <hr>
+      <button class="mi" id="m-clear">Clear history…</button>
+    </div>
+  </div>
+  <button class="btn icon" id="settingsbtn" title="Settings" aria-label="Settings">⚙</button>
+</header>
+
+<main class="layout">
+  <div class="col" id="left">
+    <button class="panel rail" data-open="left" title="Show Record and Trails">Record · Trails ›</button>
+    <section class="panel" id="record">
+      <div class="panel-head"><span class="grow">Record</span><button class="btn small" id="newtrail">New trail</button><button class="collapse" data-close="left" title="Hide this side">‹</button></div>
+      <div class="rec-body">
+        <ol class="steps" id="steps"></ol>
+        <label id="reclabel" for="next">First page</label>
         <div class="row">
-          <input id="next" list="titles" placeholder="Paste a Wikipedia URL or type a title" autocomplete="off">
-          <button class="btn default" id="add" title="Add (Enter)">Add</button>
+          <input id="next" list="titles" autocomplete="off">
+          <button class="btn primary" id="add">Add</button>
         </div>
         <datalist id="titles"></datalist>
         <div class="msg" id="msg"></div>
-        <div class="btns">
-          <button class="btn" id="back" title="Go back one page in this trail (Alt+←)">◄ Back</button>
-          <button class="btn" id="newtrail">New trail</button>
-          <button class="btn" id="undo" title="Undo (Ctrl+Z)">Undo</button>
-          <button class="btn" id="skins2" title="Choose a skin (S)">Skins</button>
-        </div>
-        <div class="btns filebtns">
-          <button class="btn" id="savebtn" title="Save your history to a file (Ctrl+S)">💾 Save</button>
-          <button class="btn" id="openbtn" title="Open a history file (Ctrl+O), or drop one on the window">📂 Open</button>
-          <span class="savedinfo" id="savedinfo"></span>
-        </div>
-        <p class="hint">To branch off, click an earlier step, or click an article of this trail in the graph.</p>
+        <div class="rec-foot"><span class="hint" id="rechint"></span><button class="btn small" id="undo" title="Undo (Ctrl+Z)">Undo</button></div>
       </div>
     </section>
-
-    <section class="win grow" id="w-trails">
-      <div class="title"><span class="ico ico-folder"></span><span class="tt" id="tt-trails" data-page="101">Trails</span><button class="minbtn" data-min="w-trails" title="Minimize to the taskbar">–</button><span class="tb"><i data-min="w-trails" title="Minimize">_</i><i>□</i><i data-min="w-trails" title="Minimize">×</i></span></div>
-      <div class="body list-body">
-        <input id="tsearch" class="tsearch" placeholder="Search trails and articles…" autocomplete="off">
-        <div class="listview" id="trails"></div>
-      </div>
-      <div class="statusbar"><span id="tcount">0</span><span>Hover = show · Click = continue</span></div>
+    <section class="panel grow" id="trailspanel">
+      <div class="panel-head"><span class="grow">Trails <span class="count" id="tcount"></span></span></div>
+      <div class="list-tools"><input id="tfilter" type="search" placeholder="Filter trails…" autocomplete="off" aria-label="Filter trails"></div>
+      <div class="list" id="trails"></div>
     </section>
   </div>
 
-  <section class="win big" id="w-brain">
-    <div class="title"><span class="ico ico-brain"></span><span class="tt" id="tt-brain" data-page="102">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i data-maxbtn title="Maximize (F)">□</i><i>×</i></span></div>
-    <div class="menubar">
-      <button class="mi" id="fit" title="Fit the graph to the window">Fit</button>
-      <button class="mi" id="maxbtn" title="Maximize the graph (F)">⛶ Maximize</button>
-      <label class="mi viewctl" title="How many connections and labels to show">Density <input type="range" id="density" min="0.3" max="2.5" step="0.1" value="1"></label>
-      <label class="mi viewctl" title="Dim connections you have not used in a while"><input type="checkbox" id="fade" checked> Fade old</label>
-      <button class="mi" id="relayout" title="Compute a fresh layout for the whole map">↻ Re-layout</button>
-      <span class="focuschip" id="focuschip" hidden></span>
-      <span class="mi legend"><span class="ln thin"></span>1 click</span>
-      <span class="mi legend"><span class="ln thick"></span>many clicks</span>
-      <span class="mi legend"><span class="sq start"></span>trail start</span>
-      <span class="mi legend"><span class="sq hub"></span>busy article</span>
-      <span class="extras" id="eq"></span>
-      <span class="extras" id="spark"></span>
-      <span class="skinpick"><button class="mi" id="skinbtn" title="Choose a skin (S)"><span class="ico ico-paint"></span> <span id="skinname">Skin</span> ▾</button></span>
-    </div>
-    <div class="crt" id="stage">
+  <section class="panel" id="center">
+    <div class="viewport crt" id="stage">
       <canvas id="fx"></canvas>
-      <canvas id="graph" aria-label="Graph of Wikipedia trails"></canvas>
-      <div class="ticker" id="ticker"><span></span></div>
-      <div class="banner" id="banner"></div>
-      <div class="toast" id="toast"></div>
-      <div class="eye" id="eye"><i></i></div>
+      <canvas id="graph" aria-label="Map of your Wikipedia trails"></canvas>
+      <div class="focusbar" id="focusbar" hidden></div>
+      <div class="mapctl">
+        <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="btn" id="zoomout" title="Zoom out" aria-label="Zoom out">−</button>
+        <button class="btn" id="fit" title="Show everything" aria-label="Show everything">⤢</button>
+      </div>
+      <div class="tip" id="tip" hidden></div>
       <div class="empty" id="empty">
         <div>
-          <p>Paste the first Wikipedia page to begin<span class="blink">█</span></p>
-          <button class="btn" id="example2">Load test data (1,000 real clicks)</button>
+          <h2>Your map is empty</h2>
+          <p>Paste the first Wikipedia page of a trail in <b>Record</b> on the left, or try an example.</p>
+          <div class="btns"><button class="btn" data-example="wikispeedia-1000">30 days of examples</button><button class="btn" data-example="wikispeedia-2years">2 years</button></div>
         </div>
       </div>
-      <div class="dialog" id="card"></div>
     </div>
-    <div class="timeline" id="timeline">
-      <div class="tl-presets"><button class="mi" data-range="30">30 days</button><button class="mi" data-range="365">1 year</button><button class="mi on" data-range="all">All</button></div>
-      <svg id="tlsvg" aria-label="Timeline"></svg>
+    <div class="timeline" id="timeline" hidden>
+      <svg id="tlsvg" aria-label="Your clicks over time. Drag to pick a period."></svg>
       <span class="tl-label" id="tllabel"></span>
     </div>
-    <div class="statusbar"><span id="status">Ready.</span><span id="stats"></span></div>
   </section>
+
+  <div class="col" id="right">
+    <button class="panel rail" data-open="right" title="Show Details">‹ Details</button>
+    <section class="panel grow" id="detailspanel">
+      <div class="panel-head"><span class="grow" id="dtitle">Overview</span><button class="collapse" data-close="right" title="Hide this side">›</button></div>
+      <div class="details" id="details"></div>
+    </section>
+  </div>
 </main>
 
-<footer class="taskbar">
-  <button class="btn start" id="startbtn" aria-haspopup="true" aria-expanded="false"><span class="flag"></span>Start</button>
-  <div class="startmenu" id="startmenu" hidden>
-    <div class="side"><b>Wiki</b>Trails</div>
-    <div class="items">
-      <button class="it" id="skinsmenu"><span class="ico ico-paint"></span>Skins… <small>S</small></button>
-      <hr>
-      <button class="it" id="testdata"><span class="ico ico-brain"></span>Load test data <small>30 days · 1,000 clicks</small></button>
-      <button class="it" id="testdata2"><span class="ico ico-brain"></span>Load test data <small>2 years · 20,000 clicks</small></button>
-      <button class="it" id="example"><span class="ico ico-pen"></span>Load small example</button>
-      <hr>
-      <button class="it" id="export"><span class="ico ico-disk"></span><span id="lbl-export">Save history…</span><small>Ctrl+S</small></button>
-      <button class="it" id="saveas"><span class="ico ico-disk"></span>Save as…</button>
-      <button class="it" id="importbtn"><span class="ico ico-folder"></span><span id="lbl-import">Open history…</span><small>Ctrl+O</small></button>
-      <input type="file" id="import" accept="application/json,.json" hidden>
-      <hr>
-      <label class="it"><span class="ico ico-sound"></span>Sound effects <input type="checkbox" id="sound"></label>
-      <label class="it"><span class="ico ico-globe"></span>Wiki language
-        <select id="lang">
-          <option value="en">en</option><option value="de">de</option><option value="tr">tr</option>
-          <option value="fr">fr</option><option value="es">es</option><option value="it">it</option>
-        </select>
-      </label>
-      <hr>
-      <button class="it danger" id="clear"><span class="ico ico-bin"></span>Clear all</button>
+<div class="modal wide" id="settings" hidden>
+  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="set-title">
+    <div class="panel-head"><span class="grow" id="set-title">Settings</span><button class="collapse" id="set-close" title="Close">✕</button></div>
+    <div class="modal-body">
+      <h4>Light or dark</h4>
+      <div class="seg" id="themeseg"><button data-theme="system">Follow my system</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+      <h4>Look</h4>
+      <p class="hint">Plain is the default. Hover a card to try a look, click to keep it.</p>
+      <div id="skingrid"></div>
+      <h4>Map</h4>
+      <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
+      <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
+      <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>
+      <h4>Other</h4>
+      <div class="setrow"><span>Wikipedia language (for links)</span><select id="lang"><option value="en">English</option><option value="de">Deutsch</option><option value="tr">Türkçe</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option></select></div>
+      <div class="setrow"><span>Sound effects</span><input type="checkbox" id="sound"></div>
+      <h4>Keyboard</h4>
+      <div class="keys">
+        <kbd>/</kbd><span>Find an article or trail</span>
+        <kbd>Esc</kbd><span>Clear the selection</span>
+        <kbd>Ctrl Z</kbd><span>Undo</span>
+        <kbd>Ctrl S</kbd><span>Save history to a file</span>
+        <kbd>Ctrl O</kbd><span>Open a history file</span>
+      </div>
+      <div class="btns" style="margin-top:18px"><button class="btn primary" id="set-done">Done</button></div>
     </div>
-  </div>
-  <div class="tasks">
-    <button class="task on" data-win="w-brain"><span class="ico ico-brain"></span><span id="task-brain">BRAIN.EXE</span></button>
-    <button class="task on" data-win="w-builder" title="Show / minimize"><span class="ico ico-pen"></span><span id="task-builder">TRAILBLZ.EXE</span></button>
-    <button class="task on" data-win="w-trails" title="Show / minimize"><span class="ico ico-folder"></span><span id="task-trails">Trails</span></button>
-  </div>
-  <div class="tray"><span id="trayinfo"></span><span class="ico ico-sound"></span><span id="clock">--:--</span></div>
-</footer>
+  </section>
+</div>
 
-<div class="gallery" id="opendlg" hidden>
-  <section class="win dlg" role="dialog" aria-modal="true" aria-labelledby="od-title">
-    <div class="title"><span class="ico ico-folder"></span><span class="tt" id="od-title">Open history</span><span class="tb"><i>_</i><i>□</i><i id="odclose" style="cursor:pointer">×</i></span></div>
-    <div class="body">
+<div class="modal" id="opendlg" hidden>
+  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="od-title">
+    <div class="panel-head"><span class="grow" id="od-title">Open history</span><button class="collapse" id="od-close" title="Close">✕</button></div>
+    <div class="modal-body">
       <p id="od-text"></p>
-      <div class="btns">
-        <button class="btn default" id="od-merge">Merge into my history</button>
+      <div class="btns" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="od-merge">Add to my history</button>
         <button class="btn" id="od-replace">Replace my history</button>
         <button class="btn" id="od-cancel">Cancel</button>
       </div>
-      <p class="hint">Merge keeps everything you have and adds the trails from the file. Replace switches to the file completely (Undo can bring yours back).</p>
+      <p class="hint">“Add” keeps everything you have and adds the trails from the file. “Replace” switches to the file completely; Undo brings yours back.</p>
     </div>
   </section>
 </div>
-<div class="dropzone" id="dropzone" hidden><div>Drop a Wiki Trails history file to open it</div></div>
 
-<div class="gallery" id="gallery" hidden>
-  <section class="win" role="dialog" aria-modal="true" aria-labelledby="gal-title">
-    <div class="title"><span class="ico ico-paint"></span><span class="tt" id="gal-title">Display Properties: Skins</span><span class="tb"><i>_</i><i>□</i><i id="galclose" style="cursor:pointer">×</i></span></div>
-    <div class="gal-tools">
-      <button class="btn" id="gal-prev" title="Previous (←)">◄</button>
-      <button class="btn" id="gal-next" title="Next (→)">►</button>
-      <button class="btn" id="gal-show" title="Tour every skin">▶ Slideshow</button>
-      <button class="btn" id="gal-rand">Surprise me</button>
-      <span class="hint" style="margin:0">Hover a card to try it live · click to keep · ←/→ to flip · Esc to close</span>
-      <span class="now" id="gal-now"></span>
-      <button class="btn default" id="gal-ok">OK</button>
-    </div>
-    <div class="gal-body" id="gal-body"></div>
-  </section>
-</div>
+<div class="dropzone" id="dropzone" hidden><div>Drop a Wiki Trails history file to open it</div></div>
+<div class="toast" id="toast" role="status"></div>
+<input type="file" id="import" accept="application/json,.json" hidden>
 </body>
 </html>

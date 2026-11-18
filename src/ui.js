@@ -1,0 +1,58 @@
+// Small helpers shared by the panels.
+import { app } from './app.js';
+
+export const $ = (id) => document.getElementById(id);
+export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+export function fmtDate(t, withYear = true) {
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) });
+}
+export function fmtDateTime(t) {
+  return new Date(t).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+export function fmtAgo(t) {
+  const d = Date.now() - t;
+  if (d < 6e4) return 'just now';
+  if (d < 36e5) return `${Math.round(d / 6e4)} min ago`;
+  if (d < 864e5) return `${Math.round(d / 36e5)} h ago`;
+  const days = Math.round(d / 864e5);
+  return days < 60 ? plural(days, 'day') + ' ago' : fmtDate(t);
+}
+export const wikiUrl = (title) => `https://${app.state.lang || 'en'}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+
+let toastT;
+/** A short message at the bottom of the screen. */
+export function toast(text, ms = 2600) {
+  const el = $('toast'); if (!el || !text) return;
+  el.textContent = text; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms);
+}
+
+let actx;
+/** Optional click sound (Settings → Sound effects). */
+export function blip(mult = 1) {
+  if (!app.settings.sound) return;
+  try {
+    actx ||= new AudioContext();
+    const sd = app.skin?.sound || { wave: 'sine', f: 880 }, o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+    o.type = sd.wave; o.frequency.setValueAtTime(sd.f * mult, now); o.frequency.exponentialRampToValueAtTime(sd.f * mult * 1.5, now + .08);
+    g.gain.setValueAtTime(.05, now); g.gain.exponentialRampToValueAtTime(.0001, now + .14);
+    o.connect(g).connect(actx.destination); o.start(now); o.stop(now + .15);
+  } catch { /* audio unavailable */ }
+}
+
+/** Two-step confirm on a button: first click arms it, second click within 3 s runs fn. */
+export function confirmClick(btn, label, fn) {
+  btn.onclick = () => {
+    if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; fn(); return; }
+    btn.dataset.label = btn.textContent; btn.dataset.armed = '1'; btn.textContent = label;
+    setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; } }, 3000);
+  };
+}
+
+/** The numbered steps of a trail (side branches indented). */
+export function stepsHTML(tr, shape, { cursorId = null, clickable = true } = {}) {
+  return shape.lines.map(({ v, n, depth, side }) =>
+    `<li class="step${side ? ' side' : ''}${v.id === cursorId ? ' cur' : ''}${clickable ? '' : ' static'}" data-v="${v.id}" data-a="${esc(v.article)}" style="padding-left:${6 + depth * 16}px" title="${esc(v.article)}"><span class="n">${n}</span><span class="t">${esc(v.article)}</span></li>`).join('');
+}

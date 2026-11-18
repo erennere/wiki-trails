@@ -71,6 +71,36 @@
   --screen-shadow: none; --scanlines: none; --vignette: none; --flicker: none;
 }
 
+/* ================= PLAIN (default) ================= */
+[data-skin="plain"] {
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --font-title: var(--font-ui); --font-label: var(--font-ui); --font-size: 13.5px;
+  --title-size: 11.5px; --title-weight: 650; --title-case: uppercase; --title-spacing: .07em; --title-pad: 11px 12px 8px; --title-border: none; --label-weight: 500;
+  --desk: #f2f2f0; --fg: #1f1f1d; --muted: #75736d; --accent: #2f6fdb; --accent-fg: #fff; --line: #dedcd7; --line-soft: #ebeae6;
+  --win-bg: #ffffff; --win-bg-solid: #ffffff; --win-fg: #1f1f1d; --win-border: 1px solid #e3e2de; --win-shadow: 0 1px 2px rgba(20,20,20,.04); --win-pad: 0px; --radius: 12px;
+  --title-bg: transparent; --title-fg: #75736d;
+  --btn-bg: #ffffff; --btn-fg: #1f1f1d; --btn-border: 1px solid #dcdbd6; --btn-shadow: none; --btn-radius: 8px; --btn-pad: 5px 12px;
+  --btn-bg-active: #f0efeb; --btn-fg-active: #1f1f1d; --btn-shadow-active: none; --btn-default-outline: none; --btn-default-shadow: none;
+  --primary-bg: #2f6fdb; --primary-fg: #ffffff;
+  --field-bg: #ffffff; --field-fg: #1f1f1d; --field-border: 1px solid #dcdbd6; --field-shadow: none; --field-radius: 8px;
+  --sel-bg: #e7eefb; --sel-fg: #1a4aa6; --sel-muted: #5574b0; --hover-bg: #f3f3f0;
+  --note-bg: #f7f7f5; --note-fg: #1f1f1d; --note-border: 1px solid #ebeae6;
+  --screen-bg: #fbfbfa; --screen-shadow: none; --screen-radius: 10px; --scanlines: none; --vignette: none; --flicker: none; --path-before: #2563d9; --path-after: #e8641c;
+  --link: #66789a; --label: #2a2a28; --label-bg: #fbfbfa; --label-start: #1f1f1d; --cursor: #e07a2f; --hub-lo: #d3d8e0; --hub-hi: #38404d;
+  --lane-dash: 6 6; --lane-speed: 1s; --empty-glow: none;
+}
+[data-skin="plain"][data-theme="dark"] {
+  --desk: #111113; --fg: #e8e8ea; --muted: #9b9ba3; --accent: #7aa2f7; --accent-fg: #0d1322; --line: #34343a; --line-soft: #2a2a2f;
+  --win-bg: #1a1a1d; --win-bg-solid: #1a1a1d; --win-fg: #e8e8ea; --win-border: 1px solid #2a2a2f; --win-shadow: none;
+  --title-fg: #9b9ba3;
+  --btn-bg: #232327; --btn-fg: #e8e8ea; --btn-border: 1px solid #36363c; --btn-bg-active: #2c2c31; --btn-fg-active: #e8e8ea;
+  --primary-bg: #7aa2f7; --primary-fg: #0d1322;
+  --field-bg: #141416; --field-fg: #e8e8ea; --field-border: 1px solid #36363c;
+  --sel-bg: #243150; --sel-fg: #d3e1ff; --sel-muted: #9fb3dc; --hover-bg: #232327;
+  --note-bg: #202024; --note-fg: #e8e8ea; --note-border: 1px solid #2a2a2f;
+  --screen-bg: #141416; --path-before: #6ea0ff; --path-after: #ff9a4d;
+  --link: #8a9cc0; --label: #e2e2e6; --label-bg: #141416; --label-start: #ffffff; --cursor: #f0a35e; --hub-lo: #3b404a; --hub-hi: #d9dee7;
+}
+
 /* ================= RETRO COMPUTING ================= */
 [data-skin="desktop95"] { }
 
@@ -425,154 +455,20 @@
 }
 
 /* =====================================================================
-   App-only extras (signature details; not shown in gallery previews)
+   Small signature details per skin (app only; not in gallery previews)
    ===================================================================== */
-/* terminal chrome: list boxes */
-html[data-chrome="terminal"] .listview, html[data-chrome="terminal"] #crumbs { box-shadow: none; border: 1px dashed var(--line-soft); }
-
-/* Mono '91 */
-html[data-skin="mono91"] .title .ico { display: none; }
-html[data-skin="mono91"] .title .tt { background: #fff; padding: 0 8px; position: relative; }
-html[data-skin="mono91"] .win > .title::before { content: ''; position: absolute; left: 8px; top: 3px; width: 11px; height: 11px; background: #fff; box-shadow: 0 0 0 1px #000, 0 0 0 3px #fff; }
-html[data-skin="mono91"] .dialog .title .x { position: absolute; left: 6px; top: 2px; width: 13px; height: 13px; font-size: 0; background: #fff; box-shadow: 0 0 0 1px #000; }
-html[data-skin="mono91"] .taskbar { order: -1; height: 26px; padding: 0 8px; }
-html[data-skin="mono91"] .taskbar .start { box-shadow: none; border: none; font-size: 0; padding: 2px 10px; min-width: 0; }
-html[data-skin="mono91"] .taskbar .start .flag { width: 15px; height: 15px; background: conic-gradient(#61bb46 0 16%, #fdb827 0 33%, #f5821f 0 50%, #e03a3e 0 66%, #963d97 0 83%, #009ddc 0); border-radius: 50% 50% 45% 45%; }
-html[data-skin="mono91"] .startmenu { top: 26px; bottom: auto; }
-html[data-skin="mono91"] .startmenu .side { display: none; }
-html[data-skin="mono91"] .task { box-shadow: none; border: none; width: auto; }
-html[data-skin="mono91"] .task .ico { display: none; }
-html[data-skin="mono91"] #boot { display: grid; place-items: center; }
-html[data-skin="mono91"] #boot pre { font: 16px/1.6 'Pixelify Sans', sans-serif; text-align: center; padding: 26px 40px; box-shadow: 0 0 0 1px #000, 2px 2px 0 1px #000; }
-
-/* Amber */
-html[data-skin="amber"] body { text-shadow: 0 0 4px rgba(255,176,0,.55); }
-html[data-skin="amber"] body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50; background: repeating-linear-gradient(0deg, rgba(0,0,0,.3) 0 1px, transparent 1px 3px), radial-gradient(ellipse, transparent 60%, rgba(0,0,0,.6)); }
-html[data-skin="amber"] .title .ico, html[data-skin="amber"] .it .ico, html[data-skin="amber"] .task .ico, html[data-skin="amber"] .taskbar .flag { display: none; }
-html[data-skin="amber"] .title .tt::before { content: '═[■]═ '; }
-html[data-skin="amber"] .taskbar .start::before { content: 'F1 '; }
-html[data-skin="amber"] .taskbar .start::after { content: ''; }
-
-/* Vector arcade */
-html[data-skin="vector"] body { text-shadow: 0 0 6px rgba(207,239,255,.5); }
-html[data-skin="vector"] .title .ico, html[data-skin="vector"] .it .ico, html[data-skin="vector"] .task .ico { display: none; }
-html[data-skin="vector"] .banner { font-family: 'Major Mono Display', monospace; border-color: #ff5ad6; color: #ff5ad6; background: #000; box-shadow: 0 0 14px #ff5ad6; }
-
-/* Teletext */
-html[data-skin="teletext"] .title { line-height: 1; transform-origin: left; }
-html[data-skin="teletext"] .title .ico { display: none; }
-html[data-skin="teletext"] .title .tt::before { content: 'P' attr(data-page) ' '; color: #fff; }
-html[data-skin="teletext"] .btns .btn:nth-child(1) { background: #ff0000; color: #fff; }
-html[data-skin="teletext"] .btns .btn:nth-child(2) { background: #00ff00; color: #000; }
-html[data-skin="teletext"] .btns .btn:nth-child(3) { background: #ffff00; color: #000; }
-html[data-skin="teletext"] .btns .btn:nth-child(4) { background: #00ffff; color: #000; }
-html[data-skin="teletext"] .btns .btn { --btn-pre: ''; --btn-post: ''; padding: 2px 10px; }
-html[data-skin="teletext"] .ticker { background: #0000ff; color: #ffff00; }
-
-/* 8-bit home computer */
-html[data-skin="homecomputer"] .desk { padding: 26px; }
-html[data-skin="homecomputer"] .title .ico, html[data-skin="homecomputer"] .it .ico, html[data-skin="homecomputer"] .task .ico { display: none; }
-html[data-skin="homecomputer"] #boot { background: repeating-linear-gradient(0deg, #6c5eb5 0 9px, #eeee77 9px 15px, #a59cf2 15px 24px, #ff7777 24px 30px, #352879 30px 38px); animation: tape .18s steps(3) infinite; padding: 40px; }
-html[data-skin="homecomputer"] #boot pre { background: #352879; height: 100%; padding: 22px; font: 14px/2 'Press Start 2P', monospace; text-transform: uppercase; }
-@keyframes tape { to { background-position: 0 38px; } }
-
-/* Holo HUD: corner brackets */
-html[data-skin="holo"] .win, html[data-skin="holo"] .dialog { position: relative; }
-html[data-skin="holo"] .win::after { content: ''; position: absolute; inset: -5px; pointer-events: none;
-  background: linear-gradient(#4df3ff, #4df3ff) 0 0 / 16px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 0 0 / 2px 16px no-repeat,
-    linear-gradient(#4df3ff, #4df3ff) 100% 0 / 16px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 100% 0 / 2px 16px no-repeat,
-    linear-gradient(#4df3ff, #4df3ff) 0 100% / 16px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 0 100% / 2px 16px no-repeat,
-    linear-gradient(#4df3ff, #4df3ff) 100% 100% / 16px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 100% 100% / 2px 16px no-repeat; }
-html[data-skin="holo"] .title .ico, html[data-skin="holo"] .it .ico, html[data-skin="holo"] .task .ico { display: none; }
-html[data-skin="holo"] .title .tt::before { content: '◢ '; color: #ffcf4d; }
-html[data-skin="holo"] .banner { border-color: #4df3ff; color: #4df3ff; background: rgba(1,7,13,.85); letter-spacing: 3px; }
-
-/* Star chart / Bio / Latent / Training / minimal: hide pixel icons */
-html:is([data-skin="starchart"], [data-skin="bioneural"], [data-skin="latent"], [data-skin="training"], [data-skin="swiss"], [data-skin="midnight"], [data-skin="zen"], [data-skin="sentinel"]) :is(.title .ico, .it .ico, .task .ico) { display: none; }
-html:is([data-skin="latent"], [data-skin="swiss"], [data-skin="midnight"], [data-skin="zen"], [data-skin="training"]) .taskbar .flag { display: none; }
-html[data-skin="training"] #spark polyline { fill: none; stroke: #3fb950; stroke-width: 1.5; }
-html[data-skin="training"] #spark { font-size: 11px; color: #8b949e; }
-
-/* Sentinel */
-html[data-skin="sentinel"] body { text-shadow: 0 0 4px rgba(255,59,59,.35); }
-html[data-skin="sentinel"] .banner { border-color: #ff3b3b; color: #ff3b3b; background: #000; }
-
-/* Aqua */
-html[data-skin="aqua"] .btn.default { background: linear-gradient(#a8d8ff, #4fa3f7 50%, #2f86ea 51%, #7cc0ff); color: #03284f; }
-html[data-skin="aqua"] .title .ico { display: none; }
-
-/* Y2K chrome */
-html[data-skin="chrome"] .btn.default { background: linear-gradient(90deg, #7ef9ff, #b388ff, #ff8ad8); }
-html[data-skin="chrome"] .toast { font-family: 'Michroma', sans-serif; color: #fff; text-shadow: 0 0 12px #b388ff, 0 0 24px #7ef9ff; }
-
-/* GeoCities */
-html[data-skin="geocities"] .title { background-size: 300% 100%; animation: rainbow 4s linear infinite; }
+html[data-chrome="terminal"] .list, html[data-chrome="terminal"] .steps:not(:empty) { border: 1px dashed var(--line-soft); }
+html[data-skin="amber"] body { text-shadow: 0 0 4px rgba(255,176,0,.5); }
+html[data-skin="vector"] body { text-shadow: 0 0 6px rgba(207,239,255,.45); }
+html[data-skin="sentinel"] body { text-shadow: 0 0 4px rgba(255,59,59,.3); }
+html[data-skin="geocities"] .panel-head { background-size: 300% 100%; animation: rainbow 4s linear infinite; }
 @keyframes rainbow { to { background-position: 300% 0; } }
-html[data-skin="geocities"] .ticker { background: #ff00ff; color: #ffff00; font: 700 15px 'Comic Neue', cursive; }
-html[data-skin="geocities"] .statusbar span:last-child { background: #000; color: #00ff00; font-family: 'VT323', monospace; font-size: 17px; }
-html[data-skin="geocities"] #qlabel { animation: cblink 1.2s steps(1) infinite; }
-
-/* Media player */
-html[data-skin="mediaplayer"] #w-brain { border-radius: 34px 12px 34px 12px; }
-html[data-skin="mediaplayer"] #w-builder { border-radius: 12px 30px 12px 30px; }
-html[data-skin="mediaplayer"] #w-trails { border-radius: 30px 12px 12px 12px; }
-html[data-skin="mediaplayer"] #eq { gap: 2px; height: 18px; align-items: flex-end; padding: 0 6px; }
-html[data-skin="mediaplayer"] #eq i { width: 4px; background: linear-gradient(#ffcc00, #00ff66); animation: eq .6s ease-in-out infinite alternate; transform-origin: bottom; }
-@keyframes eq { from { transform: scaleY(.25); } }
-
-/* 16-bit RPG */
-html[data-skin="rpg16"] :is(.tr.active, .tr.pinned, .tr:hover, .it:hover) { position: relative; }
-html[data-skin="rpg16"] :is(.tr.active, .tr.pinned, .tr:hover)::before, html[data-skin="rpg16"] .it:hover::before { content: '▶'; color: #fff; margin-right: 4px; animation: cblink .8s steps(1) infinite; }
-html[data-skin="rpg16"] .title .ico, html[data-skin="rpg16"] .it .ico, html[data-skin="rpg16"] .task .ico { display: none; }
-html[data-skin="rpg16"] .banner { background: linear-gradient(#3048d8, #0b1470); color: #fff; border: 3px solid #fff; border-radius: 6px; box-shadow: 0 0 0 2px #1a1a2a; font-family: 'Pixelify Sans', sans-serif; }
-
-/* Handheld */
-html[data-skin="handheld"] .title { font-style: italic; }
-html[data-skin="handheld"] .title .ico, html[data-skin="handheld"] .it .ico, html[data-skin="handheld"] .task .ico { display: none; }
-html[data-skin="handheld"] .win { border-radius: 8px 8px 28px 8px; }
-html[data-skin="handheld"] .body, html[data-skin="handheld"] .list-body, html[data-skin="handheld"] .dialog .inner { background: #9bbc0f; border-radius: 3px; box-shadow: inset 0 0 0 3px #5f5a6e; padding: 14px; }
-html[data-skin="handheld"] .lane-glow { display: none; }
-
-/* Polygon era: wobbly vertices */
-html[data-skin="polygon"] .nodes, html[data-skin="polygon"] .links { animation: jitter .4s steps(1) infinite; }
-@keyframes jitter { 0% { transform: translate(0, 0); } 33% { transform: translate(.7px, -.5px); } 66% { transform: translate(-.5px, .6px); } }
-html[data-skin="polygon"] .title .ico { display: none; }
-
-/* Fighter select: trail tiles + VS splash */
-html[data-skin="fighter"] .listview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; align-content: start; }
-html[data-skin="fighter"] .tr { flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; border: 2px solid #5a4a00; border-radius: 0; min-height: 64px; background: linear-gradient(#222, #0a0a0a); }
-html[data-skin="fighter"] .tr .sw { width: 100%; height: 6px; }
-html[data-skin="fighter"] .tr .nm { white-space: normal; font-size: 12px; font-weight: 700; line-height: 1.1; }
-html[data-skin="fighter"] .tr .mt { font-size: 10px; }
-html[data-skin="fighter"] .tr .ic { display: none; }
-html[data-skin="fighter"] .tr.active, html[data-skin="fighter"] .tr.pinned, html[data-skin="fighter"] .tr:hover { border-color: #ffde00; }
-html[data-skin="fighter"] .banner { font: 22px 'Bungee', sans-serif; color: #ffde00; background: none; border: none; text-shadow: 3px 3px 0 #c40000, 0 0 20px #ff3d00; top: 20px; }
-html[data-skin="fighter"] .title .ico { display: none; }
-
-/* Overworld */
-html[data-skin="overworld"] .title .ico { display: none; }
-html[data-skin="overworld"] .link { stroke-linecap: round; }
-html[data-skin="overworld"] .banner { background: #f4e4bc; color: #3b2410; border: 3px solid #7a4a1c; border-radius: 6px; font-family: 'Pixelify Sans', sans-serif; }
-
-/* Outrun */
-html[data-skin="outrun"] .title .tb i { width: 14px; height: 14px; font-size: 9px; }
-html[data-skin="outrun"] .banner { font-family: 'Orbitron', sans-serif; border-color: #ff2fd0; color: #fff200; background: rgba(18,0,42,.9); box-shadow: 0 0 16px #ff2fd0; }
-
-/* Vaporwave */
-html[data-skin="vaporwave"] .title .tt { letter-spacing: .15em; }
-html[data-skin="vaporwave"] .lane-flow { animation-duration: 1.2s; }
-
-/* Neon rain: hazard tape + glitch */
-html[data-skin="neonrain"] .title .tt { background: #fcee0a; padding: 1px 8px; animation: glitch 3.5s infinite steps(1); }
-html[data-skin="neonrain"] .title .ico { display: none; }
-@keyframes glitch { 0%, 92%, 100% { text-shadow: none; transform: none; } 93% { text-shadow: 2px 0 #ff003c, -2px 0 #00f0ff; transform: translateX(1px); } 95% { text-shadow: -2px 0 #ff003c, 2px 0 #00f0ff; transform: translateX(-1px); } }
-html[data-skin="neonrain"] .banner { border-color: #ff003c; color: #fcee0a; background: #000; font-family: 'Orbitron', sans-serif; }
-
-/* Swiss */
-html[data-skin="swiss"] .btn.default { background: #e30613; color: #fff; border-color: #e30613; }
-html[data-skin="swiss"] .title { border-bottom-width: 2px; }
-
-/* Zen: a red seal on the graph window */
-html[data-skin="zen"] #w-brain .title::after { content: '道'; margin-left: 10px; width: 22px; height: 22px; display: grid; place-items: center; background: #b7282e; color: #fbf8f1; font: 700 13px 'Shippori Mincho', serif; border-radius: 3px; }
-html[data-skin="zen"] .link { stroke-linecap: round; }
-html[data-skin="zen"] .lane-glow { display: none; }
+html[data-skin="neonrain"] .panel-head .grow { background: #fcee0a; padding: 1px 8px; flex: 0 1 auto; margin-right: auto; }
+html[data-skin="handheld"] .panel-head { font-style: italic; }
+html[data-skin="swiss"] .panel-head { border-bottom: 2px solid #111; }
+html[data-skin="zen"] #center .panel-head::after { content: '道'; }
+html[data-skin="holo"] .panel { position: relative; }
+html[data-skin="holo"] .panel::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(#4df3ff, #4df3ff) 0 0 / 14px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 0 0 / 2px 14px no-repeat,
+    linear-gradient(#4df3ff, #4df3ff) 100% 100% / 14px 2px no-repeat, linear-gradient(#4df3ff, #4df3ff) 100% 100% / 2px 14px no-repeat; }
+@media (prefers-reduced-motion: reduce) { html[data-skin="geocities"] .panel-head { animation: none; } }

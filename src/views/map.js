@@ -53,7 +53,7 @@ export function createGraph(canvas, handlers) {
   let W = 1, H = 1, dpr = 1;
   let T = d3.zoomIdentity, ax = 1, ay = 1, kFit = 1;
   const zr = () => T.k / kFit; // zoom relative to the fitted overview
-  const style = { link: '#39ff88', label: '#c6ffd8', labelBg: '#010a04', labelStart: '#fff', cursor: '#ffaa00', font: 'monospace', weight: '400', upper: false };
+  const style = { link: '#39ff88', label: '#c6ffd8', labelBg: '#010a04', labelStart: '#fff', cursor: '#ffaa00', before: '#4da3ff', after: '#ffaa00', font: 'monospace', weight: '400', upper: false };
   let skin = { shape: 'square', hollow: false, glow: true, edge: 'plain', bend: 0.12, labelSize: 15, walker: false };
   const view = { density: 1, fade: true, focus: null };
 
@@ -243,8 +243,8 @@ export function createGraph(canvas, handlers) {
       if (d) { ctx.globalAlpha = 0.95; ctx.strokeStyle = style.labelStart; ctx.lineWidth = d.w + 2.5; ctx.beginPath(); ctx.moveTo(d.x1, d.y1); ctx.quadraticCurveTo(d.cx, d.cy, d.x2, d.y2); ctx.stroke(); major.add(d.l.a); major.add(d.l.b); }
     }
 
-    // 2. highlight lanes
-    if (over) drawLanes(now, rs);
+    // 2. the selected trails, as gradients
+    if (over) drawPaths(rs);
 
     // 3. articles: important ones as shapes, the rest as faint dots
     const nodeBudget = Math.round(160 * view.density * Math.min(12, Math.max(1, k * k)));
@@ -272,7 +272,16 @@ export function createGraph(canvas, handlers) {
         ctx.fillStyle = col; ctx.fill(p);
         ctx.strokeStyle = n.isStart ? style.labelStart : style.labelBg; ctx.lineWidth = n.isStart ? 2 : 1; ctx.stroke(p);
       }
-      if (n.title === hoverNode || n.title === over?.focus) { ctx.globalAlpha = 1; ctx.strokeStyle = style.labelStart; ctx.lineWidth = 2.5; ctx.stroke(shapeP2D(skin.shape, r + 3)); }
+      if (over && isLit) {
+        ctx.globalAlpha = 1;
+        if (over.ends.has(n.title)) { ctx.strokeStyle = style.after; ctx.lineWidth = 2.5; ctx.stroke(shapeP2D(skin.shape, r + 3.5)); }
+        if (over.starts.has(n.title)) { ctx.strokeStyle = style.before; ctx.lineWidth = 2.5; ctx.stroke(shapeP2D(skin.shape, r + (over.ends.has(n.title) ? 7 : 3.5))); }
+        if (n.title === over.anchor) {
+          ctx.globalAlpha = 0.18; ctx.fillStyle = style.labelStart; ctx.fill(shapeP2D(skin.shape, r + 11));
+          ctx.globalAlpha = 1; ctx.strokeStyle = style.labelStart; ctx.lineWidth = 3; ctx.stroke(shapeP2D(skin.shape, r + 6));
+        }
+      }
+      if (n.title === hoverNode) { ctx.globalAlpha = 1; ctx.strokeStyle = style.labelStart; ctx.lineWidth = 2; ctx.stroke(shapeP2D(skin.shape, r + 3)); }
       if (n.title === cursor && Math.floor(now / 500) % 2 === 0) { ctx.globalAlpha = 1; ctx.strokeStyle = style.cursor; ctx.lineWidth = 3; ctx.setLineDash([4, 3]); ctx.stroke(shapeP2D(skin.shape, r + 5)); ctx.setLineDash([]); }
       ctx.restore();
     }
@@ -299,44 +308,50 @@ export function createGraph(canvas, handlers) {
   function lanePath(lane, extra) {
     const A = nodeBy.get(lane.from), B = nodeBy.get(lane.to);
     if (!A || !B) return null;
-    // same curve as the base connection (control point computed in a→b order), with a sideways offset per lane
+    // same curve as the base connection (control point computed in a→b order), with a small sideways offset per trail
     const [pa, pb] = lane.from < lane.to ? [A, B] : [B, A];
     const x1 = sx(pa.x), y1 = sy(pa.y), x2 = sx(pb.x), y2 = sy(pb.y);
     const [cx, cy] = ctrlPt(x1, y1, x2, y2, extra);
     return lane.from < lane.to ? [x1, y1, cx, cy, x2, y2] : [x2, y2, cx, cy, x1, y1];
   }
-  function drawLanes(now, rs) {
-    const off = -(now / 35) % 12;
-    for (const lane of over.lanes) {
-      const p = lanePath(lane, lane.extra);
+  /** Colour along a trail: blue on the way in (deepest next to the clicked page), orange afterwards (fading with distance). */
+  function rampColor(p, mode) {
+    if (mode === 'trail') return d3.interpolateRgb(style.before, style.after)(p);
+    if (p <= 0.5) return d3.interpolateRgb(style.labelBg, style.before)(0.28 + 0.72 * (p / 0.5));
+    return d3.interpolateRgb(style.labelBg, style.after)(0.28 + 0.72 * (1 - (p - 0.5) / 0.5));
+  }
+  function drawPaths(rs) {
+    const arrows = over.segs.length < 500;
+    ctx.lineCap = 'round'; ctx.setLineDash([]);
+    for (const s of over.segs) {
+      const p = lanePath(s, s.extra);
       if (!p) continue;
-      const [x1, y1, cx, cy, x2, y2] = p, col = lane.color, w = (1.4 + 1.1 * Math.log2(1 + lane.count)) * Math.min(1.4, rs);
-      ctx.strokeStyle = col;
-      if (over.lanes.length < 400) { ctx.globalAlpha = 0.22; ctx.lineWidth = w * 3.5; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, x2, y2); ctx.stroke(); }
-      ctx.globalAlpha = 0.95; ctx.lineWidth = w; ctx.setLineDash(style.laneDash ? [6, 6] : []); ctx.lineDashOffset = off;
+      const [x1, y1, cx, cy, x2, y2] = p;
+      const g = ctx.createLinearGradient(x1, y1, x2, y2);
+      g.addColorStop(0, s.c0); g.addColorStop(1, s.c1);
+      const w = (0.9 + 3.6 * s.rec) * Math.min(1.5, rs);
+      ctx.globalAlpha = 0.28 + 0.67 * s.rec; ctx.strokeStyle = g; ctx.lineWidth = w;
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, x2, y2); ctx.stroke();
-      // arrow head along the curve
-      const u = 0.58, mx = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, my = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
-      const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy), an = Math.atan2(ty, tx);
-      ctx.save(); ctx.translate(mx, my); ctx.rotate(an); ctx.fillStyle = col; ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-5, -4.5); ctx.lineTo(-5, 4.5); ctx.closePath(); ctx.fill(); ctx.restore();
+      if (arrows && s.rec > 0.2 && Math.hypot(x2 - x1, y2 - y1) > 40) {
+        const u = 0.6, mx = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, my = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
+        const tx = 2 * (1 - u) * (cx - x1) + 2 * u * (x2 - cx), ty = 2 * (1 - u) * (cy - y1) + 2 * u * (y2 - cy), a = 3 + w;
+        ctx.save(); ctx.translate(mx, my); ctx.rotate(Math.atan2(ty, tx)); ctx.fillStyle = s.c1;
+        ctx.beginPath(); ctx.moveTo(a, 0); ctx.lineTo(-a * 0.8, -a * 0.7); ctx.lineTo(-a * 0.8, a * 0.7); ctx.closePath(); ctx.fill(); ctx.restore();
+      }
     }
-    ctx.setLineDash([]); ctx.lineDashOffset = 0;
     if (over.edgeKey) {
-      const d = drawn.find((e) => e.l.key === over.edgeKey) || (() => {
-        const [a, b] = over.edgeKey.split('\u0000'); const A = nodeBy.get(a), B = nodeBy.get(b); if (!A || !B) return null;
-        const x1 = sx(A.x), y1 = sy(A.y), x2 = sx(B.x), y2 = sy(B.y), [cx, cy] = ctrlPt(x1, y1, x2, y2); return { x1, y1, cx, cy, x2, y2, w: 3 };
-      })();
-      if (d) {
-        ctx.strokeStyle = style.cursor; ctx.globalAlpha = 0.35; ctx.lineWidth = d.w + 12; ctx.beginPath(); ctx.moveTo(d.x1, d.y1); ctx.quadraticCurveTo(d.cx, d.cy, d.x2, d.y2); ctx.stroke();
-        ctx.globalAlpha = 1; ctx.lineWidth = d.w + 3; ctx.stroke();
+      const [a, b] = over.edgeKey.split('\u0000'); const A = nodeBy.get(a), B = nodeBy.get(b);
+      if (A && B) {
+        const x1 = sx(A.x), y1 = sy(A.y), x2 = sx(B.x), y2 = sy(B.y), [cx, cy] = ctrlPt(x1, y1, x2, y2);
+        ctx.strokeStyle = style.labelStart; ctx.globalAlpha = 0.25; ctx.lineWidth = 14;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, x2, y2); ctx.stroke();
       }
     }
   }
   function drawWalker(now) {
     const steps = over.walk, dur = Math.max(4000, steps.length * 1100), ph = (now % dur) / dur * steps.length;
     const i = Math.floor(ph), u = ph - i, st = steps[i];
-    const p = lanePath({ from: st.from, to: st.to }, 0); if (!p) return;
+    const p = lanePath(st, st.extra); if (!p) return;
     const [x1, y1, cx, cy, x2, y2] = p;
     const x = (1 - u) ** 2 * x1 + 2 * (1 - u) * u * cx + u * u * x2, y = (1 - u) ** 2 * y1 + 2 * (1 - u) * u * cy + u * u * y2;
     ctx.save(); ctx.translate(x, y - 4); ctx.globalAlpha = 1; ctx.fillStyle = style.cursor; ctx.strokeStyle = style.labelBg; ctx.lineWidth = 1.5;
@@ -347,10 +362,10 @@ export function createGraph(canvas, handlers) {
     const size = skin.labelSize || 14;
     const font = `${style.weight} ${size}px ${style.font}`;
     ctx.font = font; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-    const limit = Math.round(26 * view.density * Math.min(8, Math.max(1, Math.pow(k, 1.15)))) + (lit ? 30 : 0);
+    const limit = Math.round(26 * view.density * Math.min(8, Math.max(1, Math.pow(k, 1.15)))) + (lit ? 24 : 0);
     const cands = shown
       .filter(([n]) => !lit || lit.has(n.title))
-      .map(([n, x, y]) => [n, x, y, (n.title === cursor || n.title === hoverNode || n.title === over?.focus ? 1e9 : 0) + n.visits * (1 + 0.5 * (n.isStart ? 1 : 0))])
+      .map(([n, x, y]) => [n, x, y, (n.title === cursor || n.title === hoverNode ? 1e9 : 0) + (over?.prio.get(n.title) || 0) + n.visits * (1 + 0.5 * (n.isStart ? 1 : 0))])
       .sort((p, q) => q[3] - p[3]);
     const placed = [];
     let count = 0;
@@ -368,9 +383,12 @@ export function createGraph(canvas, handlers) {
   }
 
   /* ---------- frame loop ---------- */
-  function animating() { return simLeft > 0 || !!over || !!cursor || skin.edge === 'pulse'; }
+  function animating() { return simLeft > 0 || !!cursor || skin.edge === 'pulse' || !!(over?.walk && skin.walker); }
+  let paused = false;
+  function pause(p) { paused = p; if (!p) { dirty = true; kick(); } }
   function frame(now) {
     raf = 0;
+    if (paused) { simSlice(); if (simLeft > 0) raf = requestAnimationFrame(frame); return; }
     simSlice();
     const interactive = now - lastInteract < 400 || simLeft > 0;
     if (dirty || (animating() && (interactive || now - lastFrame > 33))) { const t0 = performance.now(); draw(now); drawMs = drawMs * 0.8 + (performance.now() - t0) * 0.2; dirty = false; lastFrame = now; }
@@ -468,27 +486,33 @@ export function createGraph(canvas, handlers) {
   canvas.addEventListener('dblclick', (e) => { const n = nodeAt(...pos(e)); if (n) handlers.onDblClick?.(n.title); });
 
   /* ---------- highlight ---------- */
-  // spec: { steps:[{trailId, from, to, order}], colorOf(trailId), numbers?: Map, focus?: title, edgeKey?: key }
+  // spec: { mode: 'anchor' | 'trail', paths: [{ trailId, segs: [{from, to, p0, p1}], t, rec }], anchor?, edgeKey?, numbers? }
   function setHighlight(spec) {
     if (!spec) { over = null; dirty = true; kick(); return; }
-    const trails = new Set(spec.steps.map((s) => s.trailId));
-    const mono = trails.size > 24;   // too many trails to colour individually: show one calm colour, width = how often
-    const lanes = new Map();
-    for (const s of spec.steps) {
-      const pk = s.from < s.to ? s.from + '\u0000' + s.to : s.to + '\u0000' + s.from;
-      const key = mono ? `${pk}|${s.from}` : `${pk}|${s.trailId}|${s.from}`;
-      if (!lanes.has(key)) lanes.set(key, { pk, trailId: s.trailId, from: s.from, to: s.to, count: 0 });
-      lanes.get(key).count++;
+    const paths = [...(spec.paths || [])].sort((p, q) => p.t - q.t); // oldest first, so recent trails are drawn on top
+    const perPair = new Map(), segs = [];
+    for (const p of paths) for (const sg of p.segs) {
+      const pk = sg.from < sg.to ? sg.from + '\u0000' + sg.to : sg.to + '\u0000' + sg.from;
+      const idx = perPair.get(pk) || 0; perPair.set(pk, idx + 1);
+      segs.push({ ...sg, pk, idx, rec: p.rec, trailId: p.trailId });
     }
-    const byPair = d3.group([...lanes.values()], (l) => l.pk);
-    const list = [];
-    for (const [, arr] of byPair) arr.forEach((l, i) => list.push({ ...l, extra: (i - (arr.length - 1) / 2) * Math.min(6, 30 / arr.length), color: mono ? style.cursor : spec.colorOf(l.trailId) }));
-    list.sort((p, q) => q.count - p.count);
-    const capped = list.slice(0, 900);
-    const ns = new Set(capped.flatMap((l) => [l.from, l.to]));
-    if (spec.focus) ns.add(spec.focus);
-    if (spec.edgeKey) for (const t of spec.edgeKey.split('\u0000')) ns.add(t);
-    over = { ...spec, lanes: capped, nodes: ns, walk: spec.numbers ? [...spec.steps].sort((p, q) => p.order - q.order) : null };
+    for (const sg of segs) {
+      const n = perPair.get(sg.pk);
+      sg.extra = (sg.idx - (n - 1) / 2) * Math.min(4, 24 / n);
+      sg.c0 = rampColor(sg.p0, spec.mode); sg.c1 = rampColor(sg.p1, spec.mode);
+    }
+    const nodes = new Set(), starts = new Set(), ends = new Set(), prio = new Map();
+    for (const p of spec.paths || []) {
+      if (!p.segs.length) continue;
+      const froms = new Set(p.segs.map((sg) => sg.from)), tos = new Set(p.segs.map((sg) => sg.to));
+      for (const sg of p.segs) { nodes.add(sg.from); nodes.add(sg.to); if (!tos.has(sg.from)) starts.add(sg.from); if (!froms.has(sg.to)) ends.add(sg.to); }
+    }
+    if (spec.anchor) nodes.add(spec.anchor);
+    if (spec.edgeKey) for (const t of spec.edgeKey.split('\u0000')) nodes.add(t);
+    for (const t of starts) prio.set(t, 1e6);
+    for (const t of ends) prio.set(t, (prio.get(t) || 0) + 1e5);
+    if (spec.anchor) prio.set(spec.anchor, 1e9);
+    over = { ...spec, spec, segs, nodes, starts, ends, prio, walk: spec.mode === 'trail' ? [...segs].sort((p, q) => p.p0 - q.p0) : null };
     dirty = true; kick();
   }
   function setCursor(t) { cursor = t; dirty = true; kick(); }
@@ -499,14 +523,14 @@ export function createGraph(canvas, handlers) {
     style.link = v('--link', style.link); style.label = v('--label', style.label); style.labelBg = v('--label-bg', style.labelBg);
     style.labelStart = v('--label-start', style.labelStart); style.cursor = v('--cursor', style.cursor);
     style.font = v('--font-label', 'monospace'); style.weight = v('--label-weight', '400'); style.upper = v('--label-case', 'none') === 'uppercase';
-    style.laneDash = v('--lane-dash', '6 6') !== 'none';
+    style.before = v('--path-before', '#4da3ff'); style.after = v('--path-after', style.cursor);
   }
   function setPalette(s) {
     skin = { shape: 'square', hollow: false, glow: true, edge: 'plain', bend: 0.12, labelSize: 14, walker: false, ...s };
     HUB = d3.interpolateRgbBasis(s.hub);
     TRAIL_COLORS.splice(0, TRAIL_COLORS.length, ...s.trails);
     readStyle();
-    if (over) setHighlight(over);
+    if (over) setHighlight(over.spec);
     dirty = true; kick();
     // web fonts may arrive later: re-measure once they do
     document.fonts?.ready.then(() => { textW.clear(); dirty = true; kick(); });
@@ -537,10 +561,14 @@ export function createGraph(canvas, handlers) {
   function fit(animate = true) {
     const b = coreBox(visNodes.length ? visNodes : nodes); if (!b) return;
     const padX = 70, padY = 40, vw = Math.max(50, W - padX * 2 - 60), vh = Math.max(50, H - padY * 2);
-    const bw = Math.max(1, b[2] - b[0]), bh = Math.max(1, b[3] - b[1]);
+    // a tiny map (one or two articles) shouldn't be blown up to fill the window
+    let bw = b[2] - b[0], bh = b[3] - b[1];
+    if (bw < 240) { b[0] -= (240 - bw) / 2; b[2] += (240 - bw) / 2; bw = 240; }
+    if (bh < 160) { b[1] -= (160 - bh) / 2; b[3] += (160 - bh) / 2; bh = 160; }
     const want = (vw / vh) / (bw / bh);
-    if (want >= 1) { ax = Math.min(2.4, want); ay = 1; } else { ax = 1; ay = Math.min(2.4, 1 / want); }
-    const k = Math.min(vw / (bw * ax), vh / (bh * ay));
+    const maxStretch = visNodes.length < 30 ? 1 : visNodes.length < 120 ? 1.6 : 2.4; // only big maps get stretched to the window's shape
+    if (want >= 1) { ax = Math.min(maxStretch, want); ay = 1; } else { ax = 1; ay = Math.min(maxStretch, 1 / want); }
+    const k = Math.max(0.08, Math.min(24, Math.min(vw / (bw * ax), vh / (bh * ay))));
     kFit = k;
     const t = d3.zoomIdentity.translate(W / 2 - 30 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
     (animate ? sel.transition().duration(550) : sel).call(zoom.transform, t);
@@ -553,10 +581,30 @@ export function createGraph(canvas, handlers) {
     const t = d3.zoomIdentity.translate(padLeft + (W - padLeft) / 2 - 40 - k * ax * (b[0] + b[2]) / 2, H / 2 - k * ay * (b[1] + b[3]) / 2).scale(k);
     sel.transition().duration(600).call(zoom.transform, t);
   }
+  /** Zoom out just enough (never in) that these articles are on screen, keeping what you see now in view. */
+  function reveal(titles) {
+    const list = [...titles].map((t) => nodeBy.get(t)).filter((n) => n && Number.isFinite(n.x)); if (!list.length) return;
+    const m = 50, mR = 160; // labels run to the right of their dot, and the zoom buttons sit there too
+    if (!list.some((n) => { const x = sx(n.x), y = sy(n.y); return x < m || x > W - mR || y < m || y > H - m; })) return;
+    let x0 = (m - T.x) / (T.k * ax), x1 = (W - mR - T.x) / (T.k * ax), y0 = (m - T.y) / (T.k * ay), y1 = (H - m - T.y) / (T.k * ay);
+    for (const n of list) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
+    const k = Math.max(0.08, Math.min(T.k, (W - m - mR) / ((x1 - x0) * ax), (H - 2 * m) / ((y1 - y0) * ay)));
+    const t = d3.zoomIdentity.translate(m + (W - m - mR) / 2 - k * ax * (x0 + x1) / 2, H / 2 - k * ay * (y0 + y1) / 2).scale(k);
+    sel.transition().duration(500).call(zoom.transform, t);
+  }
   function settleAndFit() {
     // small graphs settle instantly; big ones settle in slices and fit when done
     if (simLeft > 0 && nodes.length < 400) { while (simLeft > 0) { sim.tick(); simLeft--; } simSlice(0); }
     fit(false);
+  }
+  /** Pan (without zooming) so an article is comfortably inside the window. */
+  function ensureVisible(title) {
+    const n = nodeBy.get(title); if (!n) return;
+    const x = sx(n.x), y = sy(n.y), m = 70;
+    if (x > m && x < W - m && y > m && y < H - m) return;
+    const dx = x < m ? m + 40 - x : x > W - m ? W - m - 40 - x : 0;
+    const dy = y < m ? m + 40 - y : y > H - m ? H - m - 40 - y : 0;
+    sel.transition().duration(450).call(zoom.transform, T.translate(dx / T.k, dy / T.k));
   }
   function getPositions() {
     const out = {};
@@ -574,7 +622,7 @@ export function createGraph(canvas, handlers) {
 
   resize();
   return {
-    update, reset, setVisible, setPalette, setHighlight, setCursor, setView, fit, focusOn, settleAndFit, getPositions, relayout, neighbourhood,
+    pause, zoomBy: (f) => sel.transition().duration(250).call(zoom.scaleBy, f), ensureVisible, nodeCount: () => nodes.length, update, reset, setVisible, setPalette, setHighlight, setCursor, setView, fit, focusOn, reveal, settleAndFit, getPositions, relayout, neighbourhood,
     screenOf: (t) => { const n = nodeBy.get(t); return n ? [sx(n.x), sy(n.y)] : null; },
     edgeMid: (i = 0) => { const d = drawn[i]; if (!d) return null; const u = 0.5; return [(1 - u) ** 2 * d.x1 + 2 * (1 - u) * u * d.cx + u * u * d.x2, (1 - u) ** 2 * d.y1 + 2 * (1 - u) * u * d.cy + u * u * d.y2]; },
     hasNode: (t) => nodeBy.has(t), isSettling: () => simLeft > 0, drawMs: () => Math.round(drawMs * 10) / 10, stats: () => ({ nodes: visNodes.length, links: sorted.length, drawn: drawn.length }),
