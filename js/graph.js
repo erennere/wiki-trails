@@ -2,10 +2,11 @@
 // thicker and brighter the more often you clicked between them.
 const d3 = window.d3;
 
-export const TRAIL_COLORS = ['#f2b45a', '#4fc3c7', '#ef7f6b', '#9d8cff', '#7ed37a', '#ff8fc6', '#58a6ff', '#e6d45c', '#c77dff', '#5ce0b8'];
-const HUB = d3.interpolateRgbBasis(['#5b6fd8', '#8f6de0', '#d4709f', '#ef8a5f', '#f2b45a']);
+// VGA bright palette
+export const TRAIL_COLORS = ['#ffff55', '#55ffff', '#ff55ff', '#ff5555', '#55ff55', '#ffaa00', '#7f7fff', '#ffffff', '#ff9ecf', '#aaff00'];
+const HUB = d3.interpolateRgbBasis(['#1d6b36', '#2fd35a', '#a8ff4d', '#ffe14d', '#ffaa00']);
 
-const radius = (n) => 4 + 2.4 * Math.sqrt(n.visits);
+const radius = (n) => Math.round(3 + 1.9 * Math.sqrt(n.visits));
 const width = (l) => Math.min(11, 0.7 + 1.9 * Math.log2(1 + l.total));
 const alpha = (l) => Math.min(0.9, 0.2 + 0.16 * Math.log2(1 + l.total));
 
@@ -20,6 +21,7 @@ export function createGraph(svgEl, handlers) {
 
   const root = svg.append('g');
   const gLinks = root.append('g').attr('class', 'links');
+  const gStrong = root.append('g').attr('class', 'links strong').attr('filter', 'url(#glow)');
   const gOver = root.append('g').attr('class', 'overlay');
   const gNodes = root.append('g').attr('class', 'nodes');
   const gBadges = root.append('g').attr('class', 'badges');
@@ -33,6 +35,7 @@ export function createGraph(svgEl, handlers) {
   let over = null; // current highlight
   let cursor = null;
   let maxDeg = 1;
+  let labelRank = () => 1;
 
   const sim = d3.forceSimulation()
     .force('link', d3.forceLink().id((d) => d.title)
@@ -64,6 +67,7 @@ export function createGraph(svgEl, handlers) {
 
   function tick() {
     gLinks.selectAll('path').attr('d', (l) => curve(l.a, l.b, l.a).d);
+    gStrong.selectAll('path').attr('d', (l) => curve(l.a, l.b, l.a).d);
     gNodes.selectAll('g.node').attr('transform', (n) => `translate(${n.x},${n.y})`);
     if (over) drawOverlay(false);
   }
@@ -86,31 +90,31 @@ export function createGraph(svgEl, handlers) {
     links = [...derived.links.values()].map((l) => ({ ...l, source: l.a, target: l.b }));
     linkBy = new Map(links.map((l) => [l.key, l]));
 
-    gLinks.selectAll('path').data(links, (l) => l.key).join('path')
-      .attr('class', 'link')
-      .attr('stroke-width', width)
-      .attr('stroke-opacity', alpha)
-      .attr('filter', (l) => (l.total >= 3 ? 'url(#glow)' : null));
+    gLinks.selectAll('path').data(links.filter((l) => l.total < 3), (l) => l.key).join('path')
+      .attr('class', 'link').attr('stroke-width', width).attr('stroke-opacity', alpha);
+    gStrong.selectAll('path').data(links.filter((l) => l.total >= 3), (l) => l.key).join('path')
+      .attr('class', 'link').attr('stroke-width', width).attr('stroke-opacity', alpha);
+    const vs = nodes.map((n) => n.visits).sort((a, b) => b - a);
+    labelRank = (count) => vs[Math.min(vs.length - 1, Math.max(0, Math.round(count) - 1))] ?? 1;
 
     const sel = gNodes.selectAll('g.node').data(nodes, (n) => n.title);
     sel.exit().remove();
     const ent = sel.enter().append('g').attr('class', 'node')
-      .on('mouseenter', (e, n) => handlers.onHover?.(n.title))
+      .on('mouseenter', (e, n) => handlers.onHover?.(n.title, n))
       .on('mouseleave', () => handlers.onHover?.(null))
       .on('click', (e, n) => { e.stopPropagation(); handlers.onClick?.(n.title); })
       .call(d3.drag()
         .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
         .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y; })
         .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); n.fx = null; n.fy = null; }));
-    ent.append('circle').attr('class', 'halo');
-    ent.append('circle').attr('class', 'core');
+    ent.append('rect').attr('class', 'core').attr('shape-rendering', 'crispEdges');
     ent.append('text').attr('class', 'lbl');
     ent.append('title');
     const all = ent.merge(sel);
-    all.select('circle.halo').attr('r', (n) => radius(n) + 5).attr('fill', (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg)));
-    all.select('circle.core').attr('r', radius)
+    all.select('rect.core').attr('x', (n) => -radius(n)).attr('y', (n) => -radius(n))
+      .attr('width', (n) => 2 * radius(n)).attr('height', (n) => 2 * radius(n))
       .attr('fill', (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg)))
-      .attr('stroke', (n) => (n.isStart ? '#fff' : 'rgba(255,255,255,.25)'))
+      .attr('stroke', (n) => (n.isStart ? '#ffffff' : '#000'))
       .attr('stroke-width', (n) => (n.isStart ? 2 : 1));
     all.select('text').attr('x', (n) => radius(n) + 6).attr('dy', '0.35em').text((n) => n.title);
     all.select('title').text((n) => `${n.title}\n${n.visits} visit${n.visits === 1 ? '' : 's'}${n.isStart ? ' · trail start' : ''}`);
@@ -125,9 +129,16 @@ export function createGraph(svgEl, handlers) {
 
   function updateLabels() {
     const lit = over ? over.nodes : null;
+    let litRank = () => 1;
+    if (lit) { const vs = [...lit].map((t) => nodeBy.get(t)?.visits ?? 0).sort((x, y) => y - x); litRank = (c) => vs[Math.min(vs.length - 1, Math.round(c) - 1)] ?? 1; }
     gNodes.selectAll('g.node').select('text')
-      .attr('opacity', (n) => (lit ? (lit.has(n.title) ? 1 : 0) : n.visits >= 2 || n.isStart || n.title === cursor || k >= 1.15 || nodes.length <= 40 ? 1 : 0))
-      .style('font-size', `${Math.max(10, 12.5 / Math.sqrt(k))}px`);
+      .attr('opacity', (n) => {
+        const z = Math.max(1, k * k);
+        if (lit) return lit.has(n.title) && (lit.size <= 45 * z || n.visits >= litRank(45 * z) || n.title === over?.focus) ? 1 : 0;
+        if (n.title === cursor || nodes.length <= 40) return 1;
+        return n.visits >= labelRank(24 * z) ? 1 : 0;
+      })
+      .style('font-size', `${15 / k}px`).attr('x', (n) => radius(n) + 5 / k).style('stroke-width', `${4 / k}px`);
   }
 
   // spec: { steps:[{trailId, from, to, order}], colorOf(trailId), numbers: Map(title -> n) | null, focus }
@@ -136,6 +147,7 @@ export function createGraph(svgEl, handlers) {
     const lit = over?.nodes;
     gNodes.selectAll('g.node').classed('dim', (n) => lit && !lit.has(n.title)).classed('focus', (n) => over?.focus === n.title);
     gLinks.selectAll('path').classed('dim', !!over);
+    gStrong.selectAll('path').classed('dim', !!over);
     drawOverlay(true);
     updateLabels();
   }
@@ -153,17 +165,17 @@ export function createGraph(svgEl, handlers) {
       }
       const perPair = d3.group([...lanes.values()], (l) => l.pk);
       const data = [];
-      for (const [, arr] of perPair) arr.forEach((l, i) => data.push({ ...l, extra: (i - (arr.length - 1) / 2) * 7, id: `${l.pk}|${l.trailId}|${l.from}` }));
+      for (const [, arr] of perPair) arr.forEach((l, i) => data.push({ ...l, extra: (i - (arr.length - 1) / 2) * Math.min(6, 36 / arr.length), id: `${l.pk}|${l.trailId}|${l.from}` }));
       over.lanes = data;
       gOver.selectAll('*').remove();
       const g = gOver.selectAll('g.lane').data(data, (d) => d.id).join('g').attr('class', 'lane');
-      g.append('path').attr('class', 'lane-glow').attr('stroke', (d) => over.colorOf(d.trailId)).attr('stroke-width', (d) => 4 + 2 * Math.log2(1 + d.count));
+      g.append('path').attr('class', 'lane-glow').attr('opacity', data.length > 80 ? 0.12 : null).attr('stroke', (d) => over.colorOf(d.trailId)).attr('stroke-width', (d) => 4 + 2 * Math.log2(1 + d.count));
       g.append('path').attr('class', 'lane-flow').attr('stroke', (d) => over.colorOf(d.trailId)).attr('stroke-width', (d) => 1.6 + 1.2 * Math.log2(1 + d.count));
-      g.append('path').attr('class', 'lane-arrow').attr('fill', (d) => over.colorOf(d.trailId)).attr('d', 'M-5,-4.5L6,0L-5,4.5Z');
+      g.append('path').attr('class', 'lane-arrow').attr('fill', (d) => over.colorOf(d.trailId)).attr('shape-rendering', 'crispEdges').attr('d', 'M-4,-5L-4,5L1,5L1,3L3,3L3,1L5,1L5,-1L3,-1L3,-3L1,-3L1,-5Z');
       gBadges.selectAll('*').remove();
       if (over.numbers) {
         const b = gBadges.selectAll('g.badge').data([...over.numbers].filter(([t]) => nodeBy.has(t))).join('g').attr('class', 'badge');
-        b.append('circle').attr('r', 8.5);
+        b.append('rect').attr('x', -9).attr('y', -8).attr('width', 18).attr('height', 16);
         b.append('text').attr('dy', '0.35em').text(([, n]) => n);
       }
     }
@@ -174,7 +186,7 @@ export function createGraph(svgEl, handlers) {
       g.selectAll('path.lane-glow, path.lane-flow').attr('d', c.d);
       if (c.mid) g.select('path.lane-arrow').attr('transform', `translate(${c.mid.x},${c.mid.y}) rotate(${(c.mid.ang * 180) / Math.PI})`);
     });
-    gBadges.selectAll('g.badge').attr('transform', ([t]) => { const n = nodeBy.get(t); return `translate(${n.x - radius(n) - 6},${n.y - radius(n) - 6})`; });
+    gBadges.selectAll('g.badge').attr('transform', ([t]) => { const n = nodeBy.get(t); return `translate(${n.x - radius(n) - 9},${n.y - radius(n) - 9})`; });
   }
 
   function setCursor(title) {
@@ -193,6 +205,19 @@ export function createGraph(svgEl, handlers) {
     (animate ? svg.transition().duration(600) : svg).call(zoom.transform, t);
   }
 
+  /** Zoom to a set of articles (used when a highlight is pinned). */
+  function focusOn(titles, padLeft = 0) {
+    const pts = [...titles].map((t) => nodeBy.get(t)).filter(Boolean);
+    if (!pts.length) return;
+    const full = svgEl.getBoundingClientRect();
+    const box = { width: Math.max(200, full.width - padLeft), height: full.height };
+    const xs = pts.map((n) => n.x), ys = pts.map((n) => n.y);
+    const x0 = Math.min(...xs) - 40, x1 = Math.max(...xs) + 140, y0 = Math.min(...ys) - 40, y1 = Math.max(...ys) + 40;
+    const s = Math.max(0.3, Math.min(2.2, 0.85 * Math.min(box.width / (x1 - x0), box.height / (y1 - y0))));
+    const t = d3.zoomIdentity.translate(full.width - box.width + box.width / 2 - s * (x0 + x1) / 2, box.height / 2 - s * (y0 + y1) / 2).scale(s);
+    svg.transition().duration(650).call(zoom.transform, t);
+  }
+
   /** Let the layout settle, then fit. */
   function settleAndFit() {
     sim.stop();
@@ -200,5 +225,5 @@ export function createGraph(svgEl, handlers) {
     tick(); fit(false); sim.alpha(0.05).restart();
   }
 
-  return { update, setHighlight, setCursor, fit, settleAndFit, hasNode: (t) => nodeBy.has(t) };
+  return { update, setHighlight, setCursor, fit, focusOn, settleAndFit, hasNode: (t) => nodeBy.has(t) };
 }

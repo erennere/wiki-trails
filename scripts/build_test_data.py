@@ -1,0 +1,66 @@
+"""Build a Wiki Trails test dataset from real Wikispeedia human click paths.
+
+Source: Wikispeedia (West & Leskovec, SNAP, Stanford), paths_finished.tsv.
+In a path, '<' means the player pressed back; the next article is then clicked
+from the page they went back to, which is exactly Wiki Trails' branch model.
+"""
+import sys, json, random, datetime, urllib.parse as up, collections
+
+src, out, target_clicks = sys.argv[1], sys.argv[2], int(sys.argv[3])
+rnd = random.Random(42)
+title = lambda s: up.unquote(s).replace('_', ' ')
+
+rows = []
+for line in open(src, encoding='utf8'):
+    if line.startswith('#') or not line.strip():
+        continue
+    ip, ts, dur, path, rating = line.rstrip('\n').split('\t')
+    rows.append((int(ts), path.split(';')))
+
+by_game = collections.defaultdict(list)
+for ts, p in rows:
+    by_game[(p[0], p[-1])].append((ts, p))
+
+def clicks(p):
+    return sum(1 for x in p[1:] if x != '<')
+
+# Mix: lots of the popular games (shared routes get thick), plus random one-off games.
+popular = [('Brain', 'Telephone'), ('Asteroid', 'Viking'), ('Theatre', 'Zebra'), ('Pyramid', 'Bean')]
+quota = {g: int(target_clicks * w) for g, w in zip(popular, (0.24, 0.20, 0.18, 0.14))}
+chosen = []
+for g in popular:
+    pool = [r for r in by_game[g] if 3 <= clicks(r[1]) <= 14]
+    rnd.shuffle(pool); n = 0
+    for r in pool:
+        if n >= quota[g]: break
+        chosen.append(r); n += clicks(r[1])
+rest = [r for r in rows if (r[1][0], r[1][-1]) not in popular and 3 <= clicks(r[1]) <= 12]
+rnd.shuffle(rest)
+total = sum(clicks(p) for _, p in chosen)
+for r in rest:
+    if total >= target_clicks: break
+    chosen.append(r); total += clicks(r[1])
+chosen.sort(key=lambda r: r[0])
+
+trails = []
+for i, (ts, p) in enumerate(chosen):
+    visits, stack = [], []
+    for j, tok in enumerate(p):
+        if tok == '<':
+            if len(stack) > 1: stack.pop()
+            continue
+        vid = f'{i:x}-{j:x}'
+        visits.append({'id': vid, 'article': title(tok), 'parent': stack[-1] if stack else None})
+        stack.append(vid)
+    trails.append({
+        'id': f't{i:04x}',
+        'name': f'{title(p[0])} → {title(p[-1])}',
+        'created': datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        'visits': visits,
+    })
+
+json.dump({'version': 2, 'lang': 'en', 'source': 'Wikispeedia human paths (SNAP, Stanford), CC BY-SA', 'trails': trails},
+          open(out, 'w', encoding='utf8'), ensure_ascii=False, separators=(',', ':'))
+arts = {v['article'] for t in trails for v in t['visits']}
+backs = sum(p.count('<') for _, p in chosen)
+print(f'{len(trails)} trails, {total} clicks, {backs} back-steps, {len(arts)} articles')

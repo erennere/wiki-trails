@@ -1,4 +1,4 @@
-import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, trailLabel, emptyState } from './model.js';
+import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, trailLabel, emptyState, validate } from './model.js';
 import { loadInitial, saveLocal, exportFile, importFile } from './storage.js';
 import { createGraph, TRAIL_COLORS } from './graph.js';
 import { exampleState } from './example.js';
@@ -14,9 +14,9 @@ let hovered = null;
 const undoStack = [];
 
 const graph = createGraph($('svg'), {
-  onHover: (t) => { hovered = t ? { kind: 'article', id: t } : null; applyHighlight(); },
+  onHover: (t) => { hovered = t ? { kind: 'article', id: t } : null; applyHighlight(); statusFor(t); },
   onClick: (t) => clickArticle(t),
-  onBackground: () => { pinned = null; closeCard(); applyHighlight(); renderTrails(); },
+  onBackground: () => { const had = pinned; pinned = null; closeCard(); applyHighlight(); renderTrails(); if (had) graph.fit(true); },
 });
 
 const colorOf = (trailId) => TRAIL_COLORS[(D.trailIndex.get(trailId)?.index ?? 0) % TRAIL_COLORS.length];
@@ -92,6 +92,7 @@ function clickArticle(title) {
   openCard(title);
   applyHighlight();
   renderTrails();
+  zoomToPinned();
 }
 
 /* ---------- highlight ---------- */
@@ -116,6 +117,11 @@ function specFor(target) {
   return { steps, colorOf, numbers, focus: a.title };
 }
 function applyHighlight() { graph.setHighlight(specFor(hovered || pinned)); }
+function zoomToPinned() {
+  const sp = specFor(pinned); if (!sp) return;
+  const pad = $('card').style.display === 'block' ? $('card').offsetWidth + 24 : 0;
+  graph.focusOn(new Set(sp.steps.flatMap((s) => [s.from, s.to]).concat(sp.focus ? [sp.focus] : [])), pad);
+}
 
 /* ---------- rendering ---------- */
 function msg(t, warn = false) { $('msg').textContent = t || ''; $('msg').classList.toggle('warn', warn); }
@@ -131,8 +137,8 @@ function renderAll() {
 function renderStats() {
   const clicks = [...D.links.values()].reduce((s, l) => s + l.total, 0);
   let top = null; for (const l of D.links.values()) if (!top || l.total > top.total) top = l;
-  $('stats').innerHTML = `<span><b>${D.articles.size}</b>articles</span><span><b>${clicks}</b>clicks</span><span><b>${state.trails.length}</b>trails</span>` +
-    (top && top.total > 1 ? `<span>strongest: <b>${esc(top.a)} ↔ ${esc(top.b)}</b>×${top.total}</span>` : '');
+  $('stats').textContent = `${D.articles.size} articles · ${clicks} clicks · ${state.trails.length} trails` +
+    (top && top.total > 1 ? ` · strongest: ${top.a} ↔ ${top.b} ×${top.total}` : '');
 }
 
 function renderBuilder() {
@@ -161,7 +167,7 @@ function hintKnown() {
 
 const armed = new Set();
 function renderTrails() {
-  $('tcount').textContent = state.trails.length ? `· ${state.trails.length}` : '';
+  $('tcount').textContent = `${state.trails.length} trail(s)`;
   const box = $('trails');
   box.innerHTML = [...state.trails].reverse().map((t) => {
     const ends = t.visits.filter((v) => !t.visits.some((w) => w.parent === v.id)).length;
@@ -190,7 +196,7 @@ function renderTrails() {
       const t = trailOf(id);
       cur = { trailId: id, visitId: t.visits[t.visits.length - 1].id };
       pinned = { kind: 'trail', id }; closeCard();
-      afterCursorMove(); applyHighlight(); $('next').focus();
+      afterCursorMove(); applyHighlight(); zoomToPinned(); $('next').focus();
     };
   });
 }
@@ -213,17 +219,17 @@ function openCard(title) {
     if (l.b === title) { if (l.ba) out.push([l.a, l.ba]); if (l.ab) inn.push([l.a, l.ab]); }
   }
   const list = (arr) => arr.length ? `<ul>${arr.sort((x, y) => y[1] - x[1]).slice(0, 8).map(([t, n]) => `<li><a data-go="${esc(t)}">${esc(t)}</a><span class="w">×${n}</span></li>`).join('')}</ul>` : '<ul><li>none</li></ul>';
-  const mode = a.starts.size ? `Start of ${a.starts.size} trail${a.starts.size === 1 ? '' : 's'}: showing the full journeys from here and every route that led here.` : 'Showing every route that led here.';
-  $('card').innerHTML = `<button class="x" id="cx" aria-label="Close">×</button>
-    <h3>${esc(title)}</h3>
-    <div class="meta">${a.visits} visit${a.visits === 1 ? '' : 's'} · ${a.trails.size} trail${a.trails.size === 1 ? '' : 's'}</div>
+  const mode = a.starts.size ? `Start of ${a.starts.size} trail${a.starts.size === 1 ? '' : 's'}: showing every full journey from here, plus every route that led here.` : 'Showing every route that led here.';
+  $('card').innerHTML = `<div class="title"><span class="ico ico-brain"></span>Properties: ${esc(title)}<button class="x" id="cx" aria-label="Close">×</button></div>
+    <div class="inner">
+    <div class="meta"><b>${esc(title)}</b><br>${a.visits} visit${a.visits === 1 ? '' : 's'} · ${a.trails.size} trail${a.trails.size === 1 ? '' : 's'}</div>
     <div class="mode">${mode}</div>
-    <div class="sub">You went on to</div>${list(out)}
-    <div class="sub">You came from</div>${list(inn)}
+    <fieldset><legend>You went on to</legend>${list(out)}</fieldset>
+    <fieldset><legend>You came from</legend>${list(inn)}</fieldset>
     <div class="btns">
-      <button class="primary" id="cont">${cur && lastVisit(cur.trailId, title) ? 'Add next link from here' : 'Start a new trail here'}</button>
-      <a class="ext" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
-    </div>`;
+      <button class="btn default" id="cont">${cur && lastVisit(cur.trailId, title) ? 'Add next link from here' : 'Start new trail here'}</button>
+      <a class="ext" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia</a>
+    </div></div>`;
   $('card').style.display = 'block';
   $('cx').onclick = () => { pinned = null; closeCard(); applyHighlight(); };
   $('card').querySelectorAll('[data-go]').forEach((el) => el.onclick = () => clickArticle(el.dataset.go));
@@ -249,7 +255,7 @@ document.addEventListener('keydown', (e) => {
   const typing = e.target.tagName === 'INPUT' && e.target.value;
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !typing) { e.preventDefault(); undo(); }
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); stepBack(); }
-  if (e.key === 'Escape') { pinned = null; closeCard(); applyHighlight(); renderTrails(); }
+  if (e.key === 'Escape') { closeStart(); const had = pinned; pinned = null; closeCard(); applyHighlight(); renderTrails(); if (had) graph.fit(true); }
 });
 $('lang').onchange = () => { state.lang = $('lang').value; saveLocal(state); if (pinned?.kind === 'article') openCard(pinned.id); };
 $('export').onclick = () => exportFile(state);
@@ -259,21 +265,60 @@ $('import').onchange = async (e) => {
   try { const s = await importFile(f); snapshot(); state = s; cur = null; pinned = null; closeCard(); commit({ refit: true }); msg(`Imported ${s.trails.length} trails.`); }
   catch (err) { msg(`Could not import: ${err.message}`, true); }
 };
-const loadExample = () => { snapshot(); state = exampleState(); cur = null; pinned = null; closeCard(); commit({ refit: true }); };
+const loadExample = () => { closeStart(); snapshot(); state = exampleState(); cur = null; pinned = null; closeCard(); commit({ refit: true }); };
+async function loadTestData() {
+  closeStart(); status('Loading synapses…');
+  try {
+    const r = await fetch('data/wikispeedia-1000.json'); if (!r.ok) throw new Error(r.status);
+    const s = validate(await r.json());
+    snapshot(); state = s; cur = null; pinned = null; closeCard(); commit({ refit: true });
+    status(`Loaded ${s.trails.length} real human trails from Wikispeedia.`);
+  } catch (err) { status(`Could not load test data (${err.message}).`); }
+}
 $('example').onclick = loadExample;
-$('example2').onclick = loadExample;
+$('testdata').onclick = loadTestData;
+$('example2').onclick = loadTestData;
+
+/* ---------- start menu, clock, status, boot ---------- */
+function closeStart() { $('startmenu').hidden = true; $('startbtn').classList.remove('pressed'); $('startbtn').setAttribute('aria-expanded', 'false'); }
+$('startbtn').onclick = (e) => { e.stopPropagation(); const open = $('startmenu').hidden; $('startmenu').hidden = !open; $('startbtn').classList.toggle('pressed', open); $('startbtn').setAttribute('aria-expanded', String(open)); };
+$('startmenu').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', closeStart);
+$('export').addEventListener('click', closeStart);
+$('import').addEventListener('change', closeStart);
+const tickClock = () => { $('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+tickClock(); setInterval(tickClock, 15000);
+function status(t) { $('status').textContent = t; }
+function statusFor(t) {
+  const a = t && D.articles.get(t);
+  if (!a) { status(cursorArticle() ? `Cursor: ${cursorArticle()}` : 'Ready.'); return; }
+  status(`${a.title}: ${a.visits} visit(s), ${a.trails.size} trail(s)${a.starts.size ? `, start of ${a.starts.size}` : ''}`);
+}
+function boot() {
+  let seen = false; try { seen = sessionStorage.getItem('wt-boot'); sessionStorage.setItem('wt-boot', '1'); } catch {}
+  if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
+  const el = $('boot'), log = $('bootlog'); el.hidden = false;
+  const lines = ['WIKITRAILS BIOS v2.0  (C) 1996 Hyperlink Systems', '', 'Memory test: 640K OK', 'Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', 'Mounting C:\\WIKI\\TRAILS....... <span class="ok">OK</span>', '', 'Starting Wiki Trails 95...'];
+  return new Promise((res) => {
+    let i = 0; const done = () => { clearInterval(iv); el.hidden = true; res(); };
+    const iv = setInterval(() => { log.innerHTML += lines[i++] + '\n'; if (i >= lines.length) { clearInterval(iv); setTimeout(done, 450); } }, 140);
+    el.onclick = done; document.addEventListener('keydown', done, { once: true });
+  });
+}
 let clearArmed = false;
 $('clear').onclick = () => {
-  if (!clearArmed) { clearArmed = true; $('clear').textContent = 'Click again to clear'; setTimeout(() => { clearArmed = false; $('clear').textContent = 'Clear all'; }, 2500); return; }
-  clearArmed = false; $('clear').textContent = 'Clear all';
+  if (!clearArmed) { clearArmed = true; $('clear').lastChild.textContent = 'Click again to clear'; setTimeout(() => { clearArmed = false; $('clear').lastChild.textContent = 'Clear all'; }, 2500); return; }
+  clearArmed = false; $('clear').lastChild.textContent = 'Clear all'; closeStart();
   snapshot(); state = { ...emptyState(), lang: state.lang }; cur = null; pinned = null; closeCard(); commit({ refit: true });
 };
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => graph.fit(false), 150); });
 
 /* ---------- start ---------- */
 (async () => {
+  const booting = boot();
   state = await loadInitial();
   await (document.fonts?.ready ?? Promise.resolve());
+  await booting;
   commit({ refit: true });
   window.__wikiTrails = { get state() { return state; } }; // handy for debugging in the console
 })();

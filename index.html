@@ -3,82 +3,100 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wiki Trails</title>
-<meta name="description" content="Map how you wander through Wikipedia: trails of clicks drawn as a living, brain-like graph.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='10' r='4' fill='%23f2b45a'/%3E%3Ccircle cx='24' cy='8' r='3' fill='%234fc3c7'/%3E%3Ccircle cx='18' cy='24' r='5' fill='%239d8cff'/%3E%3Cpath d='M8 10L24 8M8 10L18 24M24 8L18 24' stroke='%23fff' stroke-opacity='.6' stroke-width='1.6'/%3E%3C/svg%3E">
+<title>Wiki Trails 95</title>
+<meta name="description" content="Map how you wander through Wikipedia: trails of clicks drawn as a glowing, brain-like graph on a retro CRT.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23031a0a'/%3E%3Crect x='2' y='3' width='3' height='3' fill='%23ffe14d'/%3E%3Crect x='11' y='2' width='3' height='3' fill='%2339ff88'/%3E%3Crect x='7' y='10' width='4' height='4' fill='%23ffaa00'/%3E%3Cpath d='M4 5L12 4M4 5L9 11M12 4L9 11' stroke='%2339ff88'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <script src="vendor/d3.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </head>
 <body>
-<header>
-  <h1>Wiki <span>Trails</span></h1>
-  <div class="stats" id="stats"></div>
-</header>
-<main>
-  <aside>
-    <section class="sec">
-      <h2>Build a trail</h2>
-      <div id="crumbs"></div>
-      <label id="qlabel" for="next"></label>
-      <div class="row">
-        <input id="next" list="titles" placeholder="Paste a Wikipedia URL or type a title" autocomplete="off">
-        <button class="primary" id="add" title="Add (Enter)">Add</button>
+<div id="boot" hidden><pre id="bootlog"></pre></div>
+
+<main class="desk">
+  <div class="col">
+    <section class="win" id="w-builder">
+      <div class="title"><span class="ico ico-pen"></span>TRAILBLZ.EXE<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="body">
+        <div id="crumbs"></div>
+        <label id="qlabel" for="next"></label>
+        <div class="row">
+          <input id="next" list="titles" placeholder="Paste a Wikipedia URL or type a title" autocomplete="off">
+          <button class="btn default" id="add" title="Add (Enter)">Add</button>
+        </div>
+        <datalist id="titles"></datalist>
+        <div class="msg" id="msg"></div>
+        <div class="btns">
+          <button class="btn" id="back" title="Go back one page in this trail (Alt+←)">◄ Back</button>
+          <button class="btn" id="newtrail">New trail</button>
+          <button class="btn" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+        </div>
+        <p class="hint">To branch off, click an earlier step, or click an article of this trail in the graph.</p>
       </div>
-      <datalist id="titles"></datalist>
-      <div class="msg" id="msg"></div>
-      <div class="btns">
-        <button id="back" title="Go back one page in this trail (Alt+←)">← Step back</button>
-        <button id="newtrail">New trail</button>
-        <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
-      </div>
-      <p class="hint">To branch off, click an earlier step above, or click an article of this trail in the graph. The next link starts from there.</p>
     </section>
 
-    <section class="sec">
-      <h2>Trails <span class="count" id="tcount"></span></h2>
-      <div id="trails"></div>
-    </section>
-
-    <section class="sec">
-      <h2>Data</h2>
-      <div class="btns">
-        <button id="export">Export JSON</button>
-        <label class="btn" for="import">Import JSON</label>
-        <input type="file" id="import" accept="application/json,.json" hidden>
-        <button id="example">Load example</button>
-        <button class="danger" id="clear">Clear all</button>
+    <section class="win grow" id="w-trails">
+      <div class="title"><span class="ico ico-folder"></span>Trails<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="body list-body">
+        <div class="listview" id="trails"></div>
       </div>
-      <label class="small" for="lang">Wikipedia language for “open” links</label>
-      <select id="lang">
-        <option value="en">English (en)</option><option value="de">Deutsch (de)</option><option value="tr">Türkçe (tr)</option>
-        <option value="fr">Français (fr)</option><option value="es">Español (es)</option><option value="it">Italiano (it)</option>
-      </select>
-      <p class="hint">Your trails are saved in this browser. To publish your graph on the site, export it and commit the file as <code>data/trails.json</code>.</p>
+      <div class="statusbar"><span id="tcount">0 trail(s)</span><span>Hover = show · Click = continue</span></div>
     </section>
-  </aside>
+  </div>
 
-  <section id="stage">
-    <svg id="svg" aria-label="Graph of Wikipedia trails"></svg>
-    <div class="tools">
-      <button id="fit">Fit</button>
+  <section class="win big" id="w-brain">
+    <div class="title"><span class="ico ico-brain"></span>BRAIN.EXE - C:\WIKI\TRAILS<span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+    <div class="menubar">
+      <button class="mi" id="fit"><u>F</u>it</button>
+      <span class="mi legend"><span class="ln thin"></span>1 click</span>
+      <span class="mi legend"><span class="ln thick"></span>many clicks</span>
+      <span class="mi legend"><span class="sq start"></span>trail start</span>
+      <span class="mi legend"><span class="sq hub"></span>busy article</span>
     </div>
-    <div class="legend">
-      <div><span class="ln thin"></span>clicked once</div>
-      <div><span class="ln thick"></span>clicked often</div>
-      <div><span class="dot start"></span>trail start</div>
-    </div>
-    <div class="empty" id="empty">
-      <div>
-        <p>Paste the first Wikipedia page of a trail on the left.</p>
-        <button id="example2">Or load an example</button>
+    <div class="crt" id="stage">
+      <svg id="svg" aria-label="Graph of Wikipedia trails"></svg>
+      <div class="empty" id="empty">
+        <div>
+          <p>C:\WIKI&gt; paste the first Wikipedia page to begin<span class="blink">█</span></p>
+          <button class="btn" id="example2">Load test data (1,000 real clicks)</button>
+        </div>
       </div>
+      <div class="dialog" id="card"></div>
     </div>
-    <div id="card"></div>
+    <div class="statusbar"><span id="status">Ready.</span><span id="stats"></span></div>
   </section>
 </main>
+
+<footer class="taskbar">
+  <button class="btn start" id="startbtn" aria-haspopup="true" aria-expanded="false"><span class="flag"></span>Start</button>
+  <div class="startmenu" id="startmenu" hidden>
+    <div class="side"><b>Wiki</b>Trails 95</div>
+    <div class="items">
+      <button class="it" id="testdata"><span class="ico ico-brain"></span>Load test data <small>1,000 real clicks</small></button>
+      <button class="it" id="example"><span class="ico ico-pen"></span>Load small example</button>
+      <hr>
+      <button class="it" id="export"><span class="ico ico-disk"></span>Export JSON…</button>
+      <label class="it" for="import"><span class="ico ico-folder"></span>Import JSON…</label>
+      <input type="file" id="import" accept="application/json,.json" hidden>
+      <hr>
+      <label class="it lang"><span class="ico ico-globe"></span>Wiki language
+        <select id="lang">
+          <option value="en">en</option><option value="de">de</option><option value="tr">tr</option>
+          <option value="fr">fr</option><option value="es">es</option><option value="it">it</option>
+        </select>
+      </label>
+      <hr>
+      <button class="it danger" id="clear"><span class="ico ico-bin"></span>Clear all</button>
+    </div>
+  </div>
+  <div class="tasks">
+    <span class="task on"><span class="ico ico-brain"></span>BRAIN.EXE</span>
+    <span class="task"><span class="ico ico-pen"></span>TRAILBLZ.EXE</span>
+  </div>
+  <div class="tray"><span class="ico ico-speaker"></span><span id="clock">--:--</span></div>
+</footer>
 </body>
 </html>

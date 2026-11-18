@@ -1,8 +1,10 @@
-# Wiki Trails
+# Wiki Trails 95
 
-Map how you wander through Wikipedia. You record each trail by hand (first page, then the link you clicked, then the next…), and Wiki Trails draws all of them as one living, brain-like graph: connections you use often grow thicker and glow, the way well-used pathways between neurons strengthen.
+Map how you wander through Wikipedia. You record each trail by hand (first page, then the link you clicked, then the next…), and Wiki Trails draws all of them as one brain-like graph on a green phosphor CRT inside a Windows 95 desktop. Connections you use often grow thicker and glow, the way well-used pathways between neurons strengthen.
 
-![Wiki Trails screenshot](.github/screenshot.png)
+![Wiki Trails 95: 1,000 real clicks](.github/screenshot.png)
+
+![A pinned trail with step numbers](.github/screenshot-trail.png)
 
 ## Features
 
@@ -12,7 +14,8 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 - **Weighted connections.** The thickness and glow of a line come from the total number of clicks between those two articles, across all trails.
 - **“How did I get here?”** Hover any article to see every route that led to it, coloured by trail, with animated direction.
 - **Full journeys.** Hover a trail's start article, or a trail in the sidebar, to see that journey from start to every end, with step numbers.
-- **Pin.** Click to keep a highlight; press <kbd>Esc</kbd> or click the background to clear it.
+- **Pin and zoom.** Click an article or a trail to keep its highlight and zoom in to it; press <kbd>Esc</kbd> or click the background to zoom back out.
+- **Test data.** Start → *Load test data* loads 1,000 real clicks from 176 human Wikispeedia trails (see below).
 - **Your data stays local.** Trails are stored in your browser (`localStorage`), with JSON export and import. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
 
 ## Run it locally
@@ -38,6 +41,18 @@ Visitors who have no local data see the file `data/trails.json`, if it exists. T
 2. Save the file as `data/trails.json` and commit it.
 
 Your own browser keeps using its local copy. If you want to start from the published file instead, use **Import JSON**.
+
+## Test data: real human trails
+
+`data/wikispeedia-1000.json` holds 176 real human navigation paths (1,000 clicks, 401 articles, 36 back-steps) from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page. Most of the sample is from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections. The rest are random one-off games. In Wikispeedia a `<` means the player went back, which maps directly to Wiki Trails' branching.
+
+To regenerate the file or change its size:
+
+```bash
+python3 scripts/build_test_data.py path/to/paths_finished.tsv data/wikispeedia-1000.json 1000
+```
+
+Sources: Robert West and Jure Leskovec, *Human Wayfinding in Information Networks*, WWW 2012; Robert West, Joelle Pineau and Doina Precup, *Wikispeedia: An Online Game for Inferring Semantic Distances between Concepts*, IJCAI 2009. The article content comes from Wikipedia (CC BY-SA).
 
 ## Data format
 
@@ -70,11 +85,12 @@ js/model.js       data model and derived graph (articles, weighted links, routes
 js/graph.js       d3 force layout, rendering, highlights
 js/main.js        UI: builder, trail list, article card, import/export
 js/storage.js     localStorage + data/trails.json + JSON files
-js/example.js     example dataset
+js/example.js     small example dataset
+data/             wikispeedia-1000.json test data; put your published trails.json here
+scripts/          build_test_data.py (Wikispeedia → Wiki Trails JSON)
 vendor/d3.min.js  d3 v7.9.0 (ISC licence, see vendor/d3.LICENSE)
-data/             put your published trails.json here
 ```
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). d3 is © Mike Bostock, ISC licence.
+MIT, see [LICENSE](LICENSE). d3 is © Mike Bostock, ISC licence. Fonts: Pixelify Sans and VT323 (SIL OFL) via Google Fonts. The look is inspired by Windows 95, and no Microsoft assets are used.
