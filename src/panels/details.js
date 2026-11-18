@@ -3,16 +3,8 @@ import { app, on, select, trailOf, commit, snapshot, pinThread, pinned } from '.
 import { trailLabel, trailShape, visitTime, timeSpan } from '../model.js';
 import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, confirmClick, toast } from '../ui.js';
 
-/** The colour of the thread drawn for this visit, if it's one of the threads on the map. */
-const drawn = (trailId, visitId) => app.threads?.threads.find((x) => x.trailId === trailId && x.visitId === visitId) || null;
-function swatch(trailId, visitId) {
-  const th = drawn(trailId, visitId);
-  return th ? `<span class="sw" style="background:${th.color}" title="Drawn on the map in this colour"></span>` : '<span class="sw none"></span>';
-}
-
 export function initDetails({ record, loadTest }) {
   const box = $('details');
-  let showAll = false;
 
   function render() {
     const s = app.sel;
@@ -74,20 +66,15 @@ export function initDetails({ record, loadTest }) {
       if (l.b === title) { if (l.ba) out.set(l.a, l.ba); if (l.ab) inc.set(l.a, l.ab); }
     }
     const list = (m) => [...m].sort((p, q) => q[1] - p[1]).slice(0, 8).map(([t, n]) => `<div class="lrow" data-a="${esc(t)}"><span class="l">${esc(t)}</span><span class="c">${n}×</span></div>`).join('') || '<p class="explain">None.</p>';
-    const shownSeen = showAll ? seen : seen.slice(0, 12);
     box.innerHTML = `<h3>${esc(title)}</h3>
       <div class="sub">You saw this page ${plural(seen.length, 'time')}${seen.length ? `, last on ${fmtDateTime(seen[0].t)}` : ''}${seen.length > 1 ? `, first on ${fmtDate(seen[seen.length - 1].t)}` : ''}.</div>
       <div class="actions">
         <button class="btn small" id="d-start">Start a trail here</button>
         <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
       </div>
-      <section><h4>When you saw it</h4>${shownSeen.map((s) => `<div class="lrow" ${drawn(s.trail.id, s.vid) ? `data-k="${drawn(s.trail.id, s.vid).key}" title="Show this thread"` : `data-t="${s.trail.id}" title="Show this trail"`}>
-          <span class="l">${swatch(s.trail.id, s.vid)}<span class="when">${fmtDateTime(s.t)}</span><br><span class="explain">${s.from ? `from ${esc(s.from)}` : 'start of the trail'}${s.next.length ? ` → ${esc(s.next.join(', '))}` : ' · end of the trail'}</span></span></div>`).join('')}
-        ${seen.length > shownSeen.length ? `<button class="btn small more" id="d-all">Show all ${seen.length}</button>` : ''}</section>
       <section><h4>You came from</h4>${list(inc)}</section>
       <section><h4>You went on to</h4>${list(out)}</section>`;
     $('d-start').onclick = () => record.startAt(title);
-    $('d-all')?.addEventListener('click', () => { showAll = true; render(); });
   }
 
   /* ---------- one thread you clicked on the map ---------- */
@@ -150,11 +137,10 @@ export function initDetails({ record, loadTest }) {
   }
 
   box.addEventListener('click', (e) => {
-    const k = e.target.closest('[data-k]'); if (k) return pinThread(k.dataset.k);
     const a = e.target.closest('[data-a]'); if (a && !e.target.closest('.btn')) return select({ kind: 'article', id: a.dataset.a }, { zoom: true });
     const t = e.target.closest('[data-t]'); if (t) return select({ kind: 'trail', id: t.dataset.t }, { zoom: true });
   });
-  on('select', () => { showAll = false; render(); });
+  on('select', render);
   for (const ev of ['data', 'range', 'threads', 'pin', 'cursor']) on(ev, render);
   return { render };
 }

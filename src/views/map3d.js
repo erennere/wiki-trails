@@ -266,7 +266,7 @@ export function createGraph(el, handlers) {
     const lanes = new Map();
     const pk = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
     threads.threads.forEach((th, i) => th.path.forEach((t, k) => { if (k) { const key = pk(th.path[k - 1], t); if (!lanes.has(key)) lanes.set(key, []); if (!lanes.get(key).includes(i)) lanes.get(key).push(i); } }));
-    const n = threads.threads.length, minOp = 0.5 - 0.46 * view.ageFade;
+    const n = threads.threads.length, minOp = 0.5 - 0.44 * view.ageFade, k = 0.5 + 1.5 * view.ageFade;
     // how many drawn threads start / end on each page, and each thread's place in that row
     fans = new Map(); const fanIdx = new Map();
     threads.threads.forEach((th) => {
@@ -282,7 +282,7 @@ export function createGraph(el, handlers) {
     for (const i of order) {
       const th = threads.threads[i], focused = pin === th.key;
       // the older the thread, the fainter (how much is a setting); the one you clicked on is shown in full
-      const ageOp = minOp + (1 - minOp) * Math.pow(th.rec, 1.5);
+      const ageOp = minOp + (1 - minOp) * Math.pow(th.rec, k);
       const op = pin ? (focused ? 1 : Math.min(0.14, ageOp)) : ageOp;
       const w = focused ? 1.35 : pin ? 0.55 : 0.45 + 0.55 * th.rec;
       const col = new THREE.Color(th.color), pale = col.clone().lerp(bg, 0.55);
@@ -334,8 +334,8 @@ export function createGraph(el, handlers) {
           m.renderOrder = tube.renderOrder; Object.assign(m.userData, data);
           layer.add(m);
         }
-        // the light that runs from start to end (only on the focused thread when one is focused)
-        if (!pin || focused) {
+        // the light that runs from start to end: on the newest thread, or on the one you clicked
+        if (pin ? focused : th.rank === 0) {
           const comet = [];
           for (let k = 0; k < 5; k++) comet.push(ball(pts[0], (5 - k * 0.75) * unit * w, col.clone().lerp(white, 0.4 - k * 0.07), Math.min(1, op + 0.1) * (0.95 - k * 0.17)));
           comet.forEach((m) => { m.renderOrder = 60; });

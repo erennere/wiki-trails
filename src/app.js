@@ -150,12 +150,13 @@ export function threadsFor(target) {
   all.sort((x, y) => y.t - x.t);
   const limit = kind === 'trail' ? 1 : Math.min(50, +app.settings.threads || 5);
   const threads = all.slice(0, limit), pal = app.colors.length ? app.colors : ['#2f6fdb'];
-  // each thread its own colour; the older a thread is, the fainter it's drawn
-  const tNew = threads[0]?.t ?? 0, tOld = threads[threads.length - 1]?.t ?? 0;
+  // each thread its own colour; each older one is drawn clearly fainter than the one before,
+  // so the newest stands out without reading any dates
   threads.forEach((th, i) => {
     th.key = th.trailId + ':' + th.visitId;
     th.color = pal[i % pal.length];
-    th.rec = tNew > tOld ? (th.t - tOld) / (tNew - tOld) : 1; // 1 = the newest shown, 0 = the oldest
+    th.rank = i;
+    th.rec = Math.pow(0.6, i); // 1 for the newest, then 0.6, 0.36, …
   });
   return { kind, anchor, threads, total: all.length, times: times.sort((x, y) => x - y) };
 }

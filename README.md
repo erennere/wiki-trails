@@ -6,8 +6,8 @@ Click any article and the trails that went through it light up, and you can read
 
 - **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
-- **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it and a light running from start to end.
-- **The older a trail, the fainter it is.** How strongly they fade is a setting.
+- **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.
+- **The newest trail is the solid one,** and each older trail is fainter than the one before, so you can tell the order without reading any dates. Only the newest carries the moving light. How strongly they fade is a setting.
 
 The camera turns to the angle where the trails spread out best and fills the window with them. Click a trail anywhere and it's shown in full while the others step back; the side panel explains it. Zoom out and you're back to your whole history.
 
@@ -23,7 +23,7 @@ The window has one map and two side panels, and both panels can be collapsed.
 - **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
 - **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
 - **Details** (right). Shows what you selected:
-  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it. A coloured dot marks the visits drawn on the map, in the same colour as their trail. Click one to focus that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there or open it on Wikipedia.
+  - **An article:** how often you saw it, first and last; where you came from and where you went on to; buttons to start a new trail there or open it on Wikipedia.
   - **A trail you clicked on the map:** where it started and ended, when you were on the page, and every page in order. Click a page to go to it.
   - **A trail from the list:** its steps, with Continue, Rename and Delete.
 

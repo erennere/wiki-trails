@@ -144,6 +144,6 @@ document.addEventListener('keydown', (e) => {
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
     app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
-    nodeXY: (t) => rel(graph.screenOf(t)),
+    nodeXY: (t) => rel(graph.screenOf(t)), pin: (k) => pinThread(k),
   };
 })();
