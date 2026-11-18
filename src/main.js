@@ -287,6 +287,7 @@ function openCard(title) {
   $('cx').onclick = () => { pinned = null; closeCard(); applyHighlight(); };
   $('card').querySelectorAll('[data-go]').forEach((el) => el.onclick = () => clickArticle(el.dataset.go));
   $('cont').onclick = () => {
+    showBuilder();
     if (cur && lastVisit(cur.trailId, title)) { $('next').focus(); return; }
     snapshot();
     const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
@@ -352,7 +353,7 @@ function applySkin(id, { persist = true } = {}) {
   fx.set(skin.fx);
   const t = { ...DEFAULT_TITLES, ...(skin.titles || {}) };
   $('tt-builder').textContent = t.builder; $('tt-trails').textContent = t.trails; $('tt-brain').textContent = t.brain;
-  $('task-builder').textContent = t.builder; $('task-brain').textContent = t.brain;
+  $('task-builder').textContent = t.builder; $('task-brain').textContent = t.brain; $('task-trails').textContent = t.trails;
   $('lbl-export').textContent = skin.menu?.export || 'Export JSON…';
   $('lbl-import').textContent = skin.menu?.import || 'Import JSON…';
   $('skinname').textContent = skin.name;
@@ -550,6 +551,28 @@ function toggleMax(on = !document.documentElement.dataset.max) {
   saveView();
 }
 $('maxbtn').onclick = () => toggleMax();
+document.querySelector('[data-maxbtn]').onclick = () => toggleMax();
+
+/* ---------- minimizable side windows (they go to the taskbar) ---------- */
+const MINKEY = 'wiki-trails.minimized';
+let minimized = new Set();
+try { minimized = new Set(JSON.parse(localStorage.getItem(MINKEY)) || []); } catch {}
+function applyMin() {
+  for (const id of ['w-builder', 'w-trails']) $(id).hidden = minimized.has(id);
+  if (minimized.size === 2) document.documentElement.dataset.colEmpty = '1'; else delete document.documentElement.dataset.colEmpty;
+  document.querySelectorAll('.task[data-win]').forEach((b) => b.classList.toggle('on', !minimized.has(b.dataset.win)));
+  try { localStorage.setItem(MINKEY, JSON.stringify([...minimized])); } catch {}
+}
+function setMin(id, on) { if (on) minimized.add(id); else minimized.delete(id); applyMin(); blip(on ? 0.7 : 1.2); }
+document.querySelectorAll('[data-min]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); setMin(b.dataset.min, true); });
+document.querySelectorAll('.task[data-win]').forEach((b) => b.onclick = () => {
+  const id = b.dataset.win;
+  if (id === 'w-brain') { if (document.documentElement.dataset.max) toggleMax(false); return; }
+  setMin(id, !minimized.has(id));
+  if (!minimized.has(id) && document.documentElement.dataset.max) toggleMax(false);
+});
+function showBuilder() { if (minimized.has('w-builder')) setMin('w-builder', false); if (document.documentElement.dataset.max) toggleMax(false); }
+applyMin();
 $('relayout').onclick = () => { graph.relayout(); status('Computing a fresh layout…'); waitThenFit(); };
 document.addEventListener('keydown', (e) => {
   if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || e.ctrlKey || e.metaKey || e.altKey || !gal.hidden) return;

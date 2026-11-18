@@ -21,7 +21,7 @@
 <main class="desk">
   <div class="col">
     <section class="win" id="w-builder">
-      <div class="title"><span class="ico ico-pen"></span><span class="tt" id="tt-builder" data-page="100">TRAILBLZ.EXE</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-pen"></span><span class="tt" id="tt-builder" data-page="100">TRAILBLZ.EXE</span><button class="minbtn" data-min="w-builder" title="Minimize to the taskbar">–</button><span class="tb"><i data-min="w-builder" title="Minimize">_</i><i>□</i><i data-min="w-builder" title="Minimize">×</i></span></div>
       <div class="body">
         <div id="crumbs"></div>
         <label id="qlabel" for="next"></label>
@@ -47,7 +47,7 @@
     </section>
 
     <section class="win grow" id="w-trails">
-      <div class="title"><span class="ico ico-folder"></span><span class="tt" id="tt-trails" data-page="101">Trails</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-folder"></span><span class="tt" id="tt-trails" data-page="101">Trails</span><button class="minbtn" data-min="w-trails" title="Minimize to the taskbar">–</button><span class="tb"><i data-min="w-trails" title="Minimize">_</i><i>□</i><i data-min="w-trails" title="Minimize">×</i></span></div>
       <div class="body list-body">
         <input id="tsearch" class="tsearch" placeholder="Search trails and articles…" autocomplete="off">
         <div class="listview" id="trails"></div>
@@ -57,7 +57,7 @@
   </div>
 
   <section class="win big" id="w-brain">
-    <div class="title"><span class="ico ico-brain"></span><span class="tt" id="tt-brain" data-page="102">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+    <div class="title"><span class="ico ico-brain"></span><span class="tt" id="tt-brain" data-page="102">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i data-maxbtn title="Maximize (F)">□</i><i>×</i></span></div>
     <div class="menubar">
       <button class="mi" id="fit" title="Fit the graph to the window">Fit</button>
       <button class="mi" id="maxbtn" title="Maximize the graph (F)">⛶ Maximize</button>
@@ -125,8 +125,9 @@
     </div>
   </div>
   <div class="tasks">
-    <span class="task on"><span class="ico ico-brain"></span><span id="task-brain">BRAIN.EXE</span></span>
-    <span class="task"><span class="ico ico-pen"></span><span id="task-builder">TRAILBLZ.EXE</span></span>
+    <button class="task on" data-win="w-brain"><span class="ico ico-brain"></span><span id="task-brain">BRAIN.EXE</span></button>
+    <button class="task on" data-win="w-builder" title="Show / minimize"><span class="ico ico-pen"></span><span id="task-builder">TRAILBLZ.EXE</span></button>
+    <button class="task on" data-win="w-trails" title="Show / minimize"><span class="ico ico-folder"></span><span id="task-trails">Trails</span></button>
   </div>
   <div class="tray"><span id="trayinfo"></span><span class="ico ico-sound"></span><span id="clock">--:--</span></div>
 </footer>

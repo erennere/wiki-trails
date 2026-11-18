@@ -209,7 +209,7 @@ button.mi:hover { background: var(--sel-bg); color: var(--sel-fg); }
   linear-gradient(#f33,#f33) 0 0/7px 6px no-repeat, linear-gradient(#3c3,#3c3) 9px 0/7px 6px no-repeat,
   linear-gradient(#33f,#33f) 0 8px/7px 6px no-repeat, linear-gradient(#fc0,#fc0) 9px 8px/7px 6px no-repeat; }
 .tasks { flex: 1; display: flex; gap: 4px; min-width: 0; overflow: hidden; }
-.task { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: .96em; width: 170px; white-space: nowrap; overflow: hidden; background: var(--task-bg); border: var(--btn-border); box-shadow: var(--btn-shadow); border-radius: var(--btn-radius); }
+.task { font: inherit; color: inherit; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: .96em; width: 170px; white-space: nowrap; overflow: hidden; background: var(--task-bg); border: var(--btn-border); box-shadow: var(--btn-shadow); border-radius: var(--btn-radius); }
 .task.on { font-weight: 600; background: var(--task-on-bg); color: var(--task-on-fg, inherit); box-shadow: var(--btn-shadow-active); }
 .tray { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: .96em; box-shadow: var(--status-shadow); border-radius: var(--btn-radius); }
 .startmenu { position: absolute; left: 2px; bottom: 36px; display: flex; min-width: 280px; background: var(--win-bg); color: var(--win-fg); border: var(--win-border); box-shadow: var(--win-shadow); border-radius: var(--radius); padding: var(--win-pad); }
@@ -276,7 +276,7 @@ button.mi:hover { background: var(--sel-bg); color: var(--sel-fg); }
   .col { width: auto; }
   #w-trails { max-height: 260px; }
   .win.big { min-height: 70vh; }
-  .tasks { display: none; }
+  .task { width: auto; max-width: 140px; }
 }
 
 /* --- view controls, focus, maximize --- */
@@ -317,3 +317,15 @@ html[data-max] .desk { padding: 6px; }
 .list-body { flex-direction: column; gap: 6px; }
 .tsearch { flex: none; }
 .tr.more { cursor: default; opacity: .7; font-size: .85em; justify-content: center; border: none; }
+
+/* --- minimizable side windows --- */
+.win[hidden] { display: none; }
+html[data-col-empty] .col { display: none; }
+.title .tb i[data-min], .title .tb i[data-maxbtn] { cursor: pointer; }
+.minbtn { display: none; margin-left: auto; width: 22px; height: 18px; padding: 0; place-items: center; font: 600 14px/1 var(--font-ui); cursor: pointer;
+  background: var(--btn-bg); color: var(--btn-fg); border: var(--btn-border); box-shadow: var(--btn-shadow); border-radius: var(--btn-radius); }
+.minbtn::before, .minbtn::after { content: none; }
+/* skins whose title bars have no window buttons get a visible minimize button */
+html:is([data-chrome="flat"], [data-chrome="terminal"], [data-chrome="console"], [data-chrome="onebit"], [data-skin="geocities"], [data-skin="neonrain"]) .minbtn { display: grid; }
+html[data-chrome="onebit"] .minbtn { position: relative; margin-left: auto; }
+.task:not(.on) { opacity: .75; }
