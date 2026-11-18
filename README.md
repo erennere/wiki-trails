@@ -1,4 +1,4 @@
-# Wiki Trails 95
+# Wiki Trails
 
 Map how you wander through Wikipedia. You record each trail by hand (first page, then the link you clicked, then the next…), and Wiki Trails draws all of them as one brain-like graph on a green phosphor CRT inside a Windows 95 desktop. Connections you use often grow thicker and glow, the way well-used pathways between neurons strengthen.
 
@@ -6,7 +6,9 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 
 ![A pinned trail with step numbers](.github/screenshot-trail.png)
 
-![The five skins](.github/skins.png)
+![All 27 skins](.github/skins.png)
+
+![The skin gallery](.github/gallery.png)
 
 ## Features
 
@@ -17,7 +19,16 @@ Map how you wander through Wikipedia. You record each trail by hand (first page,
 - **“How did I get here?”** Hover any article to see every route that led to it, coloured by trail, with animated direction.
 - **Full journeys.** Hover a trail's start article, or a trail in the sidebar, to see that journey from start to every end, with step numbers.
 - **Pin and zoom.** Click an article or a trail to keep its highlight and zoom in to it; press <kbd>Esc</kbd> or click the background to zoom back out.
-- **Skins (optional).** Windows 95 is the default. You can switch to *Synthwave '84*, *Game Boy*, *System 7* or *Amber Terminal* from the Start menu or the skin picker in BRAIN.EXE's menu bar. Each skin has its own graph palette, and your choice is remembered. Window chrome lives in `css/skins.css`, graph colours in `js/skins.js`, so adding a skin means one CSS block plus one entry in that list.
+- **27 skins in 7 families.** Press <kbd>S</kbd>, or use the Skins button, to open the gallery. Hover a card to try a skin live, click to keep it, use <kbd>←</kbd>/<kbd>→</kbd> to flip through them, or press **Slideshow** to tour them all.
+  - *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
+  - *Futuristic:* Holo HUD (radar sweep) · Star Chart (constellations) · Bio-Neural (travelling signals)
+  - *AI:* Latent Space · Training Run (epochs, loss sparkline) · Sentinel (its red eye follows your cursor)
+  - *Millennium / Y2K:* Aqua Bubble · Y2K Chrome (millennium countdown) · GeoCities (hit counter, marquee) · Media Player (trails are tracks)
+  - *90s console games:* 16-bit RPG (quests, XP, level-ups) · Handheld '89 · Polygon Era (memory cards) · Fighter Select (VS splash) · Overworld Map (walking marker)
+  - *Synthwave:* Outrun Sunset (animated grid) · Vaporwave (VHS glitches) · Neon Rain
+  - *Minimal:* Swiss Paper · Midnight Mono · Zen Ink
+
+  Each skin sets its own window chrome, fonts, node shape, line style, background effect, wording and little toys. Optional sound effects can be turned on in the Start menu.
 - **Test data.** Start → *Load test data* loads 1,000 real clicks from 176 human Wikispeedia trails (see below).
 - **Your data stays local.** Trails are stored in your browser (`localStorage`), with JSON export and import. Undo with <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd>; step back with <kbd>Alt</kbd>+<kbd>←</kbd>.
 
@@ -83,9 +94,10 @@ Each trail is a tree of visits. A visit's `parent` is the page you clicked from,
 
 ```
 index.html        page shell
-css/style.css     base styles (Windows 95 skin)
-css/skins.css     optional skins
-js/skins.js       skin list + graph palettes
+css/style.css     base layout; every visual reads a CSS variable (defaults = Desktop 95)
+css/skins.css     chrome presets (bevel, flat, neon, terminal, console, gloss, 1-bit) + 27 skins
+js/skins.js       skin list: graph palette, node shape, effects, wording, toys
+js/effects.js     animated background layer (stars, rain, radar, grid, bubbles, …)
 js/model.js       data model and derived graph (articles, weighted links, routes)
 js/graph.js       d3 force layout, rendering, highlights
 js/main.js        UI: builder, trail list, article card, import/export
@@ -99,3 +111,12 @@ vendor/d3.min.js  d3 v7.9.0 (ISC licence, see vendor/d3.LICENSE)
 ## Licence
 
 MIT, see [LICENSE](LICENSE). d3 is © Mike Bostock, ISC licence. Fonts: Pixelify Sans and VT323 (SIL OFL) via Google Fonts. The look is inspired by Windows 95, and no Microsoft assets are used.
+
+## Adding a skin
+
+1. Add an entry to `SKINS` in `js/skins.js`: an `id`, a name, a family, a chrome preset, colours, a node shape and an optional effect.
+2. Add a `[data-skin="your-id"] { … }` block of CSS variables to `css/skins.css`, plus any `html[data-skin="your-id"] …` extras.
+
+The gallery picks it up automatically.
+
+Skin names describe a style; they are not affiliated with any product.

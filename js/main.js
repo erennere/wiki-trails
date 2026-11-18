@@ -1,8 +1,9 @@
 import { uid, normTitle, langFromUrl, derive, chainTo, trailSteps, routesTo, trailLabel, emptyState, validate } from './model.js';
 import { loadInitial, saveLocal, exportFile, importFile } from './storage.js';
 import { createGraph, TRAIL_COLORS } from './graph.js';
+import { createEffects } from './effects.js';
 import { exampleState } from './example.js';
-import { SKINS, savedSkin, skinById, rememberSkin } from './skins.js';
+import { SKINS, CATS, savedSkin, skinById, rememberSkin } from './skins.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -15,7 +16,7 @@ let hovered = null;
 const undoStack = [];
 
 const graph = createGraph($('svg'), {
-  onHover: (t) => { hovered = t ? { kind: 'article', id: t } : null; applyHighlight(); statusFor(t); },
+  onHover: (t) => { hovered = t ? { kind: 'article', id: t } : null; applyHighlight(); statusFor(t); bannerFor(t); },
   onClick: (t) => clickArticle(t),
   onBackground: () => { const had = pinned; pinned = null; closeCard(); applyHighlight(); renderTrails(); if (had) graph.fit(true); },
 });
@@ -46,6 +47,7 @@ function addLink() {
   if (!title) { $('next').focus(); return; }
   const here = cursorArticle();
   if (here === title) { msg('You are already on that page.', true); return; }
+  const before = statInfo().clicks;
   snapshot();
   const lang = langFromUrl(raw);
   if (lang && !state.trails.length) state.lang = lang;
@@ -62,6 +64,8 @@ function addLink() {
   const first = state.trails.length === 1 && trailOf(cur.trailId).visits.length <= 2;
   $('next').value = '';
   commit({ refit: first });
+  blip();
+  toast(skin.milestone?.(before, statInfo().clicks));
   $('next').focus();
 }
 
@@ -87,6 +91,7 @@ function lastVisit(trailId, title) {
 }
 
 function clickArticle(title) {
+  blip(0.75);
   // Clicking an article of the trail you're building moves the cursor there (go back & branch).
   if (cur) { const v = lastVisit(cur.trailId, title); if (v) { cur = { trailId: cur.trailId, visitId: v.id }; afterCursorMove(); } }
   pinned = { kind: 'article', id: title };
@@ -135,18 +140,28 @@ function renderAll() {
   if (pinned?.kind === 'article') openCard(pinned.id);
 }
 
-function renderStats() {
+function statInfo() {
   const clicks = [...D.links.values()].reduce((s, l) => s + l.total, 0);
   let top = null; for (const l of D.links.values()) if (!top || l.total > top.total) top = l;
-  $('stats').textContent = `${D.articles.size} articles · ${clicks} clicks · ${state.trails.length} trails` +
-    (top && top.total > 1 ? ` · strongest: ${top.a} ↔ ${top.b} ×${top.total}` : '');
+  return { articles: D.articles.size, clicks, trails: state.trails.length, top: top && top.total > 1 ? top : null };
+}
+function renderStats() {
+  const i = statInfo();
+  $('stats').textContent = skin.stats ? skin.stats(i)
+    : `${i.articles} ${W('articles')} · ${i.clicks} ${W('clicks')} · ${i.trails} ${W('trails')}` + (i.top ? ` · strongest: ${i.top.a} ↔ ${i.top.b} ×${i.top.total}` : '');
+  $('ticker').firstElementChild.textContent = skin.ticker ? skin.ticker(i) : '';
+  if (skin.ui?.includes('eq')) $('eq').innerHTML = state.trails.slice(-16).map((t, k) => `<i style="height:${Math.min(18, 3 + t.visits.length * 1.4)}px;animation-delay:${(k % 5) * -0.13}s"></i>`).join('');
+  if (skin.ui?.includes('spark')) {
+    const v = state.trails.slice(-40).map((t) => 1 / t.visits.length), mx = Math.max(...v, 1e-9);
+    $('spark').innerHTML = v.length > 1 ? `loss <svg width="90" height="16" viewBox="0 0 90 16"><polyline points="${v.map((n, k) => `${((k / (v.length - 1)) * 88 + 1).toFixed(1)},${(15 - (n / mx) * 13).toFixed(1)}`).join(' ')}"/></svg>` : '';
+  }
 }
 
 function renderBuilder() {
   const box = $('crumbs');
   if (!cur) {
     box.innerHTML = '';
-    $('qlabel').innerHTML = state.trails.length ? 'Link 1: first page of a new trail' : 'Link 1: first page';
+    $('qlabel').innerHTML = state.trails.length ? `Link 1: first page of a new ${esc(W('trail'))}` : 'Link 1: first page';
   } else {
     const chain = chainTo(D.trailIndex.get(cur.trailId), cur.visitId);
     box.innerHTML = chain.map((v, i) => `<span class="c${i === chain.length - 1 ? ' cur' : ''}" data-v="${v.id}" title="${esc(v.article)}"><i>${i + 1}</i>${esc(v.article)}</span>`).join('<span class="sep">›</span>');
@@ -168,7 +183,7 @@ function hintKnown() {
 
 const armed = new Set();
 function renderTrails() {
-  $('tcount').textContent = `${state.trails.length} trail(s)`;
+  $('tcount').textContent = `${state.trails.length} ${W('trails')}`;
   const box = $('trails');
   box.innerHTML = [...state.trails].reverse().map((t) => {
     const ends = t.visits.filter((v) => !t.visits.some((w) => w.parent === v.id)).length;
@@ -281,20 +296,119 @@ $('testdata').onclick = loadTestData;
 $('example2').onclick = loadTestData;
 
 /* ---------- skins ---------- */
+const fx = createEffects($('fx'));
 let skin = savedSkin();
-function applySkin(id, persist = true) {
+let chosen = skin.id;
+const W = (k) => skin.words?.[k] ?? k;
+const DEFAULT_TITLES = { builder: 'TRAILBLZ.EXE', trails: 'Trails', brain: 'BRAIN.EXE - C:\\WIKI\\TRAILS' };
+function applySkin(id, { persist = true } = {}) {
   skin = skinById(id);
-  document.documentElement.dataset.skin = skin.id;
+  const html = document.documentElement;
+  html.dataset.skin = skin.id; html.dataset.chrome = skin.chrome || 'bevel'; html.dataset.ui = (skin.ui || []).join(' ');
   graph.setPalette(skin);
-  for (const sel of document.querySelectorAll('.skin-select')) sel.value = skin.id;
-  if (persist) rememberSkin(skin.id);
-  renderTrails(); applyHighlight();
+  fx.set(skin.fx);
+  const t = { ...DEFAULT_TITLES, ...(skin.titles || {}) };
+  $('tt-builder').textContent = t.builder; $('tt-trails').textContent = t.trails; $('tt-brain').textContent = t.brain;
+  $('task-builder').textContent = t.builder; $('task-brain').textContent = t.brain;
+  $('lbl-export').textContent = skin.menu?.export || 'Export JSON…';
+  $('lbl-import').textContent = skin.menu?.import || 'Import JSON…';
+  $('skinname').textContent = skin.name;
+  $('newtrail').textContent = `New ${W('trail')}`;
+  if (persist) { chosen = skin.id; rememberSkin(skin.id); }
+  $('banner').classList.remove('on');
+  renderStats(); renderBuilder(); renderTrails(); applyHighlight(); markChosen();
 }
-for (const sel of document.querySelectorAll('.skin-select')) {
-  sel.innerHTML = SKINS.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  sel.onchange = () => applySkin(sel.value);
+
+/* ---------- skin toys: toast, banner, eye, sound ---------- */
+let toastT;
+function toast(t, sound = true) {
+  if (!t) return;
+  const el = $('toast'); el.textContent = t; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 1700);
+  if (sound) blip(1.5);
 }
-applySkin(skin.id, false);
+function bannerFor(t) {
+  const el = $('banner'); const a = t && D.articles.get(t);
+  if (!a || !skin.banner) { el.classList.remove('on'); return; }
+  let topIn = null, topInCount = 0;
+  for (const l of D.links.values()) {
+    if (l.a === t && l.ba > topInCount) { topIn = l.b; topInCount = l.ba; }
+    if (l.b === t && l.ab > topInCount) { topIn = l.a; topInCount = l.ab; }
+  }
+  const txt = skin.banner({ title: t, a, topIn, topInCount });
+  if (!txt) { el.classList.remove('on'); return; }
+  el.textContent = txt; el.classList.add('on');
+}
+$('stage').addEventListener('mousemove', (e) => {
+  if (!skin.ui?.includes('eye')) return;
+  const r = $('eye').getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1;
+  $('eye').firstElementChild.style.transform = `translate(${(dx / d) * Math.min(14, d / 20)}px, ${(dy / d) * Math.min(14, d / 20)}px)`;
+});
+let soundOn = false; try { soundOn = localStorage.getItem('wiki-trails.sound') === '1'; } catch {}
+$('sound').checked = soundOn;
+$('sound').onchange = () => { soundOn = $('sound').checked; try { localStorage.setItem('wiki-trails.sound', soundOn ? '1' : '0'); } catch {} blip(); };
+let actx;
+function blip(mult = 1) {
+  if (!soundOn) return;
+  try {
+    actx ||= new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain(), sd = skin.sound || { wave: 'square', f: 880 }, now = actx.currentTime;
+    o.type = sd.wave; o.frequency.setValueAtTime(sd.f * mult, now); o.frequency.exponentialRampToValueAtTime(sd.f * mult * 1.5, now + .08);
+    g.gain.setValueAtTime(.05, now); g.gain.exponentialRampToValueAtTime(.0001, now + .14);
+    o.connect(g).connect(actx.destination); o.start(now); o.stop(now + .15);
+  } catch { /* audio unavailable */ }
+}
+
+/* ---------- skin gallery + slideshow ---------- */
+const gal = $('gallery');
+const MOCK = `<svg viewBox="0 0 120 60" preserveAspectRatio="xMidYMid slice"><path class="ml" d="M18 40 Q40 10 62 28 T104 18" stroke-width="3"/><path class="ml" d="M18 40 L50 50 L62 28" stroke-width="1" opacity=".55"/><path class="ml" d="M62 28 L88 46" stroke-width="1.6" opacity=".8"/><circle class="mn2" cx="18" cy="40" r="4.5"/><circle class="mn" cx="62" cy="28" r="5.5"/><circle class="mn" cx="104" cy="18" r="3"/><circle class="mn" cx="50" cy="50" r="2.5"/><circle class="mn" cx="88" cy="46" r="3"/></svg>`;
+function buildGallery() {
+  $('gal-body').innerHTML = CATS.map(([c, label]) => `<div class="gal-cat">${label}</div><div class="gal-grid">${SKINS.filter((s) => s.cat === c).map((s) =>
+    `<button class="card" data-skin="${s.id}" data-chrome="${s.chrome || 'bevel'}" data-id="${s.id}"><div class="mock-desk"><div class="mock-win"><div class="mock-title">${esc((s.titles?.brain) || s.name)}</div><div class="mock-screen">${MOCK}</div><div class="mock-row"><span class="mock-field"></span><span class="mock-btn">OK</span></div></div></div><div class="card-name">${esc(s.name)}</div><div class="card-sub">${esc(s.blurb)}</div></button>`).join('')}</div>`).join('');
+  for (const c of $('gal-body').querySelectorAll('.card')) {
+    c.onmouseenter = () => { stopShow(); applySkin(c.dataset.id, { persist: false }); };
+    c.onfocus = c.onmouseenter;
+    c.onclick = () => { applySkin(c.dataset.id); blip(); };
+    c.ondblclick = () => { applySkin(c.dataset.id); hideGallery(); };
+  }
+  $('gal-body').onmouseleave = () => { if (skin.id !== chosen) applySkin(chosen, { persist: false }); };
+}
+function markChosen() {
+  for (const c of document.querySelectorAll('.card')) c.classList.toggle('chosen', c.dataset.id === chosen);
+  const cs = skinById(chosen);
+  $('gal-now').textContent = skin.id === chosen ? `Current: ${cs.name}` : `Trying: ${skin.name} (current: ${cs.name})`;
+}
+function openGallery() { closeStart(); stopShow(); if (!$('gal-body').children.length) buildGallery(); markChosen(); gal.hidden = false; gal.querySelector('.card.chosen')?.scrollIntoView({ block: 'nearest' }); }
+function hideGallery() { gal.hidden = true; }
+function cancelGallery() { hideGallery(); if (skin.id !== chosen) applySkin(chosen, { persist: false }); }
+function flip(dir) { const i = SKINS.findIndex((s) => s.id === skin.id); applySkin(SKINS[(i + dir + SKINS.length) % SKINS.length].id); blip(); document.querySelector(`.card[data-id="${skin.id}"]`)?.scrollIntoView({ block: 'nearest' }); }
+let showing = null;
+function startShow() {
+  hideGallery();
+  const step = () => { const i = SKINS.findIndex((s) => s.id === skin.id); applySkin(SKINS[(i + 1) % SKINS.length].id, { persist: false }); toast(skin.name, false); status(`Slideshow: ${skin.name}. Click or press any key to keep it.`); };
+  step(); showing = setInterval(step, 3800);
+  setTimeout(() => { document.addEventListener('pointerdown', keepShow, { once: true }); document.addEventListener('keydown', keepShow, { once: true }); }, 0);
+}
+function stopShow() { if (showing) { clearInterval(showing); showing = null; } }
+function keepShow() { if (!showing) return; stopShow(); applySkin(skin.id); toast(`Kept: ${skin.name}`, false); status('Ready.'); }
+$('skinbtn').onclick = openGallery; $('skins2').onclick = openGallery; $('skinsmenu').onclick = openGallery;
+$('gal-ok').onclick = () => { applySkin(skin.id); hideGallery(); };
+$('galclose').onclick = cancelGallery;
+$('gal-prev').onclick = () => flip(-1); $('gal-next').onclick = () => flip(1);
+$('gal-show').onclick = startShow;
+$('gal-rand').onclick = () => { let s; do { s = SKINS[Math.floor(Math.random() * SKINS.length)]; } while (s.id === skin.id); applySkin(s.id); blip(); document.querySelector(`.card[data-id="${s.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+gal.addEventListener('click', (e) => { if (e.target === gal) cancelGallery(); });
+document.addEventListener('keydown', (e) => {
+  if (!gal.hidden) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); flip(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); flip(-1); }
+    else if (e.key === 'Escape') { e.stopImmediatePropagation(); cancelGallery(); }
+    else if (e.key === 'Enter') { applySkin(skin.id); hideGallery(); }
+    return;
+  }
+  if ((e.key === 's' || e.key === 'S') && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && !e.ctrlKey && !e.metaKey && !e.altKey) openGallery();
+}, true);
+applySkin(skin.id, { persist: false });
 
 /* ---------- start menu, clock, status, boot ---------- */
 function closeStart() { $('startmenu').hidden = true; $('startbtn').classList.remove('pressed'); $('startbtn').setAttribute('aria-expanded', 'false'); }
@@ -309,13 +423,15 @@ function status(t) { $('status').textContent = t; }
 function statusFor(t) {
   const a = t && D.articles.get(t);
   if (!a) { status(cursorArticle() ? `Cursor: ${cursorArticle()}` : 'Ready.'); return; }
+  if (skin.hover) { status(skin.hover(a)); return; }
   status(`${a.title}: ${a.visits} visit(s), ${a.trails.size} trail(s)${a.starts.size ? `, start of ${a.starts.size}` : ''}`);
 }
 function boot() {
   let seen = false; try { seen = sessionStorage.getItem('wt-boot'); sessionStorage.setItem('wt-boot', '1'); } catch {}
   if (seen || matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
   const el = $('boot'), log = $('bootlog'); el.hidden = false;
-  const lines = [...skin.boot, 'Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', 'Mounting C:\\WIKI\\TRAILS....... <span class="ok">OK</span>', '', 'Starting Wiki Trails 95...'];
+  const bios = ['bevel', 'terminal'].includes(skin.chrome);
+  const lines = [...skin.boot, ...(bios ? ['Detecting curiosity........ <span class="ok">FOUND</span>', 'Loading synapses........... <span class="ok">OK</span>', ''] : ['']), '<span class="ok">Starting Wiki Trails…</span>'];
   return new Promise((res) => {
     let i = 0; const done = () => { clearInterval(iv); el.hidden = true; res(); };
     const iv = setInterval(() => { log.innerHTML += lines[i++] + '\n'; if (i >= lines.length) { clearInterval(iv); setTimeout(done, 450); } }, 140);

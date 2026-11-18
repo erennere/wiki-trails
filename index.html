@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" data-skin="win95">
+<html lang="en" data-skin="desktop95" data-chrome="bevel">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wiki Trails 95</title>
-<meta name="description" content="Map how you wander through Wikipedia: trails of clicks drawn as a glowing, brain-like graph on a retro CRT.">
+<title>Wiki Trails</title>
+<meta name="description" content="Map how you wander through Wikipedia: trails of clicks drawn as a brain-like graph, in 27 skins.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23031a0a'/%3E%3Crect x='2' y='3' width='3' height='3' fill='%23ffe14d'/%3E%3Crect x='11' y='2' width='3' height='3' fill='%2339ff88'/%3E%3Crect x='7' y='10' width='4' height='4' fill='%23ffaa00'/%3E%3Cpath d='M4 5L12 4M4 5L9 11M12 4L9 11' stroke='%2339ff88'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&family=Audiowide&family=Share+Tech+Mono&family=Major+Mono+Display&family=DotGothic16&family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700&family=Michroma&family=Nunito:wght@400;700&family=Comic+Neue:wght@400;700&family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&family=Bungee&family=Quicksand:wght@400;600;700&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/skins.css">
-<script>try{var s=localStorage.getItem("wiki-trails.skin");if(s)document.documentElement.dataset.skin=s}catch(e){}</script>
+<script>try{var s=localStorage.getItem("wiki-trails.skin"),m={win95:"desktop95",synth:"outrun",gameboy:"handheld",mac:"mono91"};if(s)document.documentElement.dataset.skin=m[s]||s}catch(e){}</script>
 <script src="vendor/d3.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </head>
@@ -21,7 +21,7 @@
 <main class="desk">
   <div class="col">
     <section class="win" id="w-builder">
-      <div class="title"><span class="ico ico-pen"></span><span class="tt">TRAILBLZ.EXE</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-pen"></span><span class="tt" id="tt-builder" data-page="100">TRAILBLZ.EXE</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
       <div class="body">
         <div id="crumbs"></div>
         <label id="qlabel" for="next"></label>
@@ -35,35 +35,43 @@
           <button class="btn" id="back" title="Go back one page in this trail (Alt+←)">◄ Back</button>
           <button class="btn" id="newtrail">New trail</button>
           <button class="btn" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+          <button class="btn" id="skins2" title="Choose a skin (S)">Skins</button>
         </div>
         <p class="hint">To branch off, click an earlier step, or click an article of this trail in the graph.</p>
       </div>
     </section>
 
     <section class="win grow" id="w-trails">
-      <div class="title"><span class="ico ico-folder"></span><span class="tt">Trails</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+      <div class="title"><span class="ico ico-folder"></span><span class="tt" id="tt-trails" data-page="101">Trails</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
       <div class="body list-body">
         <div class="listview" id="trails"></div>
       </div>
-      <div class="statusbar"><span id="tcount">0 trail(s)</span><span>Hover = show · Click = continue</span></div>
+      <div class="statusbar"><span id="tcount">0</span><span>Hover = show · Click = continue</span></div>
     </section>
   </div>
 
   <section class="win big" id="w-brain">
-    <div class="title"><span class="ico ico-brain"></span><span class="tt">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
+    <div class="title"><span class="ico ico-brain"></span><span class="tt" id="tt-brain" data-page="102">BRAIN.EXE - C:\WIKI\TRAILS</span><span class="tb"><i>_</i><i>□</i><i>×</i></span></div>
     <div class="menubar">
       <button class="mi" id="fit"><u>F</u>it</button>
       <span class="mi legend"><span class="ln thin"></span>1 click</span>
       <span class="mi legend"><span class="ln thick"></span>many clicks</span>
       <span class="mi legend"><span class="sq start"></span>trail start</span>
       <span class="mi legend"><span class="sq hub"></span>busy article</span>
-      <label class="mi skinpick">Skin <select class="skin-select" aria-label="Skin"></select></label>
+      <span class="extras" id="eq"></span>
+      <span class="extras" id="spark"></span>
+      <span class="skinpick"><button class="mi" id="skinbtn" title="Choose a skin (S)"><span class="ico ico-paint"></span> <span id="skinname">Skin</span> ▾</button></span>
     </div>
     <div class="crt" id="stage">
+      <canvas id="fx"></canvas>
       <svg id="svg" aria-label="Graph of Wikipedia trails"></svg>
+      <div class="ticker" id="ticker"><span></span></div>
+      <div class="banner" id="banner"></div>
+      <div class="toast" id="toast"></div>
+      <div class="eye" id="eye"><i></i></div>
       <div class="empty" id="empty">
         <div>
-          <p>C:\WIKI&gt; paste the first Wikipedia page to begin<span class="blink">█</span></p>
+          <p>Paste the first Wikipedia page to begin<span class="blink">█</span></p>
           <button class="btn" id="example2">Load test data (1,000 real clicks)</button>
         </div>
       </div>
@@ -76,19 +84,19 @@
 <footer class="taskbar">
   <button class="btn start" id="startbtn" aria-haspopup="true" aria-expanded="false"><span class="flag"></span>Start</button>
   <div class="startmenu" id="startmenu" hidden>
-    <div class="side"><b>Wiki</b>Trails 95</div>
+    <div class="side"><b>Wiki</b>Trails</div>
     <div class="items">
+      <button class="it" id="skinsmenu"><span class="ico ico-paint"></span>Skins… <small>S</small></button>
+      <hr>
       <button class="it" id="testdata"><span class="ico ico-brain"></span>Load test data <small>1,000 real clicks</small></button>
       <button class="it" id="example"><span class="ico ico-pen"></span>Load small example</button>
       <hr>
-      <button class="it" id="export"><span class="ico ico-disk"></span>Export JSON…</button>
-      <label class="it" for="import"><span class="ico ico-folder"></span>Import JSON…</label>
+      <button class="it" id="export"><span class="ico ico-disk"></span><span id="lbl-export">Export JSON…</span></button>
+      <label class="it" for="import"><span class="ico ico-folder"></span><span id="lbl-import">Import JSON…</span></label>
       <input type="file" id="import" accept="application/json,.json" hidden>
       <hr>
-      <label class="it lang"><span class="ico ico-paint"></span>Skin
-        <select class="skin-select" aria-label="Skin"></select>
-      </label>
-      <label class="it lang"><span class="ico ico-globe"></span>Wiki language
+      <label class="it"><span class="ico ico-sound"></span>Sound effects <input type="checkbox" id="sound"></label>
+      <label class="it"><span class="ico ico-globe"></span>Wiki language
         <select id="lang">
           <option value="en">en</option><option value="de">de</option><option value="tr">tr</option>
           <option value="fr">fr</option><option value="es">es</option><option value="it">it</option>
@@ -99,10 +107,26 @@
     </div>
   </div>
   <div class="tasks">
-    <span class="task on"><span class="ico ico-brain"></span>BRAIN.EXE</span>
-    <span class="task"><span class="ico ico-pen"></span>TRAILBLZ.EXE</span>
+    <span class="task on"><span class="ico ico-brain"></span><span id="task-brain">BRAIN.EXE</span></span>
+    <span class="task"><span class="ico ico-pen"></span><span id="task-builder">TRAILBLZ.EXE</span></span>
   </div>
-  <div class="tray"><span class="ico ico-speaker"></span><span id="clock">--:--</span></div>
+  <div class="tray"><span class="ico ico-sound"></span><span id="clock">--:--</span></div>
 </footer>
+
+<div class="gallery" id="gallery" hidden>
+  <section class="win" role="dialog" aria-modal="true" aria-labelledby="gal-title">
+    <div class="title"><span class="ico ico-paint"></span><span class="tt" id="gal-title">Display Properties: Skins</span><span class="tb"><i>_</i><i>□</i><i id="galclose" style="cursor:pointer">×</i></span></div>
+    <div class="gal-tools">
+      <button class="btn" id="gal-prev" title="Previous (←)">◄</button>
+      <button class="btn" id="gal-next" title="Next (→)">►</button>
+      <button class="btn" id="gal-show" title="Tour every skin">▶ Slideshow</button>
+      <button class="btn" id="gal-rand">Surprise me</button>
+      <span class="hint" style="margin:0">Hover a card to try it live · click to keep · ←/→ to flip · Esc to close</span>
+      <span class="now" id="gal-now"></span>
+      <button class="btn default" id="gal-ok">OK</button>
+    </div>
+    <div class="gal-body" id="gal-body"></div>
+  </section>
+</div>
 </body>
 </html>

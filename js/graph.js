@@ -7,6 +7,28 @@ export const TRAIL_COLORS = ['#ffff55', '#55ffff', '#ff55ff', '#ff5555', '#55ff5
 let HUB = d3.interpolateRgbBasis(['#1d6b36', '#2fd35a', '#a8ff4d', '#ffe14d', '#ffaa00']);
 
 const radius = (n) => Math.round(3 + 1.9 * Math.sqrt(n.visits));
+let BEND = 0.12, SHAPE = 'square', HOLLOW = false, LABEL_SIZE = 15, WALKER = false;
+
+function poly(pts) { return 'M' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L') + 'Z'; }
+function radial(n, rOut, rIn, rot = -Math.PI / 2) {
+  const pts = [];
+  for (let i = 0; i < n * (rIn ? 2 : 1); i++) {
+    const r = rIn && i % 2 ? rIn : rOut, a = rot + (i * Math.PI) / (rIn ? n : n / 2);
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return poly(pts);
+}
+export function shapePath(shape, r) {
+  switch (shape) {
+    case 'circle': return `M${-r},0a${r},${r} 0 1,0 ${2 * r},0a${r},${r} 0 1,0 ${-2 * r},0`;
+    case 'diamond': return poly([[0, -r * 1.35], [r * 1.35, 0], [0, r * 1.35], [-r * 1.35, 0]]);
+    case 'tri': return poly([[0, -r * 1.45], [r * 1.3, r * .85], [-r * 1.3, r * .85]]);
+    case 'hex': return radial(6, r * 1.2, 0, 0);
+    case 'star': return radial(5, r * 1.6, r * .7);
+    case 'spark': return radial(4, r * 1.9, r * .45);
+    default: return `M${-r},${-r}h${2 * r}v${2 * r}h${-2 * r}Z`;
+  }
+}
 const width = (l) => Math.min(11, 0.7 + 1.9 * Math.log2(1 + l.total));
 const alpha = (l) => Math.min(0.9, 0.2 + 0.16 * Math.log2(1 + l.total));
 
@@ -51,7 +73,7 @@ export function createGraph(svgEl, handlers) {
   // Quadratic curve between two nodes with a gentle, consistent bend.
   function ctrl(s, t, extra = 0) {
     const dx = t.x - s.x, dy = t.y - s.y, len = Math.hypot(dx, dy) || 1;
-    const bend = len * 0.12 + extra;
+    const bend = len * BEND + extra;
     return { x: (s.x + t.x) / 2 - (dy / len) * bend, y: (s.y + t.y) / 2 + (dx / len) * bend };
   }
   function curve(aTitle, bTitle, fromTitle, extra = 0) {
@@ -107,16 +129,12 @@ export function createGraph(svgEl, handlers) {
         .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
         .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y; })
         .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); n.fx = null; n.fy = null; }));
-    ent.append('rect').attr('class', 'core').attr('shape-rendering', 'crispEdges');
+    ent.append('path').attr('class', 'core');
     ent.append('text').attr('class', 'lbl');
     ent.append('title');
     const all = ent.merge(sel);
-    all.select('rect.core').attr('x', (n) => -radius(n)).attr('y', (n) => -radius(n))
-      .attr('width', (n) => 2 * radius(n)).attr('height', (n) => 2 * radius(n))
-      .attr('fill', (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg)))
-      .attr('stroke', (n) => (n.isStart ? '#ffffff' : '#000'))
-      .attr('stroke-width', (n) => (n.isStart ? 2 : 1));
-    all.select('text').attr('x', (n) => radius(n) + 6).attr('dy', '0.35em').text((n) => n.title);
+    paintNodes(all);
+    all.select('text').attr('dy', '0.35em').text((n) => n.title);
     all.select('title').text((n) => `${n.title}\n${n.visits} visit${n.visits === 1 ? '' : 's'}${n.isStart ? ' · trail start' : ''}`);
     all.classed('start', (n) => n.isStart).classed('cursor', (n) => n.title === cursor);
 
@@ -125,6 +143,14 @@ export function createGraph(svgEl, handlers) {
     sim.alpha(old.size ? 0.5 : 1).restart();
     updateLabels();
     if (over) setHighlight(over);
+  }
+
+  function paintNodes(sel = gNodes.selectAll('g.node')) {
+    const col = (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg));
+    sel.select('path.core')
+      .attr('d', (n) => shapePath(SHAPE, radius(n)))
+      .attr('shape-rendering', SHAPE === 'square' ? 'crispEdges' : null)
+      .attr('fill', col).style('color', col);
   }
 
   function updateLabels() {
@@ -138,7 +164,7 @@ export function createGraph(svgEl, handlers) {
         if (n.title === cursor || nodes.length <= 40) return 1;
         return n.visits >= labelRank(24 * z) ? 1 : 0;
       })
-      .style('font-size', `${15 / k}px`).attr('x', (n) => radius(n) + 5 / k).style('stroke-width', `${4 / k}px`);
+      .style('font-size', `${LABEL_SIZE / k}px`).attr('x', (n) => radius(n) * (SHAPE === 'star' || SHAPE === 'spark' ? 1.5 : 1.2) + 5 / k).style('stroke-width', `${4 / k}px`);
   }
 
   // spec: { steps:[{trailId, from, to, order}], colorOf(trailId), numbers: Map(title -> n) | null, focus }
@@ -173,6 +199,13 @@ export function createGraph(svgEl, handlers) {
       g.append('path').attr('class', 'lane-flow').attr('stroke', (d) => over.colorOf(d.trailId)).attr('stroke-width', (d) => 1.6 + 1.2 * Math.log2(1 + d.count));
       g.append('path').attr('class', 'lane-arrow').attr('fill', (d) => over.colorOf(d.trailId)).attr('shape-rendering', 'crispEdges').attr('d', 'M-4,-5L-4,5L1,5L1,3L3,3L3,1L5,1L5,-1L3,-1L3,-3L1,-3L1,-5Z');
       gBadges.selectAll('*').remove();
+      over.walk = null;
+      if (WALKER && over.numbers && over.steps.length) {
+        over.walk = [...over.steps].sort((x, y) => x.order - y.order);
+        const wk = gBadges.append('g').attr('class', 'walker');
+        wk.append('path').attr('d', 'M0,-9L7,2L3,2L3,8L-3,8L-3,2L-7,2Z');
+        wk.append('animateMotion').attr('dur', `${Math.max(4, over.walk.length * 1.1)}s`).attr('repeatCount', 'indefinite').attr('rotate', '0');
+      }
       if (over.numbers) {
         const b = gBadges.selectAll('g.badge').data([...over.numbers].filter(([t]) => nodeBy.has(t))).join('g').attr('class', 'badge');
         b.append('rect').attr('x', -9).attr('y', -8).attr('width', 18).attr('height', 16);
@@ -186,6 +219,7 @@ export function createGraph(svgEl, handlers) {
       g.selectAll('path.lane-glow, path.lane-flow').attr('d', c.d);
       if (c.mid) g.select('path.lane-arrow').attr('transform', `translate(${c.mid.x},${c.mid.y}) rotate(${(c.mid.ang * 180) / Math.PI})`);
     });
+    if (over.walk) gBadges.select('g.walker animateMotion').attr('path', over.walk.map((st) => { const [a, b] = st.from < st.to ? [st.from, st.to] : [st.to, st.from]; return curve(a, b, st.from).d; }).join(' '));
     gBadges.selectAll('g.badge').attr('transform', ([t]) => { const n = nodeBy.get(t); return `translate(${n.x - radius(n) - 9},${n.y - radius(n) - 9})`; });
   }
 
@@ -226,10 +260,13 @@ export function createGraph(svgEl, handlers) {
   }
 
   /** Swap colours for a skin: hub = node gradient, trails = trail colours. */
-  function setPalette({ hub, trails }) {
-    HUB = d3.interpolateRgbBasis(hub);
-    TRAIL_COLORS.splice(0, TRAIL_COLORS.length, ...trails);
-    gNodes.selectAll('g.node').select('rect.core').attr('fill', (n) => HUB(Math.log1p(n.deg) / Math.log1p(maxDeg)));
+  function setPalette(skin) {
+    HUB = d3.interpolateRgbBasis(skin.hub);
+    TRAIL_COLORS.splice(0, TRAIL_COLORS.length, ...skin.trails);
+    SHAPE = skin.shape || 'square'; HOLLOW = !!skin.hollow; BEND = skin.bend ?? 0.12; LABEL_SIZE = skin.labelSize || 15; WALKER = !!skin.walker;
+    gStrong.attr('filter', skin.glow === false ? null : 'url(#glow)');
+    svg.attr('class', `edge-${skin.edge || 'plain'}${HOLLOW ? ' hollow' : ''}`);
+    paintNodes(); tick(); updateLabels();
     if (over) drawOverlay(true);
   }
 
