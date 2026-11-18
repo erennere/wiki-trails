@@ -1,11 +1,12 @@
 // Details: explains whatever is selected. Nothing selected → an overview of your history.
-import { app, on, select, trailOf, commit, snapshot } from '../app.js';
+import { app, on, select, trailOf, commit, snapshot, pinThread, pinned } from '../app.js';
 import { trailLabel, trailShape, visitTime, timeSpan } from '../model.js';
 import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, confirmClick, toast } from '../ui.js';
 
 /** The colour of the thread drawn for this visit, if it's one of the threads on the map. */
+const drawn = (trailId, visitId) => app.threads?.threads.find((x) => x.trailId === trailId && x.visitId === visitId) || null;
 function swatch(trailId, visitId) {
-  const th = app.threads?.threads.find((x) => x.trailId === trailId && x.visitId === visitId);
+  const th = drawn(trailId, visitId);
   return th ? `<span class="sw" style="background:${th.color}" title="Drawn on the map in this colour"></span>` : '<span class="sw none"></span>';
 }
 
@@ -16,8 +17,8 @@ export function initDetails({ record, loadTest }) {
   function render() {
     const s = app.sel;
     if (!s) return overview();
+    if (pinned()) return thread(pinned());
     if (s.kind === 'article') return article(s.id);
-    if (s.kind === 'edge') return edge(s.id);
     if (s.kind === 'trail') return trail(s.id);
   }
 
@@ -80,7 +81,7 @@ export function initDetails({ record, loadTest }) {
         <button class="btn small" id="d-start">Start a trail here</button>
         <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
       </div>
-      <section><h4>When you saw it</h4>${shownSeen.map((s) => `<div class="lrow" data-t="${s.trail.id}" title="Show this trail">
+      <section><h4>When you saw it</h4>${shownSeen.map((s) => `<div class="lrow" ${drawn(s.trail.id, s.vid) ? `data-k="${drawn(s.trail.id, s.vid).key}" title="Show this thread"` : `data-t="${s.trail.id}" title="Show this trail"`}>
           <span class="l">${swatch(s.trail.id, s.vid)}<span class="when">${fmtDateTime(s.t)}</span><br><span class="explain">${s.from ? `from ${esc(s.from)}` : 'start of the trail'}${s.next.length ? ` → ${esc(s.next.join(', '))}` : ' · end of the trail'}</span></span></div>`).join('')}
         ${seen.length > shownSeen.length ? `<button class="btn small more" id="d-all">Show all ${seen.length}</button>` : ''}</section>
       <section><h4>You came from</h4>${list(inc)}</section>
@@ -89,27 +90,28 @@ export function initDetails({ record, loadTest }) {
     $('d-all')?.addEventListener('click', () => { showAll = true; render(); });
   }
 
-  /* ---------- a connection ---------- */
-  function edge(key) {
-    const l = app.DV.links.get(key) || app.D.links.get(key);
-    $('dtitle').textContent = 'Connection';
-    if (!l) { box.innerHTML = '<p class="explain">Not in this period.</p>'; return; }
-    const uses = [];
-    for (const id of l.trails) {
-      const ti = app.D.trailIndex.get(id); if (!ti) continue;
-      for (const v of ti.trail.visits) {
-        if (v.parent == null) continue;
-        const from = ti.byId.get(v.parent).article;
-        if ((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a)) uses.push({ t: visitTime(ti.trail, v), trail: ti.trail, vid: v.id, from, to: v.article });
-      }
-    }
-    uses.sort((p, q) => q.t - p.t);
-    box.innerHTML = `<h3><a class="alink" data-a="${esc(l.a)}">${esc(l.a)}</a> ↔ <a class="alink" data-a="${esc(l.b)}">${esc(l.b)}</a></h3>
-      <div class="sub">Clicked ${plural(l.total, 'time')}${uses.length ? `, last on ${fmtDateTime(uses[0].t)}` : ''}.</div>
-      <section><h4>Directions</h4><div class="dirbar"><span>${esc(l.a)} → ${esc(l.b)}</span><b>${l.ab}×</b><span>${esc(l.b)} → ${esc(l.a)}</span><b>${l.ba}×</b></div></section>
-      <section><h4>When you clicked it</h4>${uses.slice(0, showAll ? 1e9 : 12).map((u) => `<div class="lrow" data-t="${u.trail.id}"><span class="l">${swatch(u.trail.id, u.vid)}<span class="when">${fmtDateTime(u.t)}</span><br><span class="explain">${esc(u.from)} → ${esc(u.to)} · ${esc(trailLabel(u.trail))}</span></span></div>`).join('')}
-        ${uses.length > 12 && !showAll ? `<button class="btn small more" id="d-all">Show all ${uses.length}</button>` : ''}</section>`;
-    $('d-all')?.addEventListener('click', () => { showAll = true; render(); });
+  /* ---------- one thread you clicked on the map ---------- */
+  function thread(th) {
+    const ti = app.D.trailIndex.get(th.trailId), tr = ti?.trail;
+    $('dtitle').textContent = 'Thread';
+    if (!tr) return overview();
+    const at = app.threads.anchor, t0 = visitTime(tr, tr.visits[0]), t1 = visitTime(tr, tr.visits[tr.visits.length - 1]);
+    const mins = Math.round((t1 - t0) / 6e4), last = th.path.length - 1;
+    box.innerHTML = `<h3><span class="sw big" style="background:${th.color}"></span>${esc(th.path[0])} → ${esc(th.path[last])}</h3>
+      <div class="sub">${at ? `You were on <b>${esc(at)}</b> on ${fmtDateTime(th.t)}.` : `${fmtDateTime(t0)}.`} The trail started ${fmtDateTime(t0)}${mins > 0 ? ` and took ${mins} min` : ''}.</div>
+      <div class="actions">
+        <button class="btn small" id="d-unpin">${at ? `← All threads through ${esc(at)}` : '← Back'}</button>
+        <button class="btn small" id="d-cont">Continue this trail</button>
+      </div>
+      <section><h4>The way it went</h4><ol class="steps thread">${th.path.map((t, k) => `<li class="${k === 0 ? 'first' : ''}${k === last ? ' last' : ''}${t === at ? ' here' : ''}" data-a="${esc(t)}" title="Show ${esc(t)}">
+          <span class="num">${k + 1}</span><span class="l">${esc(t)}</span>${k === 0 ? '<span class="stag">start</span>' : k === last ? '<span class="stag">end</span>' : t === at ? '<span class="stag">here</span>' : ''}</li>`).join('')}</ol>
+        ${th.passes > 1 ? `<p class="explain">This trail was on ${esc(at)} ${th.passes} times; this is its last visit.</p>` : ''}
+        ${th.sides.length ? `<p class="explain">It also went off on ${plural(th.sides.length, 'side trip')}.</p>` : ''}</section>
+      <div class="actions"><button class="btn small" id="d-trail">Show the whole trail</button></div>`;
+    box.querySelector('h3 .sw').style.setProperty('--c', th.color);
+    $('d-unpin').onclick = () => pinThread(null);
+    $('d-cont').onclick = () => record.continueTrail(tr.id);
+    $('d-trail').onclick = () => select({ kind: 'trail', id: tr.id }, { force: true });
   }
 
   /* ---------- a trail ---------- */
@@ -148,10 +150,11 @@ export function initDetails({ record, loadTest }) {
   }
 
   box.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-k]'); if (k) return pinThread(k.dataset.k);
     const a = e.target.closest('[data-a]'); if (a && !e.target.closest('.btn')) return select({ kind: 'article', id: a.dataset.a }, { zoom: true });
     const t = e.target.closest('[data-t]'); if (t) return select({ kind: 'trail', id: t.dataset.t }, { zoom: true });
   });
   on('select', () => { showAll = false; render(); });
-  for (const ev of ['data', 'range', 'threads', 'cursor']) on(ev, render);
+  for (const ev of ['data', 'range', 'threads', 'pin', 'cursor']) on(ev, render);
   return { render };
 }

@@ -21,7 +21,7 @@ export function createGraph(el, handlers) {
   let budget = new Set();              // connections drawn in the overview
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
-  let threads = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
+  let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
   const view = { density: 1, fade: true, rotate: true };
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff' };
   let hub = d3.interpolateRgbBasis(['#d3d8e0', '#38404d']);
@@ -32,10 +32,9 @@ export function createGraph(el, handlers) {
     .nodeResolution(10).nodeOpacity(1).linkOpacity(1)
     .cooldownTime(40000)
     .onNodeHover((n) => { el.style.cursor = n ? 'pointer' : ''; handlers.onHover?.(n ? n.id : null); })
-    .onLinkHover((l) => { if (!threads) handlers.onEdgeHover?.(l ? { key: l.key } : null); })
-    // while threads are drawn, their beads and strands come first: a bead opens its article, a strand its trail
+    // connections aren't clickable; while threads are drawn, a click on a thread focuses it
     .onNodeClick((n, ev) => { if (!layerClick(ev)) handlers.onClick?.(n.id); })
-    .onLinkClick((l, ev) => { if (layerClick(ev)) return; if (threads) handlers.onBackground?.(); else handlers.onEdgeClick?.({ key: l.key }); })
+    .onLinkClick((l, ev) => { if (!layerClick(ev)) handlers.onBackground?.(); })
     .onBackgroundClick((ev) => { if (!layerClick(ev)) handlers.onBackground?.(); })
     .onEngineStop(() => {
       if (!settling) return;
@@ -49,7 +48,7 @@ export function createGraph(el, handlers) {
   G.d3Force('link').distance((l) => 18 + 26 / Math.sqrt(l.total || 1));
   const cam = G.camera(); cam.fov = 30; cam.updateProjectionMatrix();
   const ctl = G.controls();
-  ctl.autoRotateSpeed = 0.35;
+  ctl.autoRotateSpeed = 0.12;
   ctl.addEventListener('start', () => { lastTouch = performance.now(); ctl.autoRotate = false; });
   ctl.addEventListener('change', () => {
     // zooming far out of the threads goes back to the whole history
@@ -176,45 +175,77 @@ export function createGraph(el, handlers) {
   }
 
   /* ---------- threads ---------- */
-  let strands = [];
-  const sphere = new THREE.SphereGeometry(1, 16, 12);
+  let strands = [], fans = new Map();
+  const sphere = new THREE.SphereGeometry(1, 16, 12), cone = new THREE.ConeGeometry(1, 2.6, 10);
   function disposeLayer() {
-    for (const o of [...layer.children]) { layer.remove(o); if (o.geometry && o.geometry !== sphere) o.geometry.dispose(); o.material?.dispose(); }
+    for (const o of [...layer.children]) { layer.remove(o); if (o.geometry && o.geometry !== sphere && o.geometry !== cone) o.geometry.dispose(); o.material?.dispose(); }
     strands = [];
   }
   const posOf = (t) => { const n = nodeBy.get(t); return n && Number.isFinite(n.x) ? new THREE.Vector3(n.x, n.y, n.z) : null; };
-  function ball(pos, r, color, opacity = 1, title = null) {
+  function ball(pos, r, color, opacity = 1, data = null) {
     const m = new THREE.Mesh(sphere, new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 }));
-    m.position.copy(pos); m.scale.setScalar(r); if (title) m.userData.title = title; layer.add(m); return m;
+    m.position.copy(pos); m.scale.setScalar(r); if (data) Object.assign(m.userData, data); layer.add(m); return m;
+  }
+  // Start and end markers: flat badges that always face you, keep their size on screen and sit on top
+  // of everything, so where a thread starts and ends stands out at a glance.
+  const textures = new Map();
+  function badge(kind, color) {
+    const k = kind + color; if (textures.has(k)) return textures.get(k);
+    const c = document.createElement('canvas'); c.width = 128; c.height = 160;
+    const g = c.getContext('2d'), col = d3.color(color).formatHex();
+    g.lineJoin = 'round';
+    if (kind === 'start') { // a ring: where you set off
+      g.beginPath(); g.arc(64, 64, 46, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill();
+      g.lineWidth = 20; g.strokeStyle = col; g.stroke();
+      g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(64, 64, 57, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(64, 64, 14, 0, Math.PI * 2); g.fillStyle = col; g.fill();
+    } else { // a pin: where you ended up
+      g.beginPath(); g.moveTo(64, 156);
+      g.bezierCurveTo(40, 112, 12, 92, 12, 60); g.arc(64, 60, 52, Math.PI, 0); g.bezierCurveTo(116, 92, 88, 112, 64, 156); g.closePath();
+      g.fillStyle = col; g.fill(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
+      g.lineWidth = 2; g.strokeStyle = 'rgba(0,0,0,.35)'; g.stroke();
+      g.beginPath(); g.arc(64, 60, 19, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    textures.set(k, tex); return tex;
+  }
+  function marker(kind, color, pos, px, opacity, data, fan = 0) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: badge(kind, color), sizeAttenuation: false, depthTest: false, depthWrite: false, transparent: true, opacity }));
+    const s = px * 2 * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, H);
+    m.scale.set(s, s * 1.25, 1);
+    // several threads ending (or starting) on one page fan out side by side, so you can count them
+    m.center.set(0.5 - fan * 0.8, kind === 'end' ? 0.02 : 0.5); // the pin's tip sits on the page
+    m.position.copy(pos); m.renderOrder = 100 + (data?.order || 0); Object.assign(m.userData, data || {});
+    layer.add(m); return m;
   }
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   function pickLayer(ev) {
     const r = el.getBoundingClientRect();
     ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, cam);
-    const hits = ray.intersectObjects(layer.children.filter((o) => o.userData.title || o.userData.trailId), false);
-    hits.sort((a, b) => (b.object.userData.title ? 1 : 0) - (a.object.userData.title ? 1 : 0) || a.distance - b.distance); // beads before strands
+    const hits = ray.intersectObjects(layer.children.filter((o) => o.userData.key), false);
+    // markers first, then the most visible thread
+    hits.sort((a, b) => (b.object.isSprite ? 1 : 0) - (a.object.isSprite ? 1 : 0) || (b.object.userData.op || 0) - (a.object.userData.op || 0) || a.distance - b.distance);
     return hits[0]?.object.userData || null;
   }
   function layerClick(ev) {
     const u = threads && ev && pickLayer(ev);
-    if (u?.title) { handlers.onClick?.(u.title); return true; }
-    if (u?.trailId) { handlers.onTrailClick?.(u.trailId); return true; }
+    if (u?.key) { handlers.onThreadClick?.(u.key); return true; }
     return false;
   }
-  let hoverBead = null;
+  let hoverKey = null;
   el.addEventListener('pointermove', (ev) => {
     if (!threads) return;
-    const u = pickLayer(ev), t = u?.title || null;
-    el.style.cursor = u ? 'pointer' : '';
-    if (t !== hoverBead) { hoverBead = t; handlers.onHover?.(t); }
+    const u = pickLayer(ev), k = u ? u.key + '|' + (u.title || '') : null;
+    if (u) el.style.cursor = 'pointer';
+    if (k !== hoverKey) { hoverKey = k; handlers.onThreadHover?.(u ? { key: u.key, title: u.title || null } : null); }
   });
   /** Draw (or clear) the threads of the selection. */
-  function setHighlight(spec) {
+  function setHighlight(spec, pinKey = null) {
     threads = spec && spec.threads.length ? { ...spec, on: new Set() } : null;
+    pin = pinKey;
     if (threads) for (const th of spec.threads) { th.path.forEach((t) => threads.on.add(t)); th.sides.forEach((b) => b.forEach((t) => threads.on.add(t))); }
     if (threads && spec.anchor) threads.on.add(spec.anchor);
-    if (threads && spec.edge) spec.edge.forEach((t) => threads.on.add(t));
     ctl.autoRotate = false;
     // decide the camera first, so strands can be sized in screen pixels for that view
     plan = threads ? bestFrame([...threads.on].map(posOf).filter(Boolean)) : null;
@@ -224,18 +255,37 @@ export function createGraph(el, handlers) {
     placeLabels(true);
   }
   function unitAt(d) { return 2 * d * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, H); }
+  /** Focus one thread: it's drawn in full, the others step back. */
+  function setPin(key) { pin = key; drawThreads(); placeLabels(true); }
   function drawThreads() {
     disposeLayer();
     drawCursor();
     if (!threads) return;
-    const bg = new THREE.Color(style.bg);
+    const bg = new THREE.Color(style.bg), white = new THREE.Color('#ffffff');
     // where several threads share a connection, give each its own lane so they read as separate strands
-    const lanes = new Map(), laneOf = new Map();
+    const lanes = new Map();
     const pk = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
     threads.threads.forEach((th, i) => th.path.forEach((t, k) => { if (k) { const key = pk(th.path[k - 1], t); if (!lanes.has(key)) lanes.set(key, []); if (!lanes.get(key).includes(i)) lanes.get(key).push(i); } }));
-    const order = threads.threads.map((th, i) => i).reverse(); // oldest first, so the newest is drawn on top
+    const n = threads.threads.length;
+    // how many drawn threads start / end on each page, and each thread's place in that row
+    fans = new Map(); const fanIdx = new Map();
+    threads.threads.forEach((th) => {
+      const last = th.path.length - 1;
+      for (const [kind, t] of [['start', th.path[0]], ['end', th.path[last]]]) {
+        if (t === threads.anchor || (kind === 'end' && last === 0)) continue;
+        const k = kind + '\u0000' + t; fanIdx.set(th.key + kind, fans.get(k) || 0); fans.set(k, (fans.get(k) || 0) + 1);
+      }
+    });
+    const fanOf = (th, kind, t) => { const m = fans.get(kind + '\u0000' + t) || 1; return (fanIdx.get(th.key + kind) || 0) - (m - 1) / 2; };
+    // oldest first, so newer threads (and the focused one) are drawn on top
+    const order = threads.threads.map((th, i) => i).sort((a, b) => (threads.threads[a].key === pin) - (threads.threads[b].key === pin) || b - a);
     for (const i of order) {
-      const th = threads.threads[i], col = new THREE.Color(th.color), pale = col.clone().lerp(bg, 0.62);
+      const th = threads.threads[i], focused = pin === th.key;
+      // the older the thread, the fainter; the one you clicked on is shown in full, the rest step back
+      const op = pin ? (focused ? 1 : 0.1 + 0.12 * th.rec) : 0.22 + 0.78 * th.rec;
+      const w = focused ? 1.35 : pin ? 0.6 : 0.55 + 0.45 * th.rec;
+      const col = new THREE.Color(th.color), pale = col.clone().lerp(bg, 0.55);
+      const data = { key: th.key, op, order: focused ? 50 : n - i };
       const pts = th.path.map(posOf);
       if (pts.some((p) => !p)) continue;
       if (pts.length > 1) {
@@ -243,25 +293,24 @@ export function createGraph(el, handlers) {
         for (let k = 0; k < pts.length; k++) {
           ctrl.push(pts[k]);
           if (k === pts.length - 1) break;
-          const a = th.path[k], b = th.path[k + 1], key = pk(a, b), ln = lanes.get(key);
+          const a = th.path[k], b = th.path[k + 1], ln = lanes.get(pk(a, b));
           const p = pts[k], q = pts[k + 1], dir = (a < b ? q.clone().sub(p) : p.clone().sub(q)).normalize();
-          let side = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : UP).normalize();
+          const side = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : UP).normalize();
           const j = ln.indexOf(i), off = ln.length > 1 ? (j - (ln.length - 1) / 2) * 9 * unit : 0;
-          const len = p.distanceTo(q);
-          ctrl.push(p.clone().add(q).multiplyScalar(0.5).addScaledVector(side, off + 0.06 * len));
+          ctrl.push(p.clone().add(q).multiplyScalar(0.5).addScaledVector(side, off + 0.06 * p.distanceTo(q)));
         }
         const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
         const L = curve.getLength(), segs = Math.min(600, Math.max(24, Math.round(L / (4 * unit)))), rad = 7;
         const geo = new THREE.TubeGeometry(curve, segs, 1, rad, false);
         // taper: thin and pale where you started, bold where you ended
         const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3), c = new THREE.Vector3(), v = new THREE.Vector3(), tmp = new THREE.Color();
-        const r0 = 0.9 * unit, r1 = (2.2 + 3.4 * th.rec) * unit;
-        for (let s = 0; s <= segs; s++) {
-          const u = s / segs; curve.getPointAt(u, c);
+        const r0 = 1 * unit * w, r1 = 5 * unit * w;
+        for (let sI = 0; sI <= segs; sI++) {
+          const u = sI / segs; curve.getPointAt(u, c);
           const r = r0 + (r1 - r0) * Math.pow(u, 0.8);
-          tmp.copy(pale).lerp(col, Math.min(1, u * 1.15));
+          tmp.copy(pale).lerp(col, Math.min(1, u * 1.2));
           for (let q = 0; q <= rad; q++) {
-            const idx = s * (rad + 1) + q;
+            const idx = sI * (rad + 1) + q;
             v.fromBufferAttribute(pos, idx).sub(c).multiplyScalar(r).add(c);
             pos.setXYZ(idx, v.x, v.y, v.z);
             colors[idx * 3] = tmp.r; colors[idx * 3 + 1] = tmp.g; colors[idx * 3 + 2] = tmp.b;
@@ -270,39 +319,50 @@ export function createGraph(el, handlers) {
         pos.needsUpdate = true;
         geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geo.computeVertexNormals();
-        const tube = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45 + 0.55 * th.rec, depthWrite: false }));
-        tube.renderOrder = 10 + (threads.threads.length - i); tube.userData.trailId = th.trailId;
+        const tube = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
+        tube.renderOrder = 10 + data.order; Object.assign(tube.userData, data);
         layer.add(tube);
-        // the light that runs from start to end
-        const comet = [];
-        for (let k = 0; k < 5; k++) comet.push(ball(pts[0], (5 - k * 0.75) * unit * (0.75 + 0.35 * th.rec), col.clone().lerp(new THREE.Color('#ffffff'), 0.35 - k * 0.06), 0.95 - k * 0.17));
-        comet.forEach((m) => { m.renderOrder = 40; });
-        strands.push({ curve, L, comet, phase: -i * 0.35, pause: 0.6 + 2.2 * (1 - th.rec), rec: th.rec, gap: 7 * unit, speed: 220 * unit });
+        // arrowheads along the way, pointing from start to end
+        const stepLen = 90 * unit, count = Math.floor(L / stepLen), tan = new THREE.Vector3();
+        for (let a = 1; a <= count; a++) {
+          const u = (a - 0.5) / count; if (u < 0.08 || u > 0.94) continue;
+          const m = new THREE.Mesh(cone, new THREE.MeshLambertMaterial({ color: tmp.copy(pale).lerp(col, Math.min(1, u * 1.2)).clone(), transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
+          curve.getPointAt(u, m.position); curve.getTangentAt(u, tan);
+          m.quaternion.setFromUnitVectors(UP, tan);
+          m.scale.setScalar((2.2 + 3.2 * u) * unit * w);
+          m.renderOrder = tube.renderOrder; Object.assign(m.userData, data);
+          layer.add(m);
+        }
+        // the light that runs from start to end (only on the focused thread when one is focused)
+        if (!pin || focused) {
+          const comet = [];
+          for (let k = 0; k < 5; k++) comet.push(ball(pts[0], (5 - k * 0.75) * unit * w, col.clone().lerp(white, 0.4 - k * 0.07), Math.min(1, op + 0.1) * (0.95 - k * 0.17)));
+          comet.forEach((m) => { m.renderOrder = 60; });
+          strands.push({ curve, L, comet, phase: -i * 0.35, pause: 0.6 + 2.2 * (1 - th.rec), gap: 7 * unit, speed: 220 * unit });
+        }
       }
-      // start: a small pale bead; end: a bold dot in the thread's colour
-      // beads on every page of the thread, in its colour, a little larger than the page's own dot;
-      // the start is a small pale bead, the end a bold one
+      // small beads on the pages in between
       const last = th.path.length - 1, tmpc = new THREE.Color();
       th.path.forEach((t, k) => {
-        if (threads.anchor === t || threads.edge?.includes(t)) return;
-        if (k === last && last > 0) ball(pts[k], (3.6 + 2.6 * th.rec) * unit, col, 1, t);
-        else if (k === 0) ball(pts[k], 3 * unit, pale, 1, t);
-        else ball(pts[k], (1.7 + 1.3 * k / last) * unit, tmpc.copy(pale).lerp(col, k / last), 1, t);
+        if (k === 0 || k === last || threads.anchor === t) return;
+        ball(pts[k], (1.8 + 1.2 * k / last) * unit * w, tmpc.copy(pale).lerp(col, k / last), op, { ...data, title: t });
       });
+      // start: a ring; end: a pin (unless the thread starts or ends on the page you clicked)
+      const big = focused ? 1.25 : 1, fade = pin && !focused ? 0.35 : 0.55 + 0.45 * th.rec;
+      if (th.path[0] !== threads.anchor || last === 0) marker('start', th.color, pts[0], 24 * big, fade, { ...data, title: th.path[0] }, fanOf(th, 'start', th.path[0]));
+      if (last > 0 && th.path[last] !== threads.anchor) marker('end', th.color, pts[last], 34 * big, fade, { ...data, title: th.path[last] }, fanOf(th, 'end', th.path[last]));
       // side trips of a single trail: thin strands in the same colour
       for (const b of th.sides) {
         const bp = b.map(posOf); if (bp.some((p) => !p) || bp.length < 2) continue;
         const curve = new THREE.CatmullRomCurve3(bp, false, 'centripetal');
-        const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(8, bp.length * 10), 0.9 * unit, 6, false), new THREE.MeshLambertMaterial({ color: pale, transparent: true, opacity: 0.75, depthWrite: false }));
-        layer.add(tube);
+        const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(8, bp.length * 10), 0.9 * unit, 6, false), new THREE.MeshLambertMaterial({ color: pale, transparent: true, opacity: 0.75 * op, depthWrite: false }));
+        Object.assign(tube.userData, data); layer.add(tube);
       }
     }
-    // the page (or the connection's two pages) you selected
-    for (const t of threads.anchor ? [threads.anchor] : threads.edge || []) {
-      const p = posOf(t); if (!p) continue;
-      const r = 7 * unit;
-      ball(p, r, style.anchor, 1, t);
-      const halo = ball(p, r * 1.9, style.anchor, 0.14); halo.renderOrder = 5;
+    // the page you selected
+    if (threads.anchor) {
+      const p = posOf(threads.anchor);
+      if (p) { const r = 7 * unit; ball(p, r, style.anchor); const halo = ball(p, r * 1.9, style.anchor, 0.14); halo.renderOrder = 5; }
     }
   }
   function drawCursor() {
@@ -321,10 +381,12 @@ export function createGraph(el, handlers) {
       if (threads) {
         const seen = new Set();
         const push = (t, kind, prio) => { if (!seen.has(t)) { seen.add(t); wanted.push({ t, kind, prio }); } };
-        (threads.anchor ? [threads.anchor] : threads.edge || []).forEach((t) => push(t, 'anchor', 1000));
-        threads.threads.forEach((th) => { const e = th.path[th.path.length - 1], s = th.path[0]; push(e, 'end', 500 + th.rec * 100); push(s, 'start', 300 + th.rec * 100); });
+        if (threads.anchor) push(threads.anchor, 'anchor', 1000);
+        const pth = pin && threads.threads.find((x) => x.key === pin);
+        if (pth) { push(pth.path[pth.path.length - 1], 'end', 900); push(pth.path[0], 'start', 880); pth.path.forEach((t, k) => push(t, 'step', 700 - k)); }
+        if (!pth) threads.threads.forEach((th) => { const e = th.path[th.path.length - 1], s = th.path[0]; push(e, 'end', 500 + th.rec * 100); push(s, 'start', 300 + th.rec * 100); });
         // a single trail: name every page on it
-        if (threads.kind === 'trail') threads.threads[0].path.forEach((t, k) => push(t, 'step', 200 - k));
+        if (threads.kind === 'trail' && !pth) threads.threads[0].path.forEach((t, k) => push(t, 'step', 200 - k));
       } else {
         const list = nodes.filter((n) => !vis || vis.has(n.id)).sort((p, q) => q.visits - p.visits);
         list.slice(0, Math.max(5, Math.min(16, Math.round(list.length / 20)))).forEach((n, i) => wanted.push({ t: n.id, kind: 'hub', prio: 100 - i }));
@@ -349,12 +411,16 @@ export function createGraph(el, handlers) {
       const p = G.graph2ScreenCoords(n.x, n.y, n.z);
       if (!o.w) { o.el.style.display = ''; o.w = o.el.offsetWidth || 60; o.h = o.el.offsetHeight || 18; }
       const fixed = w.kind === 'anchor' || w.kind === 'cursor';
-      // above the dot if there's room, else below, right or left of it
-      const spots = [[-o.w / 2, -o.h - 10], [-o.w / 2, 10], [12, -o.h / 2], [-o.w - 12, -o.h / 2]];
+      // above the dot if there's room, else below, right or left of it; beside a start ring or an end pin
+      const half = ((fans.get(w.kind + '\u0000' + w.t) || 1) - 1) * 0.4 * (w.kind === 'end' ? 34 : 24); // room for fanned-out markers
+      const spots = w.kind === 'end' ? [[18 + half, -30 - o.h / 2], [-o.w - 18 - half, -30 - o.h / 2], [-o.w / 2, 8]]
+        : w.kind === 'start' ? [[18 + half, -o.h / 2], [-o.w - 18 - half, -o.h / 2], [-o.w / 2, 16], [-o.w / 2, -o.h - 16]]
+          : [[-o.w / 2, -o.h - 10], [-o.w / 2, 10], [12, -o.h / 2], [-o.w - 12, -o.h / 2]];
       let bx = null;
       for (const [dx, dy] of fixed ? spots.slice(0, 1) : spots) {
         const c = [p.x + dx, p.y + dy, p.x + dx + o.w, p.y + dy + o.h];
-        if (fixed || !boxes.some((b) => c[0] < b[2] && c[2] > b[0] && c[1] < b[3] && c[3] > b[1])) { bx = c; break; }
+        const inside = c[0] >= 2 && c[2] <= W - 2 && c[1] >= 2 && c[3] <= H - 2;
+        if (fixed || (inside && !boxes.some((b) => c[0] < b[2] && c[2] > b[0] && c[1] < b[3] && c[3] > b[1]))) { bx = c; break; }
       }
       const off = tmp.dot(fwd) < 0 || p.x < 0 || p.x > W || p.y < 0 || p.y > H;
       if (off || !bx) { if (o.el.style.display !== 'none') o.el.style.display = 'none'; continue; }
@@ -411,7 +477,7 @@ export function createGraph(el, handlers) {
   /** The whole (visible) history. */
   function fit(animate = true) {
     const pts = visiblePoints(); if (!pts.length) return;
-    moveTo(frame(pts, currentBack(), 0.9), animate ? 900 : 0, false);
+    moveTo(frame(pts, currentBack(), 0.9), animate ? 1400 : 0, false);
   }
   /** The camera for these points: the angle where they spread out best, filling the window. */
   function bestFrame(pts) {
@@ -432,10 +498,10 @@ export function createGraph(el, handlers) {
   function focusOn(titles) {
     const pts = [...titles].map(posOf).filter(Boolean); if (!pts.length) return;
     if (pts.length === 1) { for (const m of adj.get([...titles][0]) || []) { const p = posOf(m); if (p) pts.push(p); } }
-    const f = bestFrame(pts); if (f) moveTo(f, 1100, true);
+    const f = bestFrame(pts); if (f) moveTo(f, 1700, true);
   }
   /** Move the camera to the view the threads were drawn for. */
-  function frameThreads() { if (plan) moveTo(plan, 1100, true); }
+  function frameThreads() { if (plan) moveTo(plan, 1700, true); }
   function zoomBy(f) {
     const d = cam.position.distanceTo(ctl.target) / f, back = currentBack();
     const p = ctl.target.clone().addScaledVector(back, d);
@@ -492,7 +558,7 @@ export function createGraph(el, handlers) {
   }
 
   return {
-    update, reset, relayout, setVisible, setPalette, setHighlight, setCursor, setView,
+    update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView,
     fit, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood,
     nodeCount: () => nodes.length,
     isSettling: () => settling,

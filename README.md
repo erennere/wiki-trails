@@ -5,11 +5,11 @@ Map how you wander through Wikipedia. You record each trail by hand: the page yo
 Click any article and the trails that went through it light up, and you can read them at a glance:
 
 - **Each trail has its own colour.**
-- **Each trail is drawn like a brush stroke:** thin and pale where you started, bold where you ended.
-- **A light runs along each one** from its start to its end.
-- **Newer trails are brighter and thicker,** older ones fainter.
+- **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
+- **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it and a light running from start to end.
+- **The older a trail, the fainter it is.**
 
-The camera turns to the angle where the trails spread out best and fills the window with them. Zoom out and you're back to your whole history.
+The camera turns to the angle where the trails spread out best and fills the window with them. Click a trail anywhere and it's shown in full while the others step back; the side panel explains it. Zoom out and you're back to your whole history.
 
 ![Clicking an article shows its latest trails, each from start to end](.github/screenshot.png)
 
@@ -17,15 +17,17 @@ The camera turns to the angle where the trails spread out best and fills the win
 
 The window has one map and two side panels, and both panels can be collapsed.
 
-- **Map** (middle). Drag to turn it, scroll to zoom. Click an article, a connection or a trail to see its trails. Zoom far out, click empty space or press <kbd>Esc</kbd> to go back to your whole history. Hover anything to see when you last saw it.
+- **Map** (middle). Drag to turn it, scroll to zoom. Click an article to see its trails, then click one of the trails to focus it. Click empty space or press <kbd>Esc</kbd> to step back (first from the trail, then to your whole history), or zoom far out. Hover anything to see when you last saw it.
 - **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
 - **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, or drag across it to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
 - **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
 - **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
 - **Details** (right). Shows what you selected:
-  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it. A coloured dot marks the visits drawn on the map, in the same colour as their trail. Click a visit to see that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there or open it on Wikipedia.
-  - **A connection:** how often you clicked it in each direction, and when, with the same coloured dots.
-  - **A trail:** its steps, with Continue, Rename and Delete.
+  - **An article:** how often you saw it and when, first and last. *When you saw it* lists every visit with its date and time and the pages before and after it. A coloured dot marks the visits drawn on the map, in the same colour as their trail. Click one to focus that trail. *You came from* and *You went on to* follow, plus buttons to start a new trail there or open it on Wikipedia.
+  - **A trail you clicked on the map:** where it started and ended, when you were on the page, and every page in order. Click a page to go to it.
+  - **A trail from the list:** its steps, with Continue, Rename and Delete.
+
+![A trail clicked on the map: shown in full, explained at the side](.github/focused.png)
 
 ![One trail, thin at its start (Theatre) and bold at its end (Zebra)](.github/screenshot-trail.png)
 
@@ -82,7 +84,7 @@ Look names describe a style; they are not affiliated with any product.
 | Key | Action |
 | --- | --- |
 | <kbd>/</kbd> | Find an article or trail |
-| <kbd>Esc</kbd> | Back to your whole history |
+| <kbd>Esc</kbd> | Let go of the focused trail, then back to your whole history |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save history to a file (<kbd>Shift</kbd> for Save as) |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a history file |

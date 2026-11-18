@@ -1,5 +1,5 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
-import { app, on, commit, select, setHover, setPeriod, refreshThreads, setSetting, cursorVisit, saveSettings, undo } from './app.js';
+import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf } from './app.js';
 import { loadLocal, loadPublished, saveLocal } from './storage.js';
 import { emptyState } from './model.js';
 import { createGraph } from './views/map3d.js';
@@ -29,11 +29,11 @@ setPanel('right', app.settings.right);
 let rz;
 const graph = createGraph($('graph'), {
   onHover: (t) => { setHover(t ? { kind: 'article', id: t } : null); showTip(); },
-  onEdgeHover: (l) => { if (app.hover?.kind === 'article') return; setHover(l ? { kind: 'edge', id: l.key } : null); showTip(); },
   onClick: (t) => select({ kind: 'article', id: t }, { force: true }),
-  onEdgeClick: (l) => select({ kind: 'edge', id: l.key }, { force: true }),
-  onTrailClick: (id) => select({ kind: 'trail', id }, { force: true }),
-  onBackground: () => select(null),
+  // a click on a thread focuses it and explains it in the side panel; click it again (or empty space) to let go
+  onThreadClick: (key) => { pinThread(app.pin === key ? null : key); if (app.pin) setPanel('right', true); },
+  onThreadHover: (h) => { threadHover = h; showTip(); },
+  onBackground: () => (app.pin ? pinThread(null) : select(null)),
   onZoomedOut: () => select(null),
   onSettled: () => { app.state.layout = graph.getPositions(); saveLocal(app.state); },
   onResize: () => { clearTimeout(rz); rz = setTimeout(() => (app.threads ? showThreads() : graph.fit(false)), 160); },
@@ -52,16 +52,18 @@ function placeTip() {
   if (y + tip.offsetHeight > r.height - 8) y = mouse[1] - tip.offsetHeight - 12;
   tip.style.left = `${x}px`; tip.style.top = `${y}px`;
 }
+let threadHover = null;
 function showTip() {
-  const h = app.hover;
+  const h = app.hover, th = threadHover && app.threads?.threads.find((x) => x.key === threadHover.key);
+  if (th) {
+    const tr = trailOf(th.trailId);
+    tip.innerHTML = `${threadHover.title ? `<b>${esc(threadHover.title)}</b> · ` : ''}<span class="sw" style="background:${th.color}"></span><b>${esc(th.path[0])} → ${esc(th.path[th.path.length - 1])}</b> · ${fmtDateTime(th.t)}${tr ? ` · ${plural(th.path.length, 'page')}` : ''}<br><span class="explain">${app.pin === th.key ? 'Click again to let go' : 'Click to see this thread'}</span>`;
+    tip.hidden = false; placeTip(); return;
+  }
   if (h?.kind === 'article') {
     const a = app.DV.articles.get(h.id) || app.D.articles.get(h.id);
     if (!a) { tip.hidden = true; return; }
     tip.innerHTML = `<b>${esc(a.title)}</b> · ${plural(a.visits, 'visit')} · last seen ${fmtDateTime(a.last)}`;
-  } else if (h?.kind === 'edge') {
-    const l = app.DV.links.get(h.id) || app.D.links.get(h.id);
-    if (!l) { tip.hidden = true; return; }
-    tip.innerHTML = `<b>${esc(l.a)} ↔ ${esc(l.b)}</b> · ${plural(l.total, 'click')} · last ${fmtDateTime(l.last)}`;
   } else { tip.hidden = true; return; }
   tip.hidden = false; placeTip();
 }
@@ -70,7 +72,7 @@ $('graph').addEventListener('mouseleave', () => { tip.hidden = true; });
 
 /** Draw the selection's threads and let the camera frame them (or go back to the whole history). */
 function showThreads(frame = true) {
-  graph.setHighlight(app.threads);
+  graph.setHighlight(app.threads, app.pin);
   renderThreadbar();
   if (!frame) return;
   if (app.threads) graph.frameThreads(); else graph.fit(true);
@@ -112,6 +114,7 @@ on('data', (opts = {}) => {
 });
 on('select', () => showThreads());
 on('threads', () => showThreads());
+on('pin', () => { graph.setPin(app.pin); showTip(); });
 on('cursor', () => graph.setCursor(cursorVisit()?.article || null));
 on('range', () => { graph.setVisible(app.DV); showThreads(); });
 on('skin', () => { if (app.sel) refreshThreads(); });
@@ -128,7 +131,7 @@ document.querySelectorAll('[data-example]').forEach((b) => { if (!b.onclick) b.o
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(e.target.tagName);
   if (e.key === 'Escape' && !typing && $('settings').hidden) {
-    if (app.sel) select(null);
+    if (app.pin) pinThread(null); else if (app.sel) select(null);
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !(typing && e.target.value)) { e.preventDefault(); if (undo()) toast('Undone'); }
 });
@@ -141,6 +144,6 @@ document.addEventListener('keydown', (e) => {
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
     app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
-    nodeXY: (t) => rel(graph.screenOf(t)), edgeXY: (i) => rel(graph.edgeMid(i)),
+    nodeXY: (t) => rel(graph.screenOf(t)),
   };
 })();

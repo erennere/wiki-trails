@@ -1,6 +1,6 @@
 // The app's shared state and the few actions that change it.
 // Panels and views never talk to each other directly: they call these
-// actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'skin', 'settings', 'dirty').
+// actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'pin', 'skin', 'settings', 'dirty').
 import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips } from './model.js';
 import { saveLocal } from './storage.js';
 
@@ -13,11 +13,12 @@ export const app = {
   DV: null,         // derived for the time range you're looking at
   range: null,      // [fromMs, toMs] or null for all time
   rangeName: 'all', // '30' | '365' | 'all' | 'custom'
-  sel: null,        // what's selected: { kind: 'article' | 'edge' | 'trail', id }
+  sel: null,        // what's selected: { kind: 'article' | 'trail', id }
   hover: null,      // what the pointer is over (preview only)
   cur: null,        // where the next recorded click attaches: { trailId, visitId }
   threads: null,    // the threads drawn for the selection (see threadsFor)
   period: null,     // [fromMs, toMs]: only show threads from this period (picked on the timeline)
+  pin: null,        // the thread you clicked on (its key), shown fully and explained in the side panel
   colors: [],       // trail colours of the current skin
   settings: loadSettings(),
 };
@@ -51,8 +52,8 @@ export function commit(opts = {}) {
   rederive();
   if (app.cur && !app.D.trailIndex.get(app.cur.trailId)?.byId.has(app.cur.visitId)) app.cur = null;
   const s = app.sel;
-  if (s && ((s.kind === 'trail' && !trailOf(s.id)) || (s.kind === 'article' && !app.D.articles.has(s.id)) || (s.kind === 'edge' && !app.D.links.has(s.id)))) app.sel = null;
-  app.threads = threadsFor(app.sel);
+  if (s && ((s.kind === 'trail' && !trailOf(s.id)) || (s.kind === 'article' && !app.D.articles.has(s.id)))) app.sel = null;
+  app.threads = threadsFor(app.sel); keepPin();
   emit('data', opts);
 }
 
@@ -87,7 +88,7 @@ export function replaceState(next) {
 const same = (a, b) => (a === b) || (a && b && a.kind === b.kind && a.id === b.id);
 export function select(sel, opts = {}) {
   if (same(sel, app.sel) && !opts.force) return;
-  app.sel = sel; app.period = null; app.threads = threadsFor(sel);
+  app.sel = sel; app.period = null; app.pin = null; app.threads = threadsFor(sel);
   emit('select', opts);
 }
 export function setHover(h) { if (same(h, app.hover)) return; app.hover = h; emit('hover'); }
@@ -96,12 +97,16 @@ export function setCursor(cur) { app.cur = cur; emit('cursor'); }
 export function setRange(range, name = range ? 'custom' : 'all') {
   app.range = range; app.rangeName = name;
   app.DV = range ? derive(app.state, range) : app.D;
-  app.threads = threadsFor(app.sel);
+  app.threads = threadsFor(app.sel); keepPin();
   emit('range');
 }
 /** Only show the selection's threads from this period (null = all). */
 export function setPeriod(p) { app.period = p; refreshThreads(); }
-export function refreshThreads() { app.threads = threadsFor(app.sel); emit('threads'); }
+export function refreshThreads() { app.threads = threadsFor(app.sel); keepPin(); emit('threads'); }
+/** Focus one of the drawn threads (null = none). */
+export function pinThread(key) { app.pin = key; emit('pin'); }
+export const pinned = () => (app.pin && app.threads?.threads.find((t) => t.key === app.pin)) || null;
+function keepPin() { if (app.pin && !pinned()) app.pin = null; }
 
 /* ---------- what to highlight ---------- */
 const collapse = (titles) => titles.filter((t, i) => i === 0 || t !== titles[i - 1]);
@@ -109,9 +114,8 @@ const collapse = (titles) => titles.filter((t, i) => i === 0 || t !== titles[i -
  * One rule for every selection: the threads that went through it, newest first, each from where
  * it started to where it ended.
  *  - an article: every trail that passed through it (at its latest pass in the period)
- *  - a connection: every trail that used it
  *  - a trail: that trail's main line, with its side trips
- * Returns { kind, anchor, edge, threads: [{ trailId, visitId, t, path, passes, sides, color, rec }], total, times }.
+ * Returns { kind, anchor, threads: [{ key, trailId, visitId, t, path, passes, sides, color, rec }], total, times }.
  * `times` are all the moments you were there (in the time lens), for the timeline.
  */
 export function threadsFor(target) {
@@ -120,7 +124,8 @@ export function threadsFor(target) {
   const inLens = (t) => !r || (t >= r[0] && t <= r[1]);
   const inPeriod = (t) => !p || (t >= p[0] && t <= p[1]);
   const all = [], times = [];
-  let kind = target.kind, anchor = null, edge = null;
+  const kind = target.kind;
+  let anchor = null;
   const add = (ti, v, passes) => all.push({ trailId: ti.trail.id, visitId: v.id, t: visitTime(ti.trail, v), path: collapse(threadOf(ti, v.id).map((x) => x.article)), passes, sides: [] });
   if (kind === 'trail') {
     const ti = D.trailIndex.get(target.id); if (!ti) return null;
@@ -141,29 +146,18 @@ export function threadsFor(target) {
       }
       if (at) add(ti, at, passes);
     }
-  } else if (kind === 'edge') {
-    const l = D.links.get(target.id); if (!l) return null;
-    edge = [l.a, l.b];
-    for (const id of l.trails) {
-      const ti = D.trailIndex.get(id);
-      let at = null, passes = 0;
-      for (const v of ti.trail.visits) {
-        if (v.parent == null) continue;
-        const from = ti.byId.get(v.parent).article;
-        if (!((from === l.a && v.article === l.b) || (from === l.b && v.article === l.a))) continue;
-        const t = visitTime(ti.trail, v); if (!inLens(t)) continue;
-        times.push(t); passes++;
-        if (inPeriod(t)) at = v;
-      }
-      if (at) add(ti, at, passes);
-    }
   } else return null;
   all.sort((x, y) => y.t - x.t);
   const limit = kind === 'trail' ? 1 : Math.min(50, +app.settings.threads || 5);
-  const threads = all.slice(0, limit), n = threads.length, pal = app.colors.length ? app.colors : ['#2f6fdb'];
-  // each thread its own colour; the newest strongest, older ones fainter
-  threads.forEach((th, i) => { th.color = pal[i % pal.length]; th.rec = n === 1 ? 1 : 1 - 0.72 * i / (n - 1); });
-  return { kind, anchor, edge, threads, total: all.length, times: times.sort((x, y) => x - y) };
+  const threads = all.slice(0, limit), pal = app.colors.length ? app.colors : ['#2f6fdb'];
+  // each thread its own colour; the older a thread is, the fainter it's drawn
+  const tNew = threads[0]?.t ?? 0, tOld = threads[threads.length - 1]?.t ?? 0;
+  threads.forEach((th, i) => {
+    th.key = th.trailId + ':' + th.visitId;
+    th.color = pal[i % pal.length];
+    th.rec = tNew > tOld ? 0.12 + 0.88 * Math.pow((th.t - tOld) / (tNew - tOld), 0.8) : 1;
+  });
+  return { kind, anchor, threads, total: all.length, times: times.sort((x, y) => x - y) };
 }
 
 /* ---------- settings ---------- */
