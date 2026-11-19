@@ -99,12 +99,18 @@ function renderLegend() {
   let any = false;
   for (const a of app.DV.articles.values()) if (a.read || a.skim) { any = true; break; }
   const lg = $('readlegend');
-  lg.hidden = !any || (!app.threads && app.settings.colourBy !== 'reading');
+  const th = app.threads?.kind === 'article' ? app.threads.threads[0] : null;
+  lg.hidden = !th && (!any || (!app.threads && app.settings.colourBy !== 'reading'));
   if (lg.hidden) return;
+  // what the colours of a trail mean when a page is selected
+  const sw = (c) => `<i class="ln" style="background:${c}"></i>`;
+  const of = (kind) => (th?.groups || []).filter((g) => g.startsWith(kind)).slice(0, 3).map((g) => sw(th.colorOf[g])).join('');
+  const roles = th ? `<span>${sw('var(--label)')}the way here</span>${of('down') ? `<span>${of('down')}on from here</span>` : ''}${of('side') ? `<span>${of('side')}other branches on the way</span>` : ''}` : '';
   // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
-  lg.innerHTML = app.threads
+  const reads = !any ? '' : app.threads
     ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
     : '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim)"></i>skimmed</span>';
+  lg.innerHTML = roles + reads;
 }
 on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
 

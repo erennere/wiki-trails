@@ -293,13 +293,14 @@ export function createGraph(el, handlers) {
     // far parts of it thinner and fade into the background, so the near part reads first
     const far = (d) => (d <= 1 ? 0 : Math.min(0.82, 1 - Math.pow(0.7, d - 1)));
     const thin = (d) => (d <= 1 ? 1 : Math.max(0.3, Math.pow(0.8, d - 1)));
-    // side branches (what else the trail did, not on the way to or from the selected page) are muted
-    const neutral = new THREE.Color(style.link);
-    const shade = (out, d, s) => out.copy(out).lerp(neutral, 0.7 * s).lerp(bg, far(d));
+    // colour of a part of a trail (see threadsFor in app.js): the way here in ink, each way on and
+    // each branch off the way here in its own colour
+    const hexOf = (th, g) => (g === 'up' && !th.colorOf?.up ? style.anchor : th.colorOf?.[g] || th.color);
+    const shade = (out, d) => out.lerp(bg, far(d));
     // where a trail starts (ring) and where each of its branches ends (pin)
     const endsOf = (th) => {
-      const c0 = th.chains[0], out = [['start', c0.path[0], c0.dist[0], c0.side[0] ? 1 : 0, c0.path.length === 1]];
-      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0) out.push(['end', c.path[L], c.dist[L], c.side[L] ? 1 : 0, false]); }
+      const c0 = th.chains[0], out = [['start', c0.path[0], c0.dist[0], c0.grp[0], c0.path.length === 1]];
+      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0) out.push(['end', c.path[L], c.dist[L], c.grp[L], false]); }
       return out;
     };
     fans = new Map(); const fanIdx = new Map();
@@ -345,15 +346,24 @@ export function createGraph(el, handlers) {
           const kk = at[m - 1] + (at[m] - at[m - 1]) * f, lo = Math.floor(kk), hi = Math.min(arr.length - 1, lo + 1);
           return +arr[lo] + (+arr[hi] - +arr[lo]) * (kk - lo);
         };
-        const dAt = along(c.dist), sAt = along(c.side);
+        const dAt = along(c.dist);
+        // each stretch between two pages takes the colour of the page it leads to
+        const cols = c.grp.map((g) => new THREE.Color(hexOf(th, g)));
+        const colAt = (u) => {
+          const x = u * total; let m = 1;
+          while (m < cum.length - 1 && cum[m] < x) m++;
+          const f = Math.max(0, Math.min(1, (x - cum[m - 1]) / ((cum[m] - cum[m - 1]) || 1)));
+          const kk = at[m - 1] + (at[m] - at[m - 1]) * f;
+          return cols[Math.min(cols.length - 1, Math.floor(kk) + 1)];
+        };
         const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
         const L = curve.getLength(), segs = Math.min(600, Math.max(24, Math.round(L / (4 * unit)))), rad = 7;
         const geo = new THREE.TubeGeometry(curve, segs, 1, rad, false);
         const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3), cv = new THREE.Vector3(), v = new THREE.Vector3();
         for (let sI = 0; sI <= segs; sI++) {
           const u = sI / segs; curve.getPointAt(u, cv);
-          const d = dAt(u), sd = sAt(u), r = 3.4 * unit * w * thin(d) * (1 - 0.45 * sd);
-          shade(tmp.copy(col), d, sd);
+          const d = dAt(u), r = 3.4 * unit * w * thin(d);
+          shade(tmp.copy(colAt(u)), d);
           for (let q = 0; q <= rad; q++) {
             const idx = sI * (rad + 1) + q;
             v.fromBufferAttribute(pos, idx).sub(cv).multiplyScalar(r).add(cv);
@@ -371,18 +381,18 @@ export function createGraph(el, handlers) {
         const stepLen = 90 * unit, count = Math.floor(L / stepLen), tan = new THREE.Vector3();
         for (let a = 1; a <= count; a++) {
           const u = (a - 0.5) / count; if (u < 0.08 || u > 0.94) continue;
-          const d = dAt(u), sd = sAt(u);
-          const m = new THREE.Mesh(cone, new THREE.MeshLambertMaterial({ color: shade(col.clone(), d, sd), transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
+          const d = dAt(u);
+          const m = new THREE.Mesh(cone, new THREE.MeshLambertMaterial({ color: shade(colAt(u).clone(), d), transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
           curve.getPointAt(u, m.position); curve.getTangentAt(u, tan);
           m.quaternion.setFromUnitVectors(UP, tan);
-          m.scale.setScalar(4.2 * unit * w * thin(d) * (1 - 0.4 * sd));
+          m.scale.setScalar(4.2 * unit * w * thin(d));
           m.renderOrder = tube.renderOrder; Object.assign(m.userData, data);
           layer.add(m);
         }
         // the light that runs along the main line: on the newest trail, or on the one you clicked
         if (ci === 0 && (pin ? focused : th.rank === 0)) {
           const comet = [];
-          for (let k = 0; k < 5; k++) comet.push(ball(pts[0], (5 - k * 0.75) * unit * w, col.clone().lerp(white, 0.4 - k * 0.07), Math.min(1, op + 0.1) * (0.95 - k * 0.17)));
+          for (let k = 0; k < 5; k++) comet.push(ball(pts[0], (5 - k * 0.75) * unit * w, cols[cols.length - 1].clone().lerp(white, 0.4 - k * 0.07), Math.min(1, op + 0.1) * (0.95 - k * 0.17)));
           comet.forEach((m) => { m.renderOrder = 60; });
           strands.push({ curve, L, comet, phase: -i * 0.35, pause: 0.6 + 2.2 * (1 - th.rec), gap: 7 * unit, speed: 220 * unit });
         }
@@ -393,18 +403,18 @@ export function createGraph(el, handlers) {
         if ((ci > 0 && k === 0) || t === threads.anchor || endPages.has(t) || done.has(t)) return;
         done.add(t);
         const p = posOf(t); if (!p) return;
-        const d = c.dist[k], sd = c.side[k] ? 1 : 0, dd = c.depths?.[k], fo = Math.max(0.12, op * (1 - 0.8 * far(d)) * (1 - 0.45 * sd));
-        const sz = (dd === 'read' ? 17 : 16) * (focused ? 1.15 : 0.85 + 0.15 * th.rec) * Math.max(0.6, thin(d)) * (1 - 0.25 * sd);
-        if (dd) marker(dd === 'read' ? 'bead-read' : 'bead-skim', th.color, p, sz, Math.max(0.18, fo), { ...data, title: t });
-        else ball(p, 2.6 * unit * w * thin(d), shade(col.clone(), d, sd), fo, { ...data, title: t });
+        const d = c.dist[k], hex = hexOf(th, c.grp[k]), dd = c.depths?.[k], fo = Math.max(0.12, op * (1 - 0.8 * far(d)));
+        const sz = (dd === 'read' ? 17 : 16) * (focused ? 1.15 : 0.85 + 0.15 * th.rec) * Math.max(0.6, thin(d));
+        if (dd) marker(dd === 'read' ? 'bead-read' : 'bead-skim', hex, p, sz, Math.max(0.18, fo), { ...data, title: t });
+        else ball(p, 2.6 * unit * w * thin(d), shade(new THREE.Color(hex), d), fo, { ...data, title: t });
       }));
       // start: a ring; the end of every branch: a pin (not on the page you clicked)
       const big = focused ? 1.25 : 0.8 + 0.2 * th.rec;
-      for (const [kind, t, d, sd, alone] of ends) {
+      for (const [kind, t, d, g, alone] of ends) {
         if (t === threads.anchor && !alone) continue;
         const p = posOf(t); if (!p) continue;
-        const fo = pin && !focused ? 0.3 : Math.max(0.15, op * (1 - 0.75 * far(d)) * (1 - 0.45 * sd));
-        marker(kind, th.color, p, (kind === 'end' ? 34 : 24) * big * Math.max(0.55, thin(d)) * (1 - 0.25 * sd), fo, { ...data, title: t }, fanOf(th, kind, t));
+        const fo = pin && !focused ? 0.3 : Math.max(0.15, op * (1 - 0.75 * far(d)));
+        marker(kind, hexOf(th, g), p, (kind === 'end' ? 34 : 24) * big * Math.max(0.55, thin(d)), fo, { ...data, title: t }, fanOf(th, kind, t));
       }
     }
     // the page you selected

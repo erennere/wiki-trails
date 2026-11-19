@@ -193,16 +193,45 @@ function treeOf(ti, anchors, mainId) {
       while (st.length) { const x = st.pop(); route.add(x); for (const k of ti.children.get(x) || []) st.push(k); }
     }
   }
+  // what each page is to the selected one, for its colour:
+  //  'up'      the way here (the pages before it on the trail, and the page itself)
+  //  'down:id' a way on from here, one per page you went on to, with everything after it
+  //  'side:n'  a branch off the way here, by where it leaves it (n clicks before the page)
+  const grp = new Map(), ups = new Set();
+  if (anchors.size) {
+    for (const id of anchors) for (const v of chainTo(ti, id)) ups.add(v.id);
+    for (const a of anchors) for (const k of ti.children.get(a) || []) {
+      const st = [k];
+      while (st.length) { const x = st.pop(); if (grp.has(x) || ups.has(x)) continue; grp.set(x, 'down:' + k); for (const y of ti.children.get(x) || []) st.push(y); }
+    }
+    for (const id of ups) grp.set(id, 'up');
+    for (const v of ti.trail.visits) {
+      if (grp.has(v.id)) continue;
+      let a = v;
+      while (a && !ups.has(a.id)) a = a.parent == null ? null : ti.byId.get(a.parent);
+      grp.set(v.id, 'side:' + (a ? dOf(a.id) : 99));
+    }
+  }
+  // the order colours are handed out in: ways on from here as you took them, then branches off the way
+  // here, nearest first
+  const firstT = new Map();
+  for (const v of ti.trail.visits) { const g = grp.get(v.id); if (g && !firstT.has(g)) firstT.set(g, v.t || 0); }
+  const groups = [...firstT.keys()].filter((g) => g !== 'up').sort((a, b) => {
+    const [ka, na] = a.split(':'), [kb, nb] = b.split(':');
+    if (ka !== kb) return ka === 'down' ? -1 : 1;
+    return ka === 'down' ? firstT.get(a) - firstT.get(b) : +na - +nb;
+  });
   const real = (id) => ti.byId.get(id); // a joined trail keeps where each visit really is
   const chains = lists.map((vs) => {
     const c = pathOf(ti, vs);
     c.dist = c.ids.map(dOf);
     c.side = c.ids.map((id) => (route ? !route.has(id) : false));
+    c.grp = c.ids.map((id) => grp.get(id) || 'all');
     c.tids = c.ids.map((id) => real(id)?._t || ti.trail.id);
     c.ids = c.ids.map((id) => real(id)?._v || id);
     return c;
   }).filter((c, i) => i === 0 || c.path.length > 1);
-  return { chains, path: chains[0].path, ids: chains[0].ids, tids: chains[0].tids, depths: chains[0].depths, ways: chains.length, sides: [] };
+  return { chains, groups, path: chains[0].path, ids: chains[0].ids, tids: chains[0].tids, depths: chains[0].depths, ways: chains.length, sides: [] };
 }
 
 /** Several trails that belong together (see explorations() in model.js), as one trail to draw. */
@@ -278,6 +307,11 @@ export function threadsFor(target) {
   threads.forEach((th, i) => {
     th.key = th.trailId + ':' + th.visitId;
     th.color = pal[i % pal.length];
+    // within a trail, colours say how each part relates to the selected page: the way here in ink
+    // (null: the map uses its label colour), each way on from here its own colour, then the branches
+    // off the way here; a single trail on its own keeps one colour
+    th.colorOf = { all: th.color, up: kind === 'article' ? null : th.color };
+    (th.groups || []).forEach((g, j) => { th.colorOf[g] = pal[j % pal.length]; });
     th.rank = i;
     th.rec = Math.pow(0.6, i); // 1 for the newest, then 0.6, 0.36, …
   });

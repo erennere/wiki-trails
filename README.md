@@ -4,11 +4,10 @@ Map how you wander through Wikipedia. Each trail is the page you started on, the
 
 Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. You can read them at a glance:
 
-- **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.
 - **How you read each page:** on a trail, a page you read thoroughly is a solid bead and one you skimmed an open ring. In the overview, pages you mostly read are strong and pages you mostly skimmed pale.
-- **The way through the page stands out:** how you got to it and everything you went on to from it is in the trail's colour; what else the trail did on the way (pages you went back from before reaching it) is drawn muted and thinner.
+- **Colours say how each part relates to the page:** the way here (the pages before it) is in ink; each way you went on from it has its own colour, carried through everything after it; and the branches you took off the way here have colours of their own, by how far before the page they left it. The legend at the bottom left says which is which.
 - **Trails that continue each other are one:** if a trail starts on a page you were on in another trail within three hours (you reopened it from a search, a bookmark, a restored tab or Wiki Trails), the two are drawn as one tree, joined at that page.
 - **Near is strong, far is faint:** the further a page is from the one you clicked (in clicks), the thinner and paler its part of the trail, so you see the whole trail but read the near part first. Every page on it is named where there's room.
 - **The newest trail is the solid one,** and each older trail is fainter than the one before, so you can tell the order without reading any dates. Only the newest carries the moving light. How strongly they fade is a setting.
