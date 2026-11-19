@@ -109,8 +109,16 @@ function renderThreadbar() {
   const lim = +app.settings.threads || 5;
   bar.innerHTML = `<label>Latest <select id="tlimit">${LIMITS.map((n) => `<option value="${n}"${n === lim ? ' selected' : ''}>${n}</option>`).join('')}</select> threads</label>
     <span class="tcount">${th.threads.length} of ${plural(th.total, 'thread')}</span>
+    ${th.threads.length > 1 ? `<label class="tfade" title="How clearly older threads show next to the newest">Older ones <span class="hint">faint</span><input type="range" id="tfade" min="0" max="1" step="0.05" value="${(1 - app.settings.ageFade).toFixed(2)}" aria-label="How clearly older threads show"><span class="hint">clear</span></label>` : ''}
     ${app.period ? `<button class="btn small" id="tperiod" title="Show every period">${fmtDate(app.period[0])} – ${fmtDate(app.period[1])} ✕</button>` : ''}`;
   $('tlimit').onchange = (e) => { setSetting('threads', +e.target.value); refreshThreads(); };
+  // drag to make older threads fainter or clearer (the same as Settings → How much older threads fade)
+  let raf = 0;
+  $('tfade')?.addEventListener('input', (e) => {
+    app.settings.ageFade = 1 - +e.target.value;
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(() => graph.setView({ ageFade: app.settings.ageFade }));
+  });
+  $('tfade')?.addEventListener('change', () => setSetting('ageFade', app.settings.ageFade));
   $('tperiod')?.addEventListener('click', () => setPeriod(null));
 }
 

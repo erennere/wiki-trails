@@ -277,7 +277,7 @@ export function createGraph(el, handlers) {
     const lanes = new Map();
     const pk = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
     threads.threads.forEach((th, i) => th.path.forEach((t, k) => { if (k) { const key = pk(th.path[k - 1], t); if (!lanes.has(key)) lanes.set(key, []); if (!lanes.get(key).includes(i)) lanes.get(key).push(i); } }));
-    const n = threads.threads.length, minOp = 0.5 - 0.44 * view.ageFade, k = 0.5 + 1.5 * view.ageFade;
+    const n = threads.threads.length, minOp = 0.5 - 0.38 * view.ageFade, k = 0.5 + 1.5 * view.ageFade;
     // how many drawn threads start / end on each page, and each thread's place in that row
     fans = new Map(); const fanIdx = new Map();
     threads.threads.forEach((th) => {

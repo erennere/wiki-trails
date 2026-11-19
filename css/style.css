@@ -403,3 +403,7 @@ html[data-left="closed"] { --left-w: 38px; }
 #syncbox .warn { color: #b25e00; }
 #sync-state { margin: 4px 0; }
 @media (max-width: 760px) { #syncchip-text { display: none; } }
+.threadbar { flex-wrap: wrap; max-width: calc(100% - 24px); }
+.threadbar .tfade { display: inline-flex; align-items: center; gap: 6px; }
+.threadbar .tfade .hint { color: var(--muted); font-size: 12px; }
+.threadbar .tfade input { width: 96px; }
