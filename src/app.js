@@ -3,6 +3,7 @@
 // actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'pin', 'skin', 'settings', 'dirty').
 import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, continueFrom, sideTrips, setReadingRule } from './model.js';
 import { saveLocal } from './storage.js';
+import { orderVisits } from './sync-core.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
 const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, colourBy: 'reading', sound: false, left: true, right: true };
@@ -157,12 +158,18 @@ function pathOf(ti, visits) {
  * Returns { chains: [{ path, ids, depths, dist }], path, ids, depths (of the main chain), ways }.
  */
 function treeOf(ti, anchors, mainId) {
+  // clicks away, counted along the trail (opening the same page again is no click)
   const dist = new Map(), q = [...anchors];
   for (const id of q) dist.set(id, 0);
-  for (let i = 0; i < q.length; i++) {
-    const v = ti.byId.get(q[i]), nb = [...(ti.children.get(q[i]) || [])];
+  while (q.length) {
+    const id = q.shift(), v = ti.byId.get(id), d0 = dist.get(id), nb = [...(ti.children.get(id) || [])];
     if (v?.parent != null) nb.push(v.parent);
-    for (const n of nb) if (!dist.has(n)) { dist.set(n, dist.get(q[i]) + 1); q.push(n); }
+    for (const n of nb) {
+      const d = d0 + (ti.byId.get(n)?.article === v?.article ? 0 : 1);
+      if (dist.has(n) && dist.get(n) <= d) continue;
+      dist.set(n, d);
+      if (d === d0) q.unshift(n); else q.push(n);
+    }
   }
   const dOf = (id) => (anchors.size ? dist.get(id) ?? 99 : 0);
   const main = [...chainTo(ti, mainId), ...continueFrom(ti, mainId).slice(1)];
@@ -175,12 +182,46 @@ function treeOf(ti, anchors, mainId) {
       lists.push([v, ...on]);
     }
   }
+  // the route through the selected page: how you got there, and everything you went on to from it.
+  // The rest (what else you did on the way there) is a side branch, drawn muted.
+  let route = null;
+  if (anchors.size) {
+    route = new Set();
+    for (const id of anchors) {
+      for (const v of chainTo(ti, id)) route.add(v.id);
+      const st = [id];
+      while (st.length) { const x = st.pop(); route.add(x); for (const k of ti.children.get(x) || []) st.push(k); }
+    }
+  }
+  const real = (id) => ti.byId.get(id); // a joined trail keeps where each visit really is
   const chains = lists.map((vs) => {
     const c = pathOf(ti, vs);
     c.dist = c.ids.map(dOf);
+    c.side = c.ids.map((id) => (route ? !route.has(id) : false));
+    c.tids = c.ids.map((id) => real(id)?._t || ti.trail.id);
+    c.ids = c.ids.map((id) => real(id)?._v || id);
     return c;
   }).filter((c, i) => i === 0 || c.path.length > 1);
-  return { chains, path: chains[0].path, ids: chains[0].ids, depths: chains[0].depths, ways: chains.length, sides: [] };
+  return { chains, path: chains[0].path, ids: chains[0].ids, tids: chains[0].tids, depths: chains[0].depths, ways: chains.length, sides: [] };
+}
+
+/** Several trails that belong together (see explorations() in model.js), as one trail to draw. */
+function joinedTrail(ids) {
+  const D = app.D, key = (t, v) => t + '\u0001' + v, inGroup = new Set(ids);
+  const visits = [];
+  for (const id of ids) {
+    const ti = D.trailIndex.get(id); if (!ti) continue;
+    const j = D.join.get(id);
+    for (const v of ti.trail.visits) {
+      const parent = v.parent != null ? key(id, v.parent) : j && inGroup.has(j.trailId) ? key(j.trailId, j.visitId) : null;
+      visits.push({ ...v, id: key(id, v.id), parent, t: visitTime(ti.trail, v), _t: id, _v: v.id });
+    }
+  }
+  const ordered = orderVisits(visits);
+  const byId = new Map(ordered.map((x) => [x.id, x])), children = new Map(ordered.map((x) => [x.id, []]));
+  for (const x of ordered) if (x.parent != null) children.get(x.parent)?.push(x.id);
+  const depth = new Map(ordered.map((x) => [x.id, D.pages.get(x.article)]));
+  return { trail: { id: ids[0], visits: ordered }, byId, children, depth, root: ordered.find((x) => x.parent == null), key };
 }
 
 /**
@@ -206,19 +247,27 @@ export function threadsFor(target) {
   } else if (kind === 'article') {
     const a = D.articles.get(target.id); if (!a) return null;
     anchor = a.title;
+    // trails that belong together count as one exploration (see explorations() in model.js)
+    const done = new Set();
     for (const id of a.trails) {
-      const ti = D.trailIndex.get(id);
+      const group = D.groupOf.get(id) || [id];
+      if (done.has(group)) continue;
+      done.add(group);
+      const ti = group.length > 1 ? joinedTrail(group) : D.trailIndex.get(id);
       const here = [];
       for (const v of ti.trail.visits) {
         if (v.article !== a.title) continue;
-        const t = visitTime(ti.trail, v); if (!inLens(t)) continue;
+        const t = v.t || visitTime(ti.trail, v); if (!inLens(t)) continue;
         times.push(t);
         if (inPeriod(t)) here.push(v);
       }
       if (!here.length) continue;
-      // the whole trail, as a tree, measured from the times it was on this page
-      const at = here[here.length - 1];
-      all.push({ trailId: ti.trail.id, visitId: at.id, t: visitTime(ti.trail, at), passes: here.length, ...treeOf(ti, new Set(here.map((v) => v.id)), at.id) });
+      // the whole exploration, as a tree, measured from the times it was on this page. Its main line
+      // runs through the latest time you went on from here (or simply the latest time you were here).
+      const latest = (l) => l.reduce((x, y) => ((y.t || 0) >= (x.t || 0) ? y : x));
+      const went = here.filter((v) => (ti.children.get(v.id) || []).some((k) => ti.byId.get(k)?.article !== v.article || (ti.children.get(k) || []).length));
+      const at = latest(went.length ? went : here), last = latest(here);
+      all.push({ trailId: at._t || id, visitId: at._v || at.id, t: last.t || visitTime(ti.trail, last), passes: here.length, trails: group.length, ...treeOf(ti, new Set(here.map((v) => v.id)), at.id) });
     }
   } else return null;
   all.sort((x, y) => y.t - x.t);

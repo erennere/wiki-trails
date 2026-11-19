@@ -92,7 +92,7 @@ export function initDetails({ record, loadTest }) {
         <button class="btn small" id="d-cont">Continue this trail</button>
       </div>
       <section><h4>The way it went</h4><ol class="steps thread">${th.path.map((t, k) => `<li class="${k === 0 ? 'first' : ''}${k === last ? ' last' : ''}${t === at ? ' here' : ''}" data-a="${esc(t)}" title="Show ${esc(t)}">
-          <span class="num">${k + 1}</span>${readMark(depthOf(th.trailId, th.ids[k]), { trailId: th.trailId, visitId: th.ids[k] })}<span class="l">${esc(t)}</span>${k === 0 ? '<span class="stag">start</span>' : k === last ? '<span class="stag">end</span>' : t === at ? '<span class="stag">here</span>' : ''}</li>`).join('')}</ol>
+          <span class="num">${k + 1}</span>${readMark(depthOf(th.tids?.[k] || th.trailId, th.ids[k]), { trailId: th.tids?.[k] || th.trailId, visitId: th.ids[k] })}<span class="l">${esc(t)}</span>${k === 0 ? '<span class="stag">start</span>' : k === last ? '<span class="stag">end</span>' : t === at ? '<span class="stag">here</span>' : ''}</li>`).join('')}</ol>
         ${th.ways > 1 ? `<p class="explain">This is its main line. The trail also branched off ${plural(th.ways - 1, 'time')}; the map shows every branch, fainter the further it is from ${at ? esc(at) : 'here'}.</p>` : ''}
         ${th.passes > 1 ? `<p class="explain">This trail was on ${esc(at)} ${th.passes} times.</p>` : ''}
         ${th.sides.length ? `<p class="explain">It also went off on ${plural(th.sides.length, 'side trip')}.</p>` : ''}</section>

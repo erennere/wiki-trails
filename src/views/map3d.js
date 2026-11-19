@@ -293,15 +293,18 @@ export function createGraph(el, handlers) {
     // far parts of it thinner and fade into the background, so the near part reads first
     const far = (d) => (d <= 1 ? 0 : Math.min(0.82, 1 - Math.pow(0.7, d - 1)));
     const thin = (d) => (d <= 1 ? 1 : Math.max(0.3, Math.pow(0.8, d - 1)));
+    // side branches (what else the trail did, not on the way to or from the selected page) are muted
+    const neutral = new THREE.Color(style.link);
+    const shade = (out, d, s) => out.copy(out).lerp(neutral, 0.7 * s).lerp(bg, far(d));
     // where a trail starts (ring) and where each of its branches ends (pin)
     const endsOf = (th) => {
-      const c0 = th.chains[0], out = [['start', c0.path[0], c0.dist[0], c0.path.length === 1]];
-      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0) out.push(['end', c.path[L], c.dist[L], false]); }
+      const c0 = th.chains[0], out = [['start', c0.path[0], c0.dist[0], c0.side[0] ? 1 : 0, c0.path.length === 1]];
+      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0) out.push(['end', c.path[L], c.dist[L], c.side[L] ? 1 : 0, false]); }
       return out;
     };
     fans = new Map(); const fanIdx = new Map();
     threads.threads.forEach((th) => {
-      for (const [kind, t, , alone] of endsOf(th)) {
+      for (const [kind, t, , , alone] of endsOf(th)) {
         if (t === threads.anchor && !alone) continue;
         const key = kind + '\u0000' + t; fanIdx.set(th.key + kind + t, fans.get(key) || 0); fans.set(key, (fans.get(key) || 0) + 1);
       }
@@ -335,21 +338,22 @@ export function createGraph(el, handlers) {
         const cum = [0];
         for (let m = 1; m < ctrl.length; m++) cum.push(cum[m - 1] + ctrl[m].distanceTo(ctrl[m - 1]));
         const total = cum[cum.length - 1] || 1;
-        const dAt = (u) => {
+        const along = (arr) => (u) => {
           const x = u * total; let m = 1;
           while (m < cum.length - 1 && cum[m] < x) m++;
           const f = Math.max(0, Math.min(1, (x - cum[m - 1]) / ((cum[m] - cum[m - 1]) || 1)));
-          const kk = at[m - 1] + (at[m] - at[m - 1]) * f, lo = Math.floor(kk), hi = Math.min(c.dist.length - 1, lo + 1);
-          return c.dist[lo] + (c.dist[hi] - c.dist[lo]) * (kk - lo);
+          const kk = at[m - 1] + (at[m] - at[m - 1]) * f, lo = Math.floor(kk), hi = Math.min(arr.length - 1, lo + 1);
+          return +arr[lo] + (+arr[hi] - +arr[lo]) * (kk - lo);
         };
+        const dAt = along(c.dist), sAt = along(c.side);
         const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
         const L = curve.getLength(), segs = Math.min(600, Math.max(24, Math.round(L / (4 * unit)))), rad = 7;
         const geo = new THREE.TubeGeometry(curve, segs, 1, rad, false);
         const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3), cv = new THREE.Vector3(), v = new THREE.Vector3();
         for (let sI = 0; sI <= segs; sI++) {
           const u = sI / segs; curve.getPointAt(u, cv);
-          const d = dAt(u), r = 3.4 * unit * w * thin(d);
-          tmp.copy(col).lerp(bg, far(d));
+          const d = dAt(u), sd = sAt(u), r = 3.4 * unit * w * thin(d) * (1 - 0.45 * sd);
+          shade(tmp.copy(col), d, sd);
           for (let q = 0; q <= rad; q++) {
             const idx = sI * (rad + 1) + q;
             v.fromBufferAttribute(pos, idx).sub(cv).multiplyScalar(r).add(cv);
@@ -367,11 +371,11 @@ export function createGraph(el, handlers) {
         const stepLen = 90 * unit, count = Math.floor(L / stepLen), tan = new THREE.Vector3();
         for (let a = 1; a <= count; a++) {
           const u = (a - 0.5) / count; if (u < 0.08 || u > 0.94) continue;
-          const d = dAt(u);
-          const m = new THREE.Mesh(cone, new THREE.MeshLambertMaterial({ color: col.clone().lerp(bg, far(d)), transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
+          const d = dAt(u), sd = sAt(u);
+          const m = new THREE.Mesh(cone, new THREE.MeshLambertMaterial({ color: shade(col.clone(), d, sd), transparent: op < 1, opacity: op, depthWrite: op >= 1 }));
           curve.getPointAt(u, m.position); curve.getTangentAt(u, tan);
           m.quaternion.setFromUnitVectors(UP, tan);
-          m.scale.setScalar(4.2 * unit * w * thin(d));
+          m.scale.setScalar(4.2 * unit * w * thin(d) * (1 - 0.4 * sd));
           m.renderOrder = tube.renderOrder; Object.assign(m.userData, data);
           layer.add(m);
         }
@@ -389,18 +393,18 @@ export function createGraph(el, handlers) {
         if ((ci > 0 && k === 0) || t === threads.anchor || endPages.has(t) || done.has(t)) return;
         done.add(t);
         const p = posOf(t); if (!p) return;
-        const d = c.dist[k], dd = c.depths?.[k], fo = Math.max(0.12, op * (1 - 0.8 * far(d)));
-        const sz = (dd === 'read' ? 17 : 16) * (focused ? 1.15 : 0.85 + 0.15 * th.rec) * Math.max(0.6, thin(d));
+        const d = c.dist[k], sd = c.side[k] ? 1 : 0, dd = c.depths?.[k], fo = Math.max(0.12, op * (1 - 0.8 * far(d)) * (1 - 0.45 * sd));
+        const sz = (dd === 'read' ? 17 : 16) * (focused ? 1.15 : 0.85 + 0.15 * th.rec) * Math.max(0.6, thin(d)) * (1 - 0.25 * sd);
         if (dd) marker(dd === 'read' ? 'bead-read' : 'bead-skim', th.color, p, sz, Math.max(0.18, fo), { ...data, title: t });
-        else ball(p, 2.6 * unit * w * thin(d), col.clone().lerp(bg, far(d)), fo, { ...data, title: t });
+        else ball(p, 2.6 * unit * w * thin(d), shade(col.clone(), d, sd), fo, { ...data, title: t });
       }));
       // start: a ring; the end of every branch: a pin (not on the page you clicked)
       const big = focused ? 1.25 : 0.8 + 0.2 * th.rec;
-      for (const [kind, t, d, alone] of ends) {
+      for (const [kind, t, d, sd, alone] of ends) {
         if (t === threads.anchor && !alone) continue;
         const p = posOf(t); if (!p) continue;
-        const fo = pin && !focused ? 0.3 : Math.max(0.15, op * (1 - 0.75 * far(d)));
-        marker(kind, th.color, p, (kind === 'end' ? 34 : 24) * big * Math.max(0.55, thin(d)), fo, { ...data, title: t }, fanOf(th, kind, t));
+        const fo = pin && !focused ? 0.3 : Math.max(0.15, op * (1 - 0.75 * far(d)) * (1 - 0.45 * sd));
+        marker(kind, th.color, p, (kind === 'end' ? 34 : 24) * big * Math.max(0.55, thin(d)) * (1 - 0.25 * sd), fo, { ...data, title: t }, fanOf(th, kind, t));
       }
     }
     // the page you selected
@@ -440,7 +444,8 @@ export function createGraph(el, handlers) {
             if (c.dist[k] > reach && th.key !== pin) return;
             const d = Math.min(c.dist[k], 9), last = k === c.path.length - 1 && c.path.length > 1, first = ci === 0 && k === 0;
             const kind = last ? 'end' : first ? 'start' : 'step';
-            push(t, kind, 700 - 65 * d + 90 * th.rec + (last ? 25 : first ? 15 : 0) + boost, d <= 1 ? 1 : Math.max(0.45, 1 - 0.12 * (d - 1)));
+            const sd = c.side[k] ? 1 : 0;
+            push(t, kind, 700 - 65 * d + 90 * th.rec + (last ? 25 : first ? 15 : 0) - 120 * sd + boost, (d <= 1 ? 1 : Math.max(0.45, 1 - 0.12 * (d - 1))) * (1 - 0.3 * sd));
           }));
         }
       } else {

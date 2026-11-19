@@ -155,7 +155,52 @@ export function derive(state, range = null) {
     trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root, depth });
   });
   for (const a of articles.values()) { const r = pages.get(a.title); a.reading = r; a.read = r?.depth === 'read' ? 1 : 0; a.skim = r?.depth === 'skim' ? 1 : 0; }
-  return { articles, links, trailIndex, pages };
+  return { articles, links, trailIndex, pages, ...explorations(state, trailIndex) };
+}
+
+/*
+ * Trails that belong together. A trail that starts on a page you were also on in another trail, within
+ * three hours, is the same exploration: you opened that page again (from a bookmark, a search, Wiki
+ * Trails, a restored tab…) and went on from there. It's joined to the other trail at that page.
+ * Joins are made nearest in time first, preferring a later trail joining an earlier one, and never
+ * in a loop, so each exploration is one tree.
+ * Returns { join: Map(trailId -> { trailId, visitId }), groupOf: Map(trailId -> [trailIds]) }.
+ */
+const JOIN_WINDOW = 3 * 3600e3;
+function explorations(state, trailIndex) {
+  const at = new Map();
+  for (const tr of state.trails) for (const v of tr.visits) {
+    const l = at.get(v.article) || at.set(v.article, []).get(v.article);
+    l.push({ t: visitTime(tr, v), trailId: tr.id, visitId: v.id });
+  }
+  for (const l of at.values()) l.sort((a, b) => a.t - b.t);
+  const cand = [];
+  for (const tr of state.trails) {
+    const r = trailIndex.get(tr.id)?.root; if (!r) continue;
+    const t0 = visitTime(tr, r), l = at.get(r.article);
+    let lo = 0, hi = l.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (l[m].t < t0 - JOIN_WINDOW) lo = m + 1; else hi = m; }
+    let best = null;
+    for (let i = lo; i < l.length && l[i].t <= t0 + JOIN_WINDOW; i++) {
+      const e = l[i]; if (e.trailId === tr.id) continue;
+      const dt = Math.abs(e.t - t0), later = e.t <= t0 ? 0 : 1;
+      if (!best || later < best.later || (later === best.later && dt < best.dt)) best = { ...e, dt, later };
+    }
+    if (best) cand.push({ from: tr.id, to: best.trailId, visitId: best.visitId, dt: best.dt, later: best.later });
+  }
+  cand.sort((a, b) => a.later - b.later || a.dt - b.dt);
+  const up = new Map();
+  const find = (x) => { let r = x; while (up.has(r)) r = up.get(r); while (up.has(x)) { const n = up.get(x); up.set(x, r); x = n; } return r; };
+  const join = new Map();
+  for (const c of cand) {
+    if (join.has(c.from)) continue;
+    const a = find(c.from), b = find(c.to); if (a === b) continue;
+    up.set(a, b); join.set(c.from, { trailId: c.to, visitId: c.visitId });
+  }
+  const groups = new Map(), groupOf = new Map();
+  for (const tr of state.trails) { const g = find(tr.id); (groups.get(g) || groups.set(g, []).get(g)).push(tr.id); }
+  for (const ids of groups.values()) for (const id of ids) groupOf.set(id, ids);
+  return { join, groupOf };
 }
 
 /** Chain of visits from the trail's start to `visitId` (inclusive). */
