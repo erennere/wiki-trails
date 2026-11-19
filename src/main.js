@@ -60,7 +60,7 @@ function showTip() {
   const h = app.hover, th = threadHover && app.threads?.threads.find((x) => x.key === threadHover.key);
   if (th) {
     const tr = trailOf(th.trailId);
-    tip.innerHTML = `${threadHover.title ? `<b>${esc(threadHover.title)}</b> · ` : ''}<span class="sw" style="background:${th.color}"></span><b>${esc(th.path[0])} → ${esc(th.path[th.path.length - 1])}</b> · ${fmtDateTime(th.t)}${tr ? ` · ${plural(th.path.length, 'page')}` : ''}<br><span class="explain">${app.pin === th.key ? 'Click again to let go' : 'Click to see this thread'}</span>`;
+    tip.innerHTML = `${threadHover.title ? `<b>${esc(threadHover.title)}</b> · ` : ''}<span class="sw" style="background:${th.color}"></span><b>${esc(th.path[0])} → ${esc(th.path[th.path.length - 1])}</b> · ${fmtDateTime(th.t)}${tr ? ` · ${plural(th.path.length, 'page')}` : ''}<br><span class="explain">${threadHover.title ? `Click to go to ${esc(threadHover.title)}` : app.pin === th.key ? 'Click again to let go' : 'Click the line to see this thread'}</span>`;
     tip.hidden = false; placeTip(); return;
   }
   if (h?.kind === 'article') {

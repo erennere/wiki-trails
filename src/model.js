@@ -156,6 +156,10 @@ export function chainTo(trailInfo, visitId) {
  * the way in (start → this visit), then onward, at each step taking the branch you used last.
  */
 export function threadOf(ti, visitId) {
+  return [...chainTo(ti, visitId), ...continueFrom(ti, visitId).slice(1)];
+}
+/** From a visit on: that visit, then at every fork the way you went last (the latest descendant). */
+export function continueFrom(ti, visitId) {
   const vs = ti.trail.visits;
   const latest = new Map(); // visit id → index of the latest visit at or below it
   for (let i = vs.length - 1; i >= 0; i--) {
@@ -163,13 +167,14 @@ export function threadOf(ti, visitId) {
     latest.set(v.id, m);
     if (v.parent != null) latest.set(v.parent, Math.max(latest.get(v.parent) ?? -1, m));
   }
-  const out = chainTo(ti, visitId);
+  const out = [];
   for (let c = ti.byId.get(visitId); c;) {
+    out.push(c);
     const kids = ti.children.get(c.id) || [];
     if (!kids.length) break;
     let best = kids[0];
     for (const k of kids) if (latest.get(k) > latest.get(best)) best = k;
-    c = ti.byId.get(best); out.push(c);
+    c = ti.byId.get(best);
   }
   return out;
 }

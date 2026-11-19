@@ -1,7 +1,7 @@
 // The app's shared state and the few actions that change it.
 // Panels and views never talk to each other directly: they call these
 // actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'pin', 'skin', 'settings', 'dirty').
-import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips, setReadingRule } from './model.js';
+import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, continueFrom, sideTrips, setReadingRule } from './model.js';
 import { saveLocal } from './storage.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
@@ -150,7 +150,15 @@ export function threadsFor(target) {
   const all = [], times = [];
   const kind = target.kind;
   let anchor = null;
-  const add = (ti, v, passes) => all.push({ trailId: ti.trail.id, visitId: v.id, t: visitTime(ti.trail, v), ...pathOf(ti, threadOf(ti, v.id)), passes, sides: [] });
+  // one thread per way you went on from the page: a trail that branched there gives several threads
+  const add = (ti, v, passes) => {
+    const kids = ti.children.get(v.id) || [], into = chainTo(ti, v.id);
+    if (!kids.length) return all.push({ trailId: ti.trail.id, visitId: v.id, way: '', ways: 1, t: visitTime(ti.trail, v), ...pathOf(ti, into), passes, sides: [] });
+    for (const k of kids) {
+      const on = continueFrom(ti, k), end = on[on.length - 1];
+      all.push({ trailId: ti.trail.id, visitId: v.id, way: k, ways: kids.length, t: visitTime(ti.trail, ti.byId.get(k) || end), ...pathOf(ti, [...into, ...on]), passes, sides: [] });
+    }
+  };
   if (kind === 'trail') {
     const ti = D.trailIndex.get(target.id); if (!ti) return null;
     const vs = ti.trail.visits, last = vs[vs.length - 1];
@@ -161,14 +169,15 @@ export function threadsFor(target) {
     anchor = a.title;
     for (const id of a.trails) {
       const ti = D.trailIndex.get(id);
-      let at = null, passes = 0;
+      const here = [];
       for (const v of ti.trail.visits) {
         if (v.article !== a.title) continue;
         const t = visitTime(ti.trail, v); if (!inLens(t)) continue;
-        times.push(t); passes++;
-        if (inPeriod(t)) at = v; // the latest pass in the period
+        times.push(t);
+        if (inPeriod(t)) here.push(v);
       }
-      if (at) add(ti, at, passes);
+      // every time the trail was here (in the period), with every way it went on from there
+      for (const v of here) add(ti, v, here.length);
     }
   } else return null;
   all.sort((x, y) => y.t - x.t);
@@ -177,7 +186,7 @@ export function threadsFor(target) {
   // each thread its own colour; each older one is drawn clearly fainter than the one before,
   // so the newest stands out without reading any dates
   threads.forEach((th, i) => {
-    th.key = th.trailId + ':' + th.visitId;
+    th.key = th.trailId + ':' + th.visitId + (th.way ? ':' + th.way : '');
     th.color = pal[i % pal.length];
     th.rank = i;
     th.rec = Math.pow(0.6, i); // 1 for the newest, then 0.6, 0.36, …

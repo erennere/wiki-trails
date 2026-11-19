@@ -2,7 +2,7 @@
 
 Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
-Click any article and the trails that went through it light up, and you can read them at a glance:
+Click any article and the trails that went through it light up, one thread for every way you went on from it (if you went back and clicked something else, that's a thread of its own), and you can read them at a glance:
 
 - **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
@@ -18,7 +18,7 @@ The camera turns to the angle where the trails spread out best and fills the win
 
 The window has one map and two side panels, and both panels can be collapsed.
 
-- **Map** (middle). Drag to turn it, scroll to zoom. Click an article to see its trails, then click one of the trails to focus it. Click empty space or press <kbd>Esc</kbd> to step back (first from the trail, then to your whole history), or zoom far out. Hover anything to see when you last saw it.
+- **Map** (middle). Drag to turn it, scroll to zoom. Click an article to see its trails. Click a page on one of them (its ring, pin or a bead) to go to that page, or click the line itself to focus that trail. Click empty space or press <kbd>Esc</kbd> to step back (first from the trail, then to your whole history), or zoom far out. Hover anything to see when you last saw it.
 - **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
 - **Older ones: faint ↔ clear** (next to it): drag to see older trails as clearly as the newest, or to let them fade so the newest stands out. It's the same as Settings → *How much older threads fade*.
 - **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, choose *Custom…* to enter a start and end date, or drag across the timeline to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.

@@ -241,6 +241,8 @@ export function createGraph(el, handlers) {
   }
   function layerClick(ev) {
     const u = threads && ev && pickLayer(ev);
+    // a page on a thread (its start ring, end pin or a bead) opens that page; the line itself focuses the thread
+    if (u?.title) { handlers.onClick?.(u.title); return true; }
     if (u?.key) { handlers.onThreadClick?.(u.key); return true; }
     return false;
   }
