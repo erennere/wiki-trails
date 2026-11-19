@@ -16,5 +16,6 @@
     "3d-force-graph": "1.80.2",
     "three": "0.187.0"
   },
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "homepage": "https://erennere.github.io/wiki-trails/"
 }

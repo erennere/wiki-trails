@@ -1,7 +1,7 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
-import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf } from './app.js';
+import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading } from './app.js';
 import { loadLocal, loadPublished, saveLocal } from './storage.js';
-import { emptyState } from './model.js';
+import { emptyState, uid } from './model.js';
 import { createGraph } from './views/map3d.js';
 import { createEffects } from './views/effects.js';
 import { initAppearance } from './appearance.js';
@@ -11,7 +11,8 @@ import { initDetails } from './panels/details.js';
 import { initSearch } from './panels/search.js';
 import { initTimeline } from './panels/timeline.js';
 import { initStats } from './panels/stats.js';
-import { initBridge } from './bridge.js';
+import { initSync, syncNow, sync } from './sync.js';
+import { initSyncUI } from './panels/syncui.js';
 import { initMenus } from './panels/menus.js';
 import { $, esc, plural, fmtDate, fmtDateTime, toast } from './ui.js';
 
@@ -139,6 +140,7 @@ on('skin', () => { if (app.sel) refreshThreads(); });
 /* ---------- panels ---------- */
 const record = initRecord({ showLeft: () => setPanel('left', true) });
 const menus = initMenus({ graph });
+initSyncUI({ openSettings: () => menus.openSettings() });
 initTrails();
 initDetails({ record, loadTest: menus.loadTest });
 
@@ -174,10 +176,18 @@ document.addEventListener('keydown', (e) => {
   graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
   app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
   commit({ fresh: true });
-  initBridge(); // inside the browser extension: pick up the pages it recorded
+  initSync(); // if this browser is connected to GitHub: fetch what's new there, send what's new here
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
     app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
     nodeXY: (t) => rel(graph.screenOf(t)), pin: (k) => pinThread(k),
+    sync: { now: (k) => syncNow(k), state: () => ({ on: sync.on, state: sync.state, error: sync.error, at: sync.at }) },
+    // the same changes the panels make, for tests
+    rename: (id, name) => { const t = trailOf(id); if (t) { snapshot(); t.name = name; commit(); } },
+    mark: (trailId, visitId, depth) => markReading(trailId, visitId, depth),
+    deleteTrail: (id) => { snapshot(); app.state.trails = app.state.trails.filter((t) => t.id !== id); commit(); },
+    undo: () => undo(),
+    addStep: (id, article) => { const t = trailOf(id); if (!t) return; snapshot(); t.visits.push({ id: uid(), article, parent: t.visits[t.visits.length - 1].id, t: Date.now() }); commit(); },
+    loadExample: () => menus.loadTest('small'),
   };
 })();

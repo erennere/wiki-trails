@@ -388,3 +388,18 @@ html[data-left="closed"] { --left-w: 38px; }
 .autorec.off .dot { background: var(--muted); animation: none; }
 @keyframes recpulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .autorec .dot { animation: none; } }
+
+/* ---------- sync ---------- */
+.syncchip { display: inline-flex; align-items: center; gap: 7px; }
+.syncchip .sdot { width: 8px; height: 8px; border-radius: 50%; background: #2e9e5b; flex: none; }
+.syncchip.busy .sdot { background: var(--accent); animation: spulse 1s ease-in-out infinite; }
+.syncchip.offline .sdot { background: var(--muted); }
+.syncchip.error .sdot { background: #c0392b; }
+@keyframes spulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .syncchip.busy .sdot { animation: none; } }
+#syncbox .textin { flex: 1 1 260px; max-width: 380px; }
+#syncbox .btns { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+#syncbox .rp-err { color: #c0392b; font-size: 12.5px; margin: 6px 0; }
+#syncbox .warn { color: #b25e00; }
+#sync-state { margin: 4px 0; }
+@media (max-width: 760px) { #syncchip-text { display: none; } }

@@ -11,11 +11,11 @@ function idb() {
     r.onerror = () => rej(r.error);
   });
 }
-async function idbGet(k) {
+export async function idbGet(k) {
   const db = await idb();
   return new Promise((res, rej) => { const q = db.transaction(STORE).objectStore(STORE).get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
 }
-async function idbSet(k, v) {
+export async function idbSet(k, v) {
   const db = await idb();
   return new Promise((res, rej) => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
 }

@@ -1,6 +1,6 @@
 # Wiki Trails
 
-Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
+Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
 Click any article and the trails that went through it light up, and you can read them at a glance:
 
@@ -60,7 +60,8 @@ It should still feel like day one after years of use.
 
 ### Your data
 
-- **Stored locally.** Everything stays in your browser (IndexedDB, so years of history fit).
+- **One history everywhere, if you like.** Connect each browser to a private GitHub repository and they all share one history (see [Sync between your devices](#sync-between-your-devices)). Each browser also keeps a copy (IndexedDB, so years of history fit), so the app opens instantly and works offline.
+- **Or only in this browser.** Without sync, everything stays in your browser.
 - **Save to a file.** **File → Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes a history file. In Chrome and Edge it remembers the file, so later saves update it; other browsers download a copy. A dot on the File button reminds you when it's been a while.
 - **Open a file.** **File → Open** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), or drop a file onto the window. You choose whether to add it to your history or replace your history with it.
 - **Undo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change.
@@ -112,13 +113,40 @@ Drag to turn the map, scroll to zoom.
 
 ## Run it
 
-Open `index.html` in your browser by double-clicking it. Nothing to install. Or install the browser extension, which records your trails and includes the app.
+The site: **https://erennere.github.io/wiki-trails/** (or your own copy, see [Host on GitHub Pages](#host-on-github-pages)). You can also open `index.html` from disk by double-clicking it; sync and the extension then don't work, but everything else does.
+
+## Sync between your devices
+
+Your history can live in a private GitHub repository instead of a single browser. Every browser you connect, and the extension in it, reads and writes that repository, so Edge on your laptop, Safari on your Mac and any other browser all show the same history. A page you read shows up everywhere within a minute or two.
+
+### Set it up once
+
+1. **Make a private repository** on GitHub for your history, for example `wiki-trails-data`. Leave it empty.
+2. **Make a token** that can only touch that repository. On GitHub, go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**. Under *Repository access*, choose **Only select repositories** and pick the history repository. Under *Permissions → Repository permissions*, set **Contents** to **Read and write**. Copy the token.
+3. **In each browser**, open the site, then **⚙ Settings → Sync between your devices**. Enter `your-name/wiki-trails-data` and the token, and click **Connect**. If that browser already has trails, you choose whether to add them or leave them out (leave out examples).
+
+If the extension is installed in that browser, it picks up the same connection from the site by itself. Otherwise, click its toolbar button and use **Connect here instead**.
+
+The token stays in the browser where you entered it. When it expires, make a new one and connect again.
+
+### How it works
+
+- **The repository holds one file per month**, `trails/2026-11.json`, with one trail per line. Every change is a commit, so GitHub keeps the full history of your history.
+- **The extension sends new pages about a minute after you open them.** Time on a page goes out every ten minutes or so. Without a connection, pages wait and go out later.
+- **The app checks for news every minute** while it's on screen, when you come back to it, and right after the extension in the same browser sent pages.
+- **Changes you make in the app** (marking pages, renaming, deleting, undo, recording by hand) go out a couple of seconds later.
+- **Nothing is lost when two browsers write at once.** GitHub refuses a write that would overwrite a newer file; the app or extension then reads it again, merges and writes. Pages from both sides are kept, and the name and the read/skimmed marks come from whichever was edited last.
+- **Deleting a trail** deletes it everywhere. Undo brings it back everywhere.
+- **The top bar shows** *Synced*, *Syncing…*, *Offline* (changes wait) or *Sync problem*; click it for details.
+- **Examples** would replace the synced history on every device, so they are off while a browser is connected. Disconnect it in Settings to try them.
 
 ## The browser extension
 
-The extension records your trails while you read Wikipedia, with nothing to type. It works in Microsoft Edge and Google Chrome, and in Safari on a Mac. Wiki Trails itself comes with it: click the extension's button in the toolbar, then **Open Wiki Trails**. New pages appear in the map as you read, even while the app is open.
+The extension records your trails while you read Wikipedia, with nothing to type, and sends them to your history repository. It works in Microsoft Edge and Google Chrome, and in Safari on a Mac. Its toolbar button shows whether it's recording and where pages go, and opens Wiki Trails.
 
-<img src=".github/extension-popup.png" width="300" alt="The extension's toolbar button: recording, 4 pages today, a switch to pause, and Open Wiki Trails">
+<img src=".github/extension-popup.png" width="300" alt="The extension's toolbar button: recording, 4 pages today, a switch to pause, where pages go, and Open Wiki Trails">
+
+**Wikipedia as an app.** The official Wikipedia app can't be recorded: it takes no extensions and keeps its history to itself. You can get Wikipedia in an app window of its own that *is* recorded. In Edge, open Wikipedia and choose **⋯ → Apps → Install this site as an app**. In Safari, choose **File → Add to Dock**. Extensions work in both kinds of window. Safari turns on the extensions that may read wikipedia.org for the web app by itself; check under the web app's **Settings → Extensions** if not.
 
 ### What it records
 
@@ -131,17 +159,18 @@ The extension records your trails while you read Wikipedia, with nothing to type
 
 To pause, click the toolbar button and untick *Record the Wikipedia pages I open*, or click *Pause* in the Record panel. While it's paused, the button shows "off".
 
-**Privacy.** The extension only runs on Wikipedia article pages, and the only permission it asks for is storage. It sends nothing anywhere: the pages go into the browser's own storage, and the app keeps your history there too. The app loads its fonts from Google Fonts, like the website does; without a connection it uses your system's fonts.
+**Privacy.** The extension runs on Wikipedia article pages and on the Wiki Trails site, nowhere else. It sends what it records only to your own GitHub repository. The app loads its fonts from Google Fonts; without a connection it uses your system's fonts.
 
-**Each browser keeps its own history.** Edge, Safari and the website each have a separate one. To bring them together, use **File → Save** in one and **File → Open → Add to my history** in the other. Trails that are already there aren't added twice.
+**History from the first version.** The first version of the extension kept its own copy of the app and history in the browser. The new version finds that history and adds it to your repository once you connect.
 
 ### Install in Edge (or Chrome)
 
 1. Unzip `wiki-trails-extension.zip` to a folder where it can stay, for example `Documents\wiki-trails-extension`. Edge loads the extension from there each time it starts, so don't delete the folder.
 2. Go to `edge://extensions` (`chrome://extensions` in Chrome), turn on **Developer mode** and click **Load unpacked**. Choose the unzipped folder, the one with `manifest.json` in it.
 3. To keep the button in view, click the Extensions button next to the address bar and choose **Show in toolbar** next to Wiki Trails.
+4. Open the site and connect it (see [Set it up once](#set-it-up-once)); the extension follows.
 
-To update, unzip the new version over the old folder and click **Reload** under Wiki Trails in `edge://extensions`. Your history stays: the extension keeps the same identity even if you move it to another folder.
+To update, unzip the new version over the old folder and click **Reload** under Wiki Trails in `edge://extensions`. Pages waiting to be sent stay: the extension keeps the same identity even if you move it to another folder.
 
 ### Install in Safari on a Mac
 
@@ -150,19 +179,21 @@ Safari only takes extensions that come inside a Mac app, so you build that app o
 1. Unzip `wiki-trails-extension.zip` and this repository.
 2. In Terminal, in the repository folder, run `bash scripts/package_safari.sh ~/Downloads/wiki-trails-extension` (with the path of your unzipped extension folder). It builds a small app called Wiki Trails and opens it.
 3. In Safari, open **Settings → Advanced** and tick **Show features for web developers**. Then, under **Settings → Developer**, tick **Allow unsigned extensions**.
-4. Under **Settings → Extensions**, tick **Wiki Trails**. Allow it on Wikipedia when Safari asks, choosing *Always Allow on This Website*. Each language's Wikipedia (en, de, …) is a website of its own, so you may need to allow it again for another language.
+4. Under **Settings → Extensions**, tick **Wiki Trails**. Safari asks before letting an extension see a website: allow it on Wikipedia and on `erennere.github.io` (the site), choosing *Always Allow on This Website*. Each language's Wikipedia (en, de, …) is a website of its own, so you may need to allow it again for another language.
+5. Open the site and connect it; the extension follows. If you didn't allow it on the site, use **Connect here instead** in its toolbar button.
 
-**After Safari restarts.** An app you build yourself counts as unsigned, and Safari turns *Allow unsigned extensions* off each time it quits. Tick it again under **Settings → Developer** after you open Safari; until you do, the extension is off and records nothing. To avoid that step, the app has to be signed with an Apple Developer ID and notarized, which needs a paid Apple Developer Program membership and Safari 18.4 or later.
+**After Safari restarts.** An app you build yourself counts as unsigned, and Safari turns *Allow unsigned extensions* off each time it quits. Tick it again under **Settings → Developer** after you open Safari; until you do, the extension is off and records nothing (your history is safe in the repository). To avoid that step, the app has to be signed with an Apple Developer ID and notarized, which needs a paid Apple Developer Program membership and Safari 18.4 or later.
 
-**Only trying it out?** Under **Settings → Developer**, **Add Temporary Extension…** loads the unzipped folder without Xcode. Safari removes it after 24 hours or when it quits, and what it recorded can go with it, so save your history to a file (**File → Save**) before then.
+**Only trying it out?** Under **Settings → Developer**, **Add Temporary Extension…** loads the unzipped folder without Xcode. Safari removes it after 24 hours or when it quits.
 
-**iPhone and iPad** need the extension inside an iOS app, which you can only install with a paid Apple Developer Program membership. The script builds for the Mac only.
+**iPhone and iPad** need the extension inside an iOS app, which you can only install with a paid Apple Developer Program membership. The script builds for the Mac only. The site itself works on them, synced.
 
 ### Host on GitHub Pages
 
 1. Push this repo to GitHub.
 2. Go to **Settings → Pages → Build and deployment → Source: Deploy from a branch**, then pick `main` and `/ (root)`.
 3. The site appears at `https://<user>.github.io/<repo>/`.
+4. Put that address in `homepage` in `package.json` and run `npm run build:extension`: the extension opens that site and talks to it there only.
 
 To publish your own map, save your history with **File → Save as**, put the file at `data/trails.json`, and commit it. Visitors with no history of their own see that file. This only works on the hosted site: browsers don't allow reading it when the page is opened from disk. Your own browser keeps using its local history.
 
@@ -174,7 +205,7 @@ The code lives in `src/` as ES modules and is bundled into `js/app.js`. The bund
 npm install        # once: esbuild, three.js and 3d-force-graph
 npm run build      # or: npm run watch
 npm run serve      # optional: http://localhost:8000
-npm run build:extension   # the extension, with the app inside: dist/extension and dist/wiki-trails-extension.zip
+npm run build:extension   # the extension: dist/extension and dist/wiki-trails-extension.zip
 ```
 
 ```
@@ -192,12 +223,15 @@ src/ui.js             small helpers (dates, toasts, the steps list)
 src/panels/           record, trails, details, search, timeline, menus, stats
 src/views/map3d.js    the 3D network (3d-force-graph), threads drawn with three.js, labels, camera
 src/views/effects.js  animated backgrounds for some looks
-src/bridge.js         in the extension: adds the pages the recorder noted to your history
+src/sync.js           sync in the app: connect, fetch what's new on GitHub, send what's new here
+src/sync-core.js      the repository's files and the merge rules, shared with the extension
+src/extlink.js        talks to the extension when it's installed in this browser
 src/example.js        tiny example
 js/early.js           applies your theme before the page draws (a file, since extensions forbid inline scripts)
 data/                 Wikispeedia examples; your published trails.json goes here
 extension/            the browser extension: manifest, page.js (runs on Wikipedia), recorder.js (decides
-                      where each page belongs), the toolbar popup and icons
+                      where each page belongs and sends it to GitHub), appbridge.js (runs on the site),
+                      the toolbar popup and icons
 scripts/              build_test_data.py (Wikispeedia → Wiki Trails), build_extension.mjs, package_safari.sh
 vendor/d3.min.js      d3 v7.9.0
 ```
@@ -234,6 +268,7 @@ The Settings gallery picks it up automatically.
 - **Going back is not a click** and adds no connection.
 - **`t`** is when you opened the page, in milliseconds since 1970.
 - **`read`** is optional: `"read"` or `"skim"` when you said how you read the page. Without it, the app goes by `secs`, or else guesses from the time until the next page.
+- **`updated`**, **`removed`** and **`deleted`** are used by sync: when the trail was last edited in the app, pages taken out of it, and a deleted trail's stub.
 - **`secs`** and **`scroll`** are optional and come from the extension: the seconds the page was in front of you, and how far down you scrolled (0 to 1). **`src`** is `"auto"` for a page the extension recorded.
 - **`layout`** is optional and keeps the network looking the same after you open the file: each article's position in 3D. Files from the older flat map have two numbers per article; those positions are ignored and the network is arranged afresh.
 - **Derived data.** Articles and connections are computed from the visits. A connection's weight is the number of clicks between its two articles, in either direction, over all trails.

@@ -46,7 +46,7 @@ export function blip(mult = 1) {
 export function confirmClick(btn, label, fn) {
   btn.onclick = () => {
     if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; fn(); return; }
-    btn.dataset.label = btn.textContent; btn.dataset.armed = '1'; btn.textContent = label;
+    btn.dataset.label = btn.textContent; btn.dataset.armed = '1'; btn.textContent = typeof label === 'function' ? label() : label;
     setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = btn.dataset.label; } }, 3000);
   };
 }

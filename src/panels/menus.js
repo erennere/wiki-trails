@@ -3,6 +3,7 @@ import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, apply
 import { validate, emptyState } from '../model.js';
 import { saveToFile, pickFile, readFile, merge } from '../storage.js';
 import { exampleState } from '../example.js';
+import { sync } from '../sync.js';
 import { SKINS, CATS } from '../skins.js';
 import { applySkin, setTheme } from '../appearance.js';
 import { $, esc, plural, fmtAgo, toast, confirmClick } from '../ui.js';
@@ -51,7 +52,7 @@ export function initMenus({ graph }) {
     if (!app.state.trails.length) return applyOpen(s, 'replace', name);
     pending = { s, name };
     const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
-    $('od-text').innerHTML = `<b>${esc(name || 'This file')}</b> has ${plural(s.trails.length, 'trail')} and ${plural(clicks, 'click')}. You currently have ${plural(app.state.trails.length, 'trail')}.`;
+    $('od-text').innerHTML = `<b>${esc(name || 'This file')}</b> has ${plural(s.trails.length, 'trail')} and ${plural(clicks, 'click')}. You currently have ${plural(app.state.trails.length, 'trail')}.${sync.on ? ' Your history is synced, so this changes it on every device.' : ''}`;
     $('opendlg').hidden = false; $('od-merge').focus();
   }
   function applyOpen(s, how, name) {
@@ -89,6 +90,7 @@ export function initMenus({ graph }) {
   }
   async function loadTest(name) {
     closeMenus();
+    if (sync.on) return toast('Examples would replace your synced history on every device. To try them, disconnect this browser in Settings first.', 5000);
     try {
       const s = name === 'small' ? exampleState() : validate(await loadDataScript(name));
       graph.reset(); replaceState(s);
@@ -100,7 +102,7 @@ export function initMenus({ graph }) {
   $('m-saveas').onclick = () => doSave(true);
   $('m-open').onclick = doOpen;
   document.querySelectorAll('[data-example]').forEach((b) => b.onclick = () => loadTest(b.dataset.example));
-  confirmClick($('m-clear'), 'Click again to clear everything', () => { closeMenus(); graph.reset(); replaceState({ ...emptyState(), lang: app.state.lang }); toast('History cleared. Undo brings it back.'); });
+  confirmClick($('m-clear'), () => (sync.on ? 'Click again to clear it on every device' : 'Click again to clear everything'), () => { closeMenus(); graph.reset(); replaceState({ ...emptyState(), lang: app.state.lang }); toast('History cleared. Undo brings it back.'); });
 
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;

@@ -4,7 +4,7 @@
   "short_name": "Wiki Trails",
   "version": "1.0.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAojzwrB2TekBoGLPVeQ/nslEk8ytt2yLaLk4BHE4xuuSQ8d6DOazc0BO9XGC8MYTYrex7hooYGMUZu2fdZmAkcxrn2vjhhfN5simPZDb5m9voR7Rt5Km7pwDHFf3NeC0p2DeuGqBOh+0K761DnCsKWWq5c8KY2NCZ0J0+gnzy0WnztaxTaBZ2Ay3ruF9TJzpOz+St5puKg/UGQ6Up2onJ6FPF7zovdR7HRl2r7fAPwAE4aJbLYsnkJ+OskgDBV7zv+QjtWIz0i/qPvnVGo782DHMaKfNKRTFgAdeYQIXclVVgGjN9MSaApUqDxgOxi0eoCPH+ZGKy2BfmHDliGZBwHQIDAQAB",
-  "description": "Records the Wikipedia articles you open and the links you follow, as trails for Wiki Trails. Everything stays in your browser.",
+  "description": "Records the Wikipedia articles you open and the links you follow, and sends them to your own GitHub repository for Wiki Trails.",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",
@@ -35,10 +35,21 @@
         "page.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://erennere.github.io/wiki-trails/*"
+      ],
+      "js": [
+        "appbridge.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "permissions": [
     "storage",
-    "unlimitedStorage"
-  ]
+    "unlimitedStorage",
+    "alarms"
+  ],
+  "homepage_url": "https://erennere.github.io/wiki-trails/"
 }

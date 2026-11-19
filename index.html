@@ -38,6 +38,7 @@
       <div class="btns"><button class="btn small" id="rcancel">Cancel</button><button class="btn small primary" id="rapply">Show this period</button></div>
     </div>
   </div>
+  <button class="btn syncchip" id="syncchip" hidden title="Sync"><span class="sdot"></span><span id="syncchip-text">Synced</span></button>
   <div class="menu">
     <button class="btn" id="filebtn" aria-haspopup="true">File ▾</button>
     <div class="dropdown" id="filemenu" hidden>
@@ -123,6 +124,26 @@
   <section class="panel" role="dialog" aria-modal="true" aria-labelledby="set-title">
     <div class="panel-head"><span class="grow" id="set-title">Settings</span><button class="collapse" id="set-close" title="Close">✕</button></div>
     <div class="modal-body">
+      <h4 id="sync-h">Sync between your devices</h4>
+      <div id="syncbox">
+        <p class="hint" id="sync-intro">Keep your history in a private GitHub repository. Every browser you connect, and the Wiki Trails extension, then shares one history.</p>
+        <div id="sync-form">
+          <div class="setrow"><span>Repository</span><input id="sync-repo" class="textin" placeholder="your-name/wiki-trails-data" spellcheck="false" autocomplete="off"></div>
+          <div class="setrow"><span>Access token</span><input id="sync-token" class="textin" type="password" placeholder="github_pat_…" spellcheck="false" autocomplete="off"></div>
+          <p class="hint">A fine-grained token with <b>Contents: Read and write</b> on that repository only. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Make one on GitHub</a>. It stays in this browser.</p>
+          <div class="btns"><button class="btn small primary" id="sync-connect">Connect</button></div>
+        </div>
+        <div id="sync-ask" hidden>
+          <p id="sync-ask-text"></p>
+          <div class="btns"><button class="btn small primary" id="sync-add">Add them</button><button class="btn small" id="sync-leave">Leave them out</button><button class="btn small" id="sync-cancel">Cancel</button></div>
+        </div>
+        <div id="sync-on" hidden>
+          <p id="sync-state"></p>
+          <p class="hint" id="sync-ext"></p>
+          <div class="btns"><button class="btn small" id="sync-now">Sync now</button><button class="btn small" id="sync-off">Disconnect this browser</button></div>
+        </div>
+        <p class="rp-err" id="sync-err" hidden></p>
+      </div>
       <h4>Light or dark</h4>
       <div class="seg" id="themeseg"><button data-theme="system">Follow my system</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
       <h4>Look</h4>

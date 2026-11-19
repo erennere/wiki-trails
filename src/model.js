@@ -53,9 +53,15 @@ export function validate(raw) {
         ...(Number.isFinite(v.secs) && v.secs >= 0 ? { secs: Math.round(v.secs) } : {}),
         ...(Number.isFinite(v.scroll) ? { scroll: Math.max(0, Math.min(1, v.scroll)) } : {}),
         ...(v.src === 'auto' ? { src: 'auto' } : {}),
+        ...(typeof v.lang === 'string' && /^[a-z-]{2,12}$/.test(v.lang) ? { lang: v.lang } : {}),
       });
     }
-    if (visits.length) s.trails.push({ id: String(t.id || uid()), name: String(t.name || ''), created: t.created || new Date().toISOString(), visits });
+    if (!visits.length) continue;
+    const tr = { id: String(t.id || uid()), name: String(t.name || ''), created: t.created || new Date().toISOString(), visits };
+    // kept for syncing between devices (see sync-core.js): when you last edited it, and pages you took out
+    if (+t.updated > 0) tr.updated = +t.updated;
+    if (Array.isArray(t.removed) && t.removed.length) tr.removed = t.removed.map(String);
+    s.trails.push(tr);
   }
   return s;
 }
