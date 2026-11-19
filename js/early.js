@@ -4,7 +4,7 @@ try {
   var s = JSON.parse(localStorage.getItem('wiki-trails.settings')) || {}, h = document.documentElement;
   var dark = (s.theme || 'system') === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : s.theme === 'dark';
   h.dataset.theme = dark ? 'dark' : 'light';
-  if (s.skin) h.dataset.skin = s.skin;
+  if (s.skin && (s.skinPicked || s.skin !== 'plain')) h.dataset.skin = s.skin; // else the default (Desktop 95)
   if (s.left === false) h.dataset.left = 'closed';
   if (s.right === false) h.dataset.right = 'closed';
 } catch (e) { /* storage unavailable */ }

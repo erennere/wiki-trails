@@ -317,7 +317,11 @@ export function threadsFor(target) {
 
 /* ---------- settings ---------- */
 function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) }; } catch { return { ...DEFAULTS }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { /* nothing saved */ }
+  // Desktop 95 is the default look now: a look you never picked yourself follows the default
+  if (!saved.skinPicked && saved.skin === 'plain') delete saved.skin;
+  return { ...DEFAULTS, ...saved };
 }
 export function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(app.settings)); } catch { /* storage unavailable */ } }
 export function setSetting(key, value) { app.settings[key] = value; saveSettings(); emit('settings', key); }

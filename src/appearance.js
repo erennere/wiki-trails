@@ -1,4 +1,4 @@
-// Appearance: the skin (Plain by default) and light/dark, which follows the system unless set in Settings.
+// Appearance: the skin (Desktop 95 by default) and light/dark, which follows the system unless set in Settings.
 import { app, emit, setSetting } from './app.js';
 import { skinById } from './skins.js';
 
@@ -27,7 +27,7 @@ export function applySkin(id, { persist = true } = {}) {
   app.colors = pal.trails.slice();
   graph?.setPalette(pal);
   fx?.set(skin.fx);
-  if (persist) setSetting('skin', skin.id);
+  if (persist) { app.settings.skinPicked = true; setSetting('skin', skin.id); }
   emit('skin');
 }
 
