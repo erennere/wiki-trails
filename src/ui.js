@@ -51,7 +51,7 @@ export function confirmClick(btn, label, fn) {
   };
 }
 
-export const dur = (s) => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
+export const dur = (s) => (s >= 5400 ? `${(s / 3600).toFixed(s >= 36000 ? 0 : 1)} h` : s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
 /** A small mark for how you read a page: a filled dot (read), a ring (skimmed), a dash (don't know). */
 export function readMark(r, { button = true, trailId = '', visitId = '' } = {}) {
   const d = r?.depth, cls = `rd ${d === 'read' ? 'rd-read' : d === 'skim' ? 'rd-skim' : 'rd-none'}${r?.guessed ? ' guessed' : ''}`;

@@ -2,12 +2,13 @@
 
 Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
-Click any article and the trails that went through it light up, one thread for every way you went on from it (if you went back and clicked something else, that's a thread of its own), and you can read them at a glance:
+Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. You can read them at a glance:
 
 - **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.
 - **How you read each page:** on a trail, a page you read thoroughly is a solid bead and one you skimmed an open ring. In the overview, pages you mostly read are strong and pages you mostly skimmed pale.
+- **Near is strong, far is faint:** the further a page is from the one you clicked (in clicks), the thinner and paler its part of the trail, so you see the whole trail but read the near part first. Every page on it is named where there's room.
 - **The newest trail is the solid one,** and each older trail is fainter than the one before, so you can tell the order without reading any dates. Only the newest carries the moving light. How strongly they fade is a setting.
 
 The camera turns to the angle where the trails spread out best and fills the window with them. Click a trail anywhere and it's shown in full while the others step back; the side panel explains it. Zoom out and you're back to your whole history.

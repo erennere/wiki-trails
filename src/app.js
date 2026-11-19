@@ -150,6 +150,40 @@ function pathOf(ti, visits) {
   return { path, depths, ids };
 }
 /**
+ * A trail as a tree to draw. It's split into chains that cover every page of the trail once: the main
+ * one runs from the start through `mainId` and on the way you went last; every other branch is a chain
+ * of its own that starts where it forks off, so branches visibly split from one line.
+ * Every page also gets its distance (in clicks) from the nearest of `anchors` (0 everywhere if none).
+ * Returns { chains: [{ path, ids, depths, dist }], path, ids, depths (of the main chain), ways }.
+ */
+function treeOf(ti, anchors, mainId) {
+  const dist = new Map(), q = [...anchors];
+  for (const id of q) dist.set(id, 0);
+  for (let i = 0; i < q.length; i++) {
+    const v = ti.byId.get(q[i]), nb = [...(ti.children.get(q[i]) || [])];
+    if (v?.parent != null) nb.push(v.parent);
+    for (const n of nb) if (!dist.has(n)) { dist.set(n, dist.get(q[i]) + 1); q.push(n); }
+  }
+  const dOf = (id) => (anchors.size ? dist.get(id) ?? 99 : 0);
+  const main = [...chainTo(ti, mainId), ...continueFrom(ti, mainId).slice(1)];
+  const drawn = new Set(main.map((v) => v.id)), lists = [main];
+  for (let c = 0; c < lists.length; c++) {
+    for (const v of lists[c]) for (const k of ti.children.get(v.id) || []) {
+      if (drawn.has(k)) continue;
+      const on = continueFrom(ti, k);
+      for (const x of on) drawn.add(x.id);
+      lists.push([v, ...on]);
+    }
+  }
+  const chains = lists.map((vs) => {
+    const c = pathOf(ti, vs);
+    c.dist = c.ids.map(dOf);
+    return c;
+  }).filter((c, i) => i === 0 || c.path.length > 1);
+  return { chains, path: chains[0].path, ids: chains[0].ids, depths: chains[0].depths, ways: chains.length, sides: [] };
+}
+
+/**
  * One rule for every selection: the threads that went through it, newest first, each from where
  * it started to where it ended.
  *  - an article: every trail that passed through it (at its latest pass in the period)
@@ -165,20 +199,10 @@ export function threadsFor(target) {
   const all = [], times = [];
   const kind = target.kind;
   let anchor = null;
-  // one thread per way you went on from the page: a trail that branched there gives several threads
-  const add = (ti, v, passes) => {
-    const kids = ti.children.get(v.id) || [], into = chainTo(ti, v.id);
-    if (!kids.length) return all.push({ trailId: ti.trail.id, visitId: v.id, way: '', ways: 1, t: visitTime(ti.trail, v), ...pathOf(ti, into), passes, sides: [] });
-    for (const k of kids) {
-      const on = continueFrom(ti, k), end = on[on.length - 1];
-      all.push({ trailId: ti.trail.id, visitId: v.id, way: k, ways: kids.length, t: visitTime(ti.trail, ti.byId.get(k) || end), ...pathOf(ti, [...into, ...on]), passes, sides: [] });
-    }
-  };
   if (kind === 'trail') {
     const ti = D.trailIndex.get(target.id); if (!ti) return null;
     const vs = ti.trail.visits, last = vs[vs.length - 1];
-    const main = chainTo(ti, last.id);
-    all.push({ trailId: ti.trail.id, visitId: last.id, t: visitTime(ti.trail, vs[0]), ...pathOf(ti, main), passes: 1, sides: sideTrips(ti, new Set(main.map((x) => x.id))) });
+    all.push({ trailId: ti.trail.id, visitId: last.id, t: visitTime(ti.trail, vs[0]), passes: 1, ...treeOf(ti, new Set(), last.id) });
   } else if (kind === 'article') {
     const a = D.articles.get(target.id); if (!a) return null;
     anchor = a.title;
@@ -191,8 +215,10 @@ export function threadsFor(target) {
         times.push(t);
         if (inPeriod(t)) here.push(v);
       }
-      // every time the trail was here (in the period), with every way it went on from there
-      for (const v of here) add(ti, v, here.length);
+      if (!here.length) continue;
+      // the whole trail, as a tree, measured from the times it was on this page
+      const at = here[here.length - 1];
+      all.push({ trailId: ti.trail.id, visitId: at.id, t: visitTime(ti.trail, at), passes: here.length, ...treeOf(ti, new Set(here.map((v) => v.id)), at.id) });
     }
   } else return null;
   all.sort((x, y) => y.t - x.t);
@@ -201,7 +227,7 @@ export function threadsFor(target) {
   // each thread its own colour; each older one is drawn clearly fainter than the one before,
   // so the newest stands out without reading any dates
   threads.forEach((th, i) => {
-    th.key = th.trailId + ':' + th.visitId + (th.way ? ':' + th.way : '');
+    th.key = th.trailId + ':' + th.visitId;
     th.color = pal[i % pal.length];
     th.rank = i;
     th.rec = Math.pow(0.6, i); // 1 for the newest, then 0.6, 0.36, …
