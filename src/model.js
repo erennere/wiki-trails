@@ -36,6 +36,7 @@ export function validate(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.trails)) throw new Error('Not a Wiki Trails file');
   const s = { version: 2, lang: typeof raw.lang === 'string' ? raw.lang : 'en', trails: [] };
   if (raw.layout && typeof raw.layout === 'object') s.layout = raw.layout;
+  if (raw.example) s.example = String(raw.example); // loaded from File → Examples, so not your own history
   for (const t of raw.trails) {
     if (!t || !Array.isArray(t.visits)) continue;
     const ids = new Set();

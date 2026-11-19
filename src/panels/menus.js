@@ -93,6 +93,7 @@ export function initMenus({ graph }) {
     if (sync.on) return toast('Examples would replace your synced history on every device. To try them, disconnect this browser in Settings first.', 5000);
     try {
       const s = name === 'small' ? exampleState() : validate(await loadDataScript(name));
+      s.example = name;
       graph.reset(); replaceState(s);
       toast(`Loaded ${plural(s.trails.length, 'example trail')}${graph.isSettling() ? '. Arranging the map…' : '.'}`);
     } catch (err) { toast(`Could not load the example (${err.message}).`); }

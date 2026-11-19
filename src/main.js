@@ -1,6 +1,6 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
 import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading, ownHistory } from './app.js';
-import { loadLocal, loadPublished, saveLocal } from './storage.js';
+import { loadLocal, loadPublished, saveLocal, isExample } from './storage.js';
 import { emptyState, uid } from './model.js';
 import { createGraph } from './views/map3d.js';
 import { createEffects } from './views/effects.js';
@@ -201,10 +201,13 @@ document.addEventListener('keydown', (e) => {
 /* ---------- start ---------- */
 (async () => {
   graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
-  const mine = await loadLocal();
+  // your own history: anything you recorded, opened or synced here (examples don't count)
+  const local = await loadLocal();
+  let synced = false; try { synced = !!JSON.parse(localStorage.getItem('wiki-trails.sync'))?.token; } catch { /* not connected */ }
+  const mine = local && (synced || (local.trails.length > 0 && !isExample(local))) ? local : null;
   const shown = mine ? null : await loadPublished();
   if (shown) { app.published = shown.owner || 'Someone'; delete shown.owner; }
-  app.state = mine || shown || emptyState();
+  app.state = mine || shown || local || emptyState();
   commit({ fresh: true });
   renderPublished();
   initSync(); // if this browser is connected to GitHub: fetch what's new there, send what's new here

@@ -37,15 +37,41 @@ export function saveLocal(state) {
   }, 250);
 }
 
-/** The repo's published dataset (data/trails.json), shown to visitors with no local data. */
+/** Example data you loaded from File → Examples doesn't count as your own history. */
+export function isExample(s) {
+  return !!s && (!!s.example || (s.trails.length > 0 && s.trails.every((t) => /^t\d{4,}$/.test(t.id))));
+}
+
+/**
+ * The history the site shows to visitors who have none of their own (see index.html):
+ *  - live from the owner's history repository, if it's public (<meta name="wiki-trails-history">)
+ *  - otherwise the copy in data/trails.json
+ */
 export async function loadPublished() {
   if (!/^https?:$/.test(location.protocol)) return null; // browsers block fetch() from disk; the extension has no published file
+  const meta = (n) => document.querySelector(`meta[name="${n}"]`)?.content?.trim() || '';
+  const repo = meta('wiki-trails-history'), owner = meta('wiki-trails-owner');
+  if (/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${repo}/contents/trails`, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-cache' });
+      if (r.ok) {
+        const files = (await r.json()).filter((f) => /^\d{4}-\d{2}\.json$/.test(f.name) && f.download_url);
+        const docs = await Promise.all(files.map((f) => fetch(f.download_url, { cache: 'no-cache' }).then((x) => (x.ok ? x.json() : null)).catch(() => null)));
+        const byId = new Map();
+        for (const d of docs) for (const t of d?.trails || []) if (t?.id) byId.set(t.id, t);
+        const s = validate({ trails: [...byId.values()].filter((t) => !t.deleted) });
+        for (const t of s.trails) { delete t.updated; delete t.removed; }
+        s.trails.sort((a, b) => (Date.parse(a.created) || 0) - (Date.parse(b.created) || 0));
+        if (s.trails.length) { s.owner = owner || repo.split('/')[0]; return s; }
+      }
+    } catch { /* private, offline or rate-limited: use the copy below */ }
+  }
   try {
     const r = await fetch('data/trails.json', { cache: 'no-cache' });
     if (!r.ok) return null;
     const raw = await r.json();
     const s = validate(raw);
-    s.owner = typeof raw.owner === 'string' ? raw.owner.slice(0, 60) : '';
+    s.owner = owner || (typeof raw.owner === 'string' ? raw.owner.slice(0, 60) : '');
     return s.trails.length ? s : null;
   } catch { return null; }
 }
