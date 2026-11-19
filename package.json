@@ -3,7 +3,7 @@
   "private": true,
   "description": "Map how you wander through Wikipedia: record your trails by hand and see them as one brain-like 3D network.",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --minify --outfile=js/app.js --legal-comments=none",
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --minify --outfile=js/app.js --legal-comments=none && node scripts/stamp.mjs",
     "watch": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --watch",
     "serve": "python3 -m http.server 8000",
     "build:extension": "npm run build && node scripts/build_extension.mjs"
