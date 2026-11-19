@@ -1,5 +1,7 @@
 # Wiki Trails
 
+**[Open it: erennere.github.io/wiki-trails](https://erennere.github.io/wiki-trails/)**, showing my own trails until you start yours.
+
 Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
 Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. You can read them at a glance:
