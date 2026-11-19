@@ -2,6 +2,7 @@
 import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading } from '../app.js';
 import { uid, normTitle, langFromUrl, trailShape } from '../model.js';
 import { $, esc, stepsHTML, blip, toast, plural } from '../ui.js';
+import { inExtension, recordingOn, setRecording } from '../bridge.js';
 
 export function initRecord({ showLeft }) {
   function render() {
@@ -76,6 +77,19 @@ export function initRecord({ showLeft }) {
     setCursor({ trailId: app.cur.trailId, visitId: li.dataset.v });
     $('next').focus();
   });
+
+  // inside the browser extension: pages you open on Wikipedia are recorded for you
+  async function renderAuto(on) {
+    if (!inExtension) return;
+    if (on == null) on = await recordingOn();
+    $('autorec').hidden = false;
+    $('autorec').classList.toggle('off', !on);
+    $('autorec-text').textContent = on ? 'Recording the Wikipedia pages you open' : 'Recording is paused';
+    $('autorec-btn').textContent = on ? 'Pause' : 'Resume';
+    $('autorec-btn').onclick = () => setRecording(!on);
+  }
+  on('recording', renderAuto);
+  renderAuto();
 
   on('data', () => { render(); renderTitles(); });
   on('cursor', render);

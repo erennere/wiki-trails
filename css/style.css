@@ -381,3 +381,10 @@ html[data-left="closed"] { --left-w: 38px; }
 .stip .tr.tot { color: var(--muted); margin-top: 3px; }
 .stip .k { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
 #viewseg { margin-left: 6px; }
+
+/* recording by the browser extension */
+.autorec { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: var(--hover-bg); }
+.autorec .dot { width: 8px; height: 8px; border-radius: 50%; background: #2fa84f; flex: none; animation: recpulse 2.4s ease-in-out infinite; }
+.autorec.off .dot { background: var(--muted); animation: none; }
+@keyframes recpulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .autorec .dot { animation: none; } }

@@ -11,6 +11,7 @@ import { initDetails } from './panels/details.js';
 import { initSearch } from './panels/search.js';
 import { initTimeline } from './panels/timeline.js';
 import { initStats } from './panels/stats.js';
+import { initBridge } from './bridge.js';
 import { initMenus } from './panels/menus.js';
 import { $, esc, plural, fmtDate, fmtDateTime, toast } from './ui.js';
 
@@ -173,6 +174,7 @@ document.addEventListener('keydown', (e) => {
   graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
   app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
   commit({ fresh: true });
+  initBridge(); // inside the browser extension: pick up the pages it recorded
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
     app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),

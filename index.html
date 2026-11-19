@@ -11,17 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&family=Audiowide&family=Share+Tech+Mono&family=Major+Mono+Display&family=DotGothic16&family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700&family=Michroma&family=Nunito:wght@400;700&family=Comic+Neue:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Bungee&family=Quicksand:wght@400;600;700&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/skins.css">
-<script>
-  // apply saved appearance before the first paint (no flash)
-  try {
-    var s = JSON.parse(localStorage.getItem('wiki-trails.settings')) || {}, h = document.documentElement;
-    var dark = (s.theme || 'system') === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : s.theme === 'dark';
-    h.dataset.theme = dark ? 'dark' : 'light';
-    if (s.skin) h.dataset.skin = s.skin;
-    if (s.left === false) h.dataset.left = 'closed';
-    if (s.right === false) h.dataset.right = 'closed';
-  } catch (e) {}
-</script>
+<script src="js/early.js"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="js/app.js" defer></script>
 </head>
@@ -73,6 +63,7 @@
     <section class="panel" id="record">
       <div class="panel-head"><span class="grow">Record</span><button class="btn small" id="newtrail">New trail</button><button class="collapse" data-close="left" title="Hide this side">‹</button></div>
       <div class="rec-body">
+        <div class="autorec" id="autorec" hidden><span class="dot"></span><span class="grow" id="autorec-text"></span><button class="btn small" id="autorec-btn"></button></div>
         <ol class="steps" id="steps"></ol>
         <div class="readrow" id="readrow" hidden><span class="grow" id="readq"></span><div class="seg small" role="group" aria-label="How you read it"><button data-rd="skim"><span class="rd rd-skim"></span>Skimmed</button><button data-rd="read"><span class="rd rd-read"></span>Read</button></div></div>
         <label id="reclabel" for="next">First page</label>

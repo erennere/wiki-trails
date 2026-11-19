@@ -51,11 +51,14 @@ export function confirmClick(btn, label, fn) {
   };
 }
 
+const dur = (s) => (s >= 90 ? `${Math.round(s / 60)} min` : `${Math.round(s)} s`);
 /** A small mark for how you read a page: a filled dot (read), a ring (skimmed), a dash (don't know). */
 export function readMark(r, { button = true, trailId = '', visitId = '' } = {}) {
   const d = r?.depth, cls = `rd ${d === 'read' ? 'rd-read' : d === 'skim' ? 'rd-skim' : 'rd-none'}${r?.guessed ? ' guessed' : ''}`;
   const what = d === 'read' ? 'Read' : d === 'skim' ? 'Skimmed' : 'Not marked';
-  const tip = `${what}${r?.guessed ? ` (guessed: ${Math.round(r.secs)} s before the next page)` : ''}${button ? ' · click to change' : ''}`;
+  const how = r?.measured ? ` (on the page for ${dur(r.secs)}${r.scroll != null ? `, scrolled ${Math.round(r.scroll * 100)}%` : ''})`
+    : r?.guessed ? ` (guessed: ${dur(r.secs)} before the next page)` : '';
+  const tip = `${what}${how}${button ? ' · click to change' : ''}`;
   return button ? `<button class="${cls}" data-rd-t="${trailId}" data-rd-v="${visitId}" title="${tip}" aria-label="${tip}"></button>` : `<span class="${cls}" title="${tip}"></span>`;
 }
 

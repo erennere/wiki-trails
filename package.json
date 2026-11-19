@@ -5,7 +5,8 @@
   "scripts": {
     "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --minify --outfile=js/app.js --legal-comments=none",
     "watch": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=js/app.js --watch",
-    "serve": "python3 -m http.server 8000"
+    "serve": "python3 -m http.server 8000",
+    "build:extension": "npm run build && node scripts/build_extension.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"
@@ -14,5 +15,6 @@
   "dependencies": {
     "3d-force-graph": "1.80.2",
     "three": "0.187.0"
-  }
+  },
+  "version": "1.0.0"
 }

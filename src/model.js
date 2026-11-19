@@ -7,7 +7,8 @@
 // }
 // A visit's `parent` is the visit you clicked from (null for the trail's first page).
 // `read` is how you read the page, if you said so: 'read' (thoroughly) or 'skim'.
-// Otherwise it's guessed from how long it was until you opened the next page.
+// Otherwise it's taken from `secs` (time the page was in front of you, measured by the browser
+// extension), or guessed from how long it was until you opened the next page.
 // Going "back" in the browser is not a click, so it creates no connection.
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -45,7 +46,14 @@ export function validate(raw) {
       if (v.parent != null && !ids.has(v.parent)) continue; // parents must come first
       ids.add(v.id);
       const t = Number(v.t); 
-      visits.push({ id: String(v.id), article, parent: v.parent ?? null, ...(t > 0 ? { t } : {}), ...(v.read === 'read' || v.read === 'skim' ? { read: v.read } : {}) });
+      visits.push({
+        id: String(v.id), article, parent: v.parent ?? null, ...(t > 0 ? { t } : {}),
+        ...(v.read === 'read' || v.read === 'skim' ? { read: v.read } : {}),
+        // recorded by the browser extension: time the page was in front of you, how far you scrolled
+        ...(Number.isFinite(v.secs) && v.secs >= 0 ? { secs: Math.round(v.secs) } : {}),
+        ...(Number.isFinite(v.scroll) ? { scroll: Math.max(0, Math.min(1, v.scroll)) } : {}),
+        ...(v.src === 'auto' ? { src: 'auto' } : {}),
+      });
     }
     if (visits.length) s.trails.push({ id: String(t.id || uid()), name: String(t.name || ''), created: t.created || new Date().toISOString(), visits });
   }
@@ -67,13 +75,16 @@ export const visitTime = (tr, v) => v.t || Date.parse(tr.created) || 0;
 // Gaps under 3 s or over 2 h say nothing (typed in afterwards, or left open), so those stay unknown.
 const reading = { guess: true, readAfter: 60 };
 export function setReadingRule(r) { Object.assign(reading, r); }
-/** For every visit of a trail: { depth: 'read' | 'skim' | null, guessed, secs } */
+/** For every visit of a trail: { depth: 'read' | 'skim' | null, guessed, measured, secs, scroll } */
 export function readingOfTrail(tr) {
   const out = new Map(), order = tr.visits.filter((v) => v.t).sort((a, b) => a.t - b.t), next = new Map();
   for (let i = 0; i + 1 < order.length; i++) next.set(order[i].id, order[i + 1].t - order[i].t);
   for (const v of tr.visits) {
-    const gap = next.get(v.id), secs = gap != null ? gap / 1000 : null;
-    if (v.read) { out.set(v.id, { depth: v.read, guessed: false, secs }); continue; }
+    const gap = next.get(v.id);
+    if (v.read) { out.set(v.id, { depth: v.read, guessed: false, secs: v.secs ?? (gap != null ? gap / 1000 : null), scroll: v.scroll ?? null }); continue; }
+    // measured by the extension: time actually spent on the page (while you were using it)
+    if (v.secs != null && reading.guess) { out.set(v.id, { depth: v.secs >= reading.readAfter ? 'read' : 'skim', guessed: true, measured: true, secs: v.secs, scroll: v.scroll ?? null }); continue; }
+    const secs = gap != null ? gap / 1000 : null;
     const ok = reading.guess && secs != null && secs >= 3 && secs <= 7200;
     out.set(v.id, { depth: ok ? (secs >= reading.readAfter ? 'read' : 'skim') : null, guessed: ok, secs });
   }

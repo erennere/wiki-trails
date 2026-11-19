@@ -39,7 +39,7 @@ export function saveLocal(state) {
 
 /** The repo's published dataset (data/trails.json), shown to visitors with no local data. */
 export async function loadPublished() {
-  if (location.protocol === 'file:') return null; // browsers block fetch() from disk
+  if (!/^https?:$/.test(location.protocol)) return null; // browsers block fetch() from disk; the extension has no published file
   try {
     const r = await fetch('data/trails.json', { cache: 'no-cache' });
     if (!r.ok) return null;
