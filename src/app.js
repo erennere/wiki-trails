@@ -21,6 +21,7 @@ export const app = {
   pin: null,        // the thread you clicked on (its key), shown fully and explained in the side panel
   colors: [],       // trail colours of the current skin
   settings: loadSettings(),
+  published: null,  // whose published history you're looking at (data/trails.json), until you start your own
 };
 setReadingRule({ guess: app.settings.guessReading, readAfter: app.settings.readAfter });
 app.D = app.DV = derive(app.state);
@@ -49,7 +50,7 @@ function rederive() {
 
 /** Call after changing app.state. */
 export function commit(opts = {}) {
-  saveLocal(app.state);
+  if (!app.published) saveLocal(app.state); // someone else's published history is only shown, never kept
   rederive();
   if (app.cur && !app.D.trailIndex.get(app.cur.trailId)?.byId.has(app.cur.visitId)) app.cur = null;
   const s = app.sel;
@@ -64,7 +65,8 @@ export const depthOf = (trailId, visitId) => app.D.trailIndex.get(trailId)?.dept
 export function markReading(trailId, visitId, depth) {
   const v = app.D.trailIndex.get(trailId)?.byId.get(visitId); if (!v) return;
   snapshot();
-  if (depth) v.read = depth; else delete v.read;
+  // how you read a page is about the page, so the mark goes on every time you opened it
+  for (const tr of app.state.trails) for (const x of tr.visits) if (x.article === v.article) { if (depth) x.read = depth; else delete x.read; }
   commit();
 }
 /** After changing how reading is guessed. */
@@ -94,10 +96,23 @@ export function undo() {
 
 /** Swap in a whole different history (open a file, load test data, clear). */
 export function replaceState(next) {
-  snapshot();
+  if (app.published) { app.published = null; emit('published'); } else snapshot();
   app.state = next; app.cur = null; app.sel = null; app.hover = null; app.period = null;
   app.range = null; app.rangeName = 'all';
   commit({ fresh: true });
+}
+
+/**
+ * You were looking at someone's published history and now start your own (record a page, open a
+ * file, connect sync): their trails make way for yours. Returns true if that happened.
+ */
+export function ownHistory() {
+  if (!app.published) return false;
+  app.published = null;
+  app.state = { ...emptyState(), lang: app.state.lang };
+  app.cur = null; app.sel = null; app.hover = null; app.period = null; app.pin = null; app.threads = null;
+  emit('published');
+  return true;
 }
 
 /* ---------- selection, hover, cursor ---------- */

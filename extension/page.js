@@ -39,16 +39,20 @@
 
   send({ type: 'open', title, lang: langOf(location.hostname), from, fromNs, nav, t: Date.now() });
 
-  // time on the page: counted only while it's visible and you've done something in the last 2 minutes
-  const IDLE = 120000;
+  // time on the page: only while you're actually on it — the tab is showing, the browser window is the
+  // one you're using, and you moved, scrolled or typed in the last 45 seconds. A page left open, in a
+  // background tab or behind another window doesn't count.
+  const IDLE = 45000;
   let secs = 0, last = performance.now(), active = performance.now(), maxScroll = 0;
   const visible = () => document.visibilityState === 'visible';
+  let on = visible() && document.hasFocus();
   function tick() {
     const now = performance.now();
-    if (visible() && now - active < IDLE) secs += (now - last) / 1000;
+    if (on) { const until = Math.min(now, active + IDLE); if (until > last) secs += (until - last) / 1000; }
     last = now;
   }
-  const poke = () => { tick(); active = performance.now(); };
+  const state = () => { tick(); on = visible() && document.hasFocus(); };
+  const poke = () => { tick(); active = performance.now(); if (!on) state(); };
   function scrolled() {
     const h = document.documentElement.scrollHeight - innerHeight;
     maxScroll = Math.max(maxScroll, h > 0 ? Math.min(1, scrollY / h) : 1);
@@ -64,9 +68,11 @@
   for (const ev of ['mousemove', 'keydown', 'wheel', 'touchstart', 'pointerdown']) addEventListener(ev, poke, { passive: true, capture: true });
   addEventListener('scroll', () => { poke(); scrolled(); }, { passive: true });
   scrolled();
-  document.addEventListener('visibilitychange', () => { if (visible()) { last = active = performance.now(); } else report(true); });
+  document.addEventListener('visibilitychange', () => { state(); if (visible()) active = performance.now(); else report(true); });
+  addEventListener('focus', () => { state(); active = performance.now(); });
+  addEventListener('blur', () => { state(); report(true); });
   addEventListener('pagehide', () => report(true));
   // coming back to this page from the browser's back/forward cache
-  addEventListener('pageshow', (e) => { if (e.persisted) { last = active = performance.now(); send({ type: 'shown', title, t: Date.now() }); } });
-  setInterval(() => { if (visible()) report(); }, 15000);
+  addEventListener('pageshow', (e) => { if (e.persisted) { last = active = performance.now(); on = visible() && document.hasFocus(); send({ type: 'shown', title, t: Date.now() }); } });
+  setInterval(() => { if (on) report(); }, 15000);
 })();

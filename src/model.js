@@ -77,22 +77,35 @@ export const pairKey = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
 export const visitTime = (tr, v) => v.t || Date.parse(tr.created) || 0;
 
 /* ---------- how you read a page ---------- */
-// A page counts as read when you stayed at least `readAfter` seconds before opening the next one.
-// Gaps under 3 s or over 2 h say nothing (typed in afterwards, or left open), so those stay unknown.
+// Read or skimmed is about the page, not one visit: it's the total time you spent on it, over every
+// time you opened it. The browser extension measures that time only while the page was in front of
+// you and you were using it, so a page left open somewhere doesn't count. At least `readAfter` seconds
+// in total counts as read. If you said how you read a page, that's what counts.
+// Pages you recorded by hand have no measured time; for those (if guessing is on) the time until you
+// opened the next page stands in, each gap between 3 s and 2 h (longer gaps say nothing).
 const reading = { guess: true, readAfter: 60 };
 export function setReadingRule(r) { Object.assign(reading, r); }
-/** For every visit of a trail: { depth: 'read' | 'skim' | null, guessed, measured, secs, scroll } */
-export function readingOfTrail(tr) {
-  const out = new Map(), order = tr.visits.filter((v) => v.t).sort((a, b) => a.t - b.t), next = new Map();
-  for (let i = 0; i + 1 < order.length; i++) next.set(order[i].id, order[i + 1].t - order[i].t);
-  for (const v of tr.visits) {
-    const gap = next.get(v.id);
-    if (v.read) { out.set(v.id, { depth: v.read, guessed: false, secs: v.secs ?? (gap != null ? gap / 1000 : null), scroll: v.scroll ?? null }); continue; }
-    // measured by the extension: time actually spent on the page (while you were using it)
-    if (v.secs != null && reading.guess) { out.set(v.id, { depth: v.secs >= reading.readAfter ? 'read' : 'skim', guessed: true, measured: true, secs: v.secs, scroll: v.scroll ?? null }); continue; }
-    const secs = gap != null ? gap / 1000 : null;
-    const ok = reading.guess && secs != null && secs >= 3 && secs <= 7200;
-    out.set(v.id, { depth: ok ? (secs >= reading.readAfter ? 'read' : 'skim') : null, guessed: ok, secs });
+/** For every page: { depth: 'read' | 'skim' | null, guessed, measured, secs (in total), scroll (furthest) } */
+export function readingOfPages(state) {
+  const P = new Map();
+  const pg = (a) => P.get(a) || P.set(a, { secs: 0, measured: 0, gap: 0, gaps: 0, scroll: null, mark: null, markT: -1 }).get(a);
+  for (const tr of state.trails) {
+    const order = tr.visits.filter((v) => v.t).sort((a, b) => a.t - b.t), next = new Map();
+    for (let i = 0; i + 1 < order.length; i++) next.set(order[i].id, order[i + 1].t - order[i].t);
+    for (const v of tr.visits) {
+      const p = pg(v.article), t = visitTime(tr, v);
+      if (v.read && t >= p.markT) { p.mark = v.read; p.markT = t; }
+      if (v.secs != null) { p.secs += v.secs; p.measured++; if (v.scroll != null) p.scroll = Math.max(p.scroll ?? 0, v.scroll); }
+      else if (v.src !== 'auto') { const g = next.get(v.id); if (g != null && g >= 3000 && g <= 7200e3) { p.gap += g / 1000; p.gaps++; } }
+    }
+  }
+  const out = new Map();
+  for (const [a, p] of P) {
+    const secs = p.measured ? p.secs : p.gaps ? p.gap : null;
+    if (p.mark) out.set(a, { depth: p.mark, guessed: false, measured: !!p.measured, secs, scroll: p.scroll });
+    else if (p.measured) out.set(a, { depth: p.secs >= reading.readAfter ? 'read' : 'skim', guessed: true, measured: true, secs, scroll: p.scroll });
+    else if (reading.guess && p.gaps) out.set(a, { depth: p.gap >= reading.readAfter ? 'read' : 'skim', guessed: true, measured: false, secs });
+    else out.set(a, { depth: null, guessed: false, measured: false, secs: null, scroll: null });
   }
   return out;
 }
@@ -116,19 +129,19 @@ export function derive(state, range = null) {
     return articles.get(t);
   };
   const trailIndex = new Map();
+  const pages = readingOfPages(state); // over your whole history: read or skimmed is about the page
   state.trails.forEach((tr, i) => {
     const byId = new Map(tr.visits.map((v) => [v.id, v]));
     const children = new Map(tr.visits.map((v) => [v.id, []]));
     let root = null;
-    const depth = readingOfTrail(tr);
+    const depth = new Map(tr.visits.map((v) => [v.id, pages.get(v.article)]));
     for (const v of tr.visits) {
       if (v.parent != null) children.get(v.parent)?.push(v.id);
       if (v.parent == null && !root) root = v;
       const t = visitTime(tr, v);
       if (!inRange(t)) continue;
-      const a = art(v.article), d = depth.get(v.id).depth;
+      const a = art(v.article);
       a.visits++; a.trails.add(tr.id); if (t > a.last) a.last = t;
-      if (d === 'read') a.read++; else if (d === 'skim') a.skim++;
       if (v.parent == null) { a.starts.add(tr.id); continue; }
       const from = byId.get(v.parent).article, to = v.article;
       if (from === to) continue;
@@ -141,7 +154,8 @@ export function derive(state, range = null) {
     }
     trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root, depth });
   });
-  return { articles, links, trailIndex };
+  for (const a of articles.values()) { const r = pages.get(a.title); a.reading = r; a.read = r?.depth === 'read' ? 1 : 0; a.skim = r?.depth === 'skim' ? 1 : 0; }
+  return { articles, links, trailIndex, pages };
 }
 
 /** Chain of visits from the trail's start to `visitId` (inclusive). */

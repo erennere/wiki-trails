@@ -43,7 +43,10 @@ export async function loadPublished() {
   try {
     const r = await fetch('data/trails.json', { cache: 'no-cache' });
     if (!r.ok) return null;
-    return validate(await r.json());
+    const raw = await r.json();
+    const s = validate(raw);
+    s.owner = typeof raw.owner === 'string' ? raw.owner.slice(0, 60) : '';
+    return s.trails.length ? s : null;
   } catch { return null; }
 }
 

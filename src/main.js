@@ -1,5 +1,5 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
-import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading } from './app.js';
+import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading, ownHistory } from './app.js';
 import { loadLocal, loadPublished, saveLocal } from './storage.js';
 import { emptyState, uid } from './model.js';
 import { createGraph } from './views/map3d.js';
@@ -17,6 +17,14 @@ import { initMenus } from './panels/menus.js';
 import { $, esc, plural, fmtDate, fmtDateTime, toast } from './ui.js';
 
 const html = document.documentElement;
+
+/* ---------- someone's published history, shown until you start your own ---------- */
+function renderPublished() {
+  const who = app.published;
+  $('pubnote').hidden = !who;
+  if (who) $('pubnote-text').innerHTML = `You're looking at <b>${esc(who)}</b>'s Wikipedia trails. Record a page or open a history file and the map is yours.`;
+}
+on('published', renderPublished);
 
 /* ---------- side panels: open / closed ---------- */
 function setPanel(side, open) {
@@ -38,7 +46,7 @@ const graph = createGraph($('graph'), {
   onThreadHover: (h) => { threadHover = h; showTip(); },
   onBackground: () => (app.pin ? pinThread(null) : select(null)),
   onZoomedOut: () => select(null),
-  onSettled: () => { app.state.layout = graph.getPositions(); saveLocal(app.state); },
+  onSettled: () => { app.state.layout = graph.getPositions(); if (!app.published) saveLocal(app.state); },
   onResize: () => { clearTimeout(rz); rz = setTimeout(() => (app.threads ? showThreads() : graph.fit(false)), 160); },
 });
 const fx = createEffects($('fx'));
@@ -96,7 +104,7 @@ function renderLegend() {
   // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
   lg.innerHTML = app.threads
     ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
-    : '<span><i class="sw2" style="background:var(--read)"></i>mostly read</span><span><i class="sw2" style="background:var(--skim)"></i>mostly skimmed</span>';
+    : '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim)"></i>skimmed</span>';
 }
 on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
 
@@ -149,6 +157,8 @@ on('skin', () => { if (app.sel) refreshThreads(); });
 const record = initRecord({ showLeft: () => setPanel('left', true) });
 const menus = initMenus({ graph });
 initSyncUI({ openSettings: () => menus.openSettings() });
+$('pub-own').onclick = () => { if (ownHistory()) { graph.reset(); commit({ fresh: true }); } setPanel('left', true); $('next').focus(); };
+$('pub-open').onclick = () => menus.open();
 initTrails();
 initDetails({ record, loadTest: menus.loadTest });
 
@@ -182,8 +192,12 @@ document.addEventListener('keydown', (e) => {
 /* ---------- start ---------- */
 (async () => {
   graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
-  app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
+  const mine = await loadLocal();
+  const shown = mine ? null : await loadPublished();
+  if (shown) { app.published = shown.owner || 'Someone'; delete shown.owner; }
+  app.state = mine || shown || emptyState();
   commit({ fresh: true });
+  renderPublished();
   initSync(); // if this browser is connected to GitHub: fetch what's new there, send what's new here
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)

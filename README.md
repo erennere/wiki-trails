@@ -74,7 +74,7 @@ The ⚙ button opens Settings:
 - **Light or dark.** Follows your system by default.
 - **Look.** Plain is the default, and 27 optional looks are available. Hover a card to try one, click to keep it.
 - **Map:** how many connections to show, fade old connections, how much older threads fade, turn the map slowly when you're not using it, and re-arrange it from scratch.
-- **Reading:** colour pages by how you read them or by how often you were there; guess from the time between pages whether you read or skimmed (on or off); and how long a page has to stay open to count as read.
+- **Reading:** colour pages by how you read them or by how often you were there; how much time in total a page needs to count as read; and, for pages you recorded by hand (which have no measured time), whether to guess from the time until the next page.
 - **Other:** the Wikipedia language for links, and optional sounds.
 
 ![Settings](.github/gallery.png)
@@ -156,7 +156,7 @@ The extension records your trails while you read Wikipedia, with nothing to type
 - **Back and forward** add no step. The next link you click branches from the page you went back to, as in the app.
 - **A new trail starts** when you arrive from anywhere else: a search engine, a bookmark, an address you typed, Wikipedia's search box or its Main Page.
 - **Reloading** a page adds nothing.
-- **How long each page was in front of you**, and how far you scrolled. Time only counts while the tab is visible and you have moved the mouse, scrolled or typed in the last two minutes. A page you spent at least a minute on counts as read; you can change that under Settings → *Read after*, and you can still mark any page yourself.
+- **How much time you spent on each page**, and how far you scrolled. Time only counts while the tab is showing, the browser window is the one you're using, and you moved the mouse, scrolled or typed in the last 45 seconds, so a page left open in the background doesn't count. A page counts as read once you spent at least a minute on it **in total**, over every time you opened it; you can change that under Settings → *A page counts as read after*, and you can still mark any page yourself.
 
 To pause, click the toolbar button and untick *Record the Wikipedia pages I open*, or click *Pause* in the Record panel. While it's paused, the button shows "off".
 
@@ -196,7 +196,18 @@ Safari only takes extensions that come inside a Mac app, so you build that app o
 3. The site appears at `https://<user>.github.io/<repo>/`.
 4. Put that address in `homepage` in `package.json` and run `npm run build:extension`: the extension opens that site and talks to it there only.
 
-To publish your own map, save your history with **File → Save as**, put the file at `data/trails.json`, and commit it. Visitors with no history of their own see that file. This only works on the hosted site: browsers don't allow reading it when the page is opened from disk. Your own browser keeps using its local history.
+### Show your history to visitors
+
+Visitors who have no history of their own see yours, with a note saying whose it is. As soon as they record a page, open a history file or connect sync, the map is theirs instead; your trails are never stored in their browser.
+
+With sync, this happens on its own: the workflow in `.github/workflows/pages.yml` copies your history from its private repository onto the site once an hour (deleted trails are left out). To set it up:
+
+1. In this repository, **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. Make a fine-grained token with **Contents: Read-only** on your history repository only, and add it under **Settings → Secrets and variables → Actions → New repository secret**, named `HISTORY_TOKEN`.
+3. Optionally, under the same page's **Variables** tab, add `OWNER_NAME` (the name visitors see, otherwise your GitHub username) and `HISTORY_REPO` (if it isn't `<you>/wiki-trails-data`).
+4. Run it once from **Actions → Publish the site → Run workflow**, or wait for the hour.
+
+Without sync, save your history with **File → Save as**, put the file at `data/trails.json` and commit it. Either way, everything you read becomes public: every article, when you opened it and how long you spent on it.
 
 ### Developing
 

@@ -90,6 +90,7 @@
       <canvas id="fx"></canvas>
       <div id="graph" role="img" aria-label="3D map of your Wikipedia trails"></div>
       <div class="threadbar" id="threadbar" hidden></div>
+      <div class="pubnote" id="pubnote" hidden><span id="pubnote-text"></span><button class="btn small" id="pub-own">Start my own</button><button class="btn small" id="pub-open">Open my history file…</button></div>
       <div class="readlegend" id="readlegend" hidden><span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span></div>
       <div class="mapctl">
         <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
@@ -153,8 +154,8 @@
       <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
       <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
       <div class="setrow"><span>Colour pages by</span><select id="colourby"><option value="reading">how you read them</option><option value="visits">how often you were there</option></select></div>
-      <div class="setrow"><span>Guess from the time until the next page whether you read a page or skimmed it</span><input type="checkbox" id="guessread"></div>
-      <div class="setrow"><span>A page counts as read after</span><select id="readafter"><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option></select></div>
+      <div class="setrow"><span>For pages recorded by hand, guess from the time until the next page whether you read or skimmed them</span><input type="checkbox" id="guessread"></div>
+      <div class="setrow"><span>A page counts as read after, in total,</span><select id="readafter"><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option></select></div>
       <div class="setrow"><span>How much older threads fade</span><span class="hint">a little</span><input type="range" id="agefade" min="0" max="1" step="0.05"><span class="hint">a lot</span></div>
       <div class="setrow"><span>Turn the map slowly when you're not using it</span><input type="checkbox" id="rotate"></div>
       <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>

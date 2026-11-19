@@ -1,0 +1,70 @@
+# Publishes the site on GitHub Pages, with your history on it for visitors (data/trails.json).
+# Your history stays in its private repository; once an hour this copies it onto the site.
+# Needs, in this repository's Settings:
+#  - Pages → Build and deployment → Source: GitHub Actions
+#  - Secrets and variables → Actions → New repository secret HISTORY_TOKEN: a fine-grained token with
+#    Contents: Read-only on your history repository
+#  - optional variables: HISTORY_REPO (default <you>/wiki-trails-data) and OWNER_NAME (the name visitors see)
+# Without HISTORY_TOKEN the site is published without anyone's history.
+name: Publish the site
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 * * * *'   # every hour, to pick up what you read
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      HAS_HISTORY: ${{ secrets.HISTORY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: site
+
+      - name: Fetch your history (from its private repository)
+        if: env.HAS_HISTORY == 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.HISTORY_REPO || format('{0}/wiki-trails-data', github.repository_owner) }}
+          token: ${{ secrets.HISTORY_TOKEN }}
+          path: history
+
+      - name: Put it on the site as data/trails.json
+        if: env.HAS_HISTORY == 'true'
+        run: node site/scripts/publish_history.mjs history site/data/trails.json "${{ vars.OWNER_NAME || github.repository_owner }}"
+
+      - id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Skip if nothing changed since the last hour
+        id: same
+        if: github.event_name == 'schedule'
+        run: |
+          if curl -fsSL "${{ steps.pages.outputs.base_url }}/data/trails.json" -o live.json && cmp -s live.json site/data/trails.json; then
+            echo "same=true" >> "$GITHUB_OUTPUT"; echo "No new pages since the last update."
+          fi
+
+      - if: steps.same.outputs.same != 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deployment
+        if: steps.same.outputs.same != 'true'
+        uses: actions/deploy-pages@v5

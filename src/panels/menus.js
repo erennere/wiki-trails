@@ -49,7 +49,7 @@ export function initMenus({ graph }) {
 
   let pending = null;
   function askOpen(s, name) {
-    if (!app.state.trails.length) return applyOpen(s, 'replace', name);
+    if (!app.state.trails.length || app.published) return applyOpen(s, 'replace', name); // a shown history isn't yours to add to
     pending = { s, name };
     const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
     $('od-text').innerHTML = `<b>${esc(name || 'This file')}</b> has ${plural(s.trails.length, 'trail')} and ${plural(clicks, 'click')}. You currently have ${plural(app.state.trails.length, 'trail')}.${sync.on ? ' Your history is synced, so this changes it on every device.' : ''}`;
@@ -163,5 +163,5 @@ export function initMenus({ graph }) {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('settings').hidden) closeSettings(); if (!$('opendlg').hidden) $('opendlg').hidden = true; } });
 
   renderSaved();
-  return { loadTest, openSettings };
+  return { loadTest, openSettings, open: doOpen };
 }

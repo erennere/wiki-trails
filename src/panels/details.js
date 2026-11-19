@@ -1,7 +1,7 @@
 // Details: explains whatever is selected. Nothing selected → an overview of your history.
 import { app, on, select, trailOf, commit, snapshot, pinThread, pinned, depthOf, markReading } from '../app.js';
 import { trailLabel, trailShape, visitTime, timeSpan } from '../model.js';
-import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, readMark, confirmClick, toast } from '../ui.js';
+import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, readMark, confirmClick, toast, dur } from '../ui.js';
 
 export function initDetails({ record, loadTest }) {
   const box = $('details');
@@ -68,7 +68,7 @@ export function initDetails({ record, loadTest }) {
     const list = (m) => [...m].sort((p, q) => q[1] - p[1]).slice(0, 8).map(([t, n]) => `<div class="lrow" data-a="${esc(t)}"><span class="l">${esc(t)}</span><span class="c">${n}×</span></div>`).join('') || '<p class="explain">None.</p>';
     box.innerHTML = `<h3>${esc(title)}</h3>
       <div class="sub">You saw this page ${plural(seen.length, 'time')}${seen.length ? `, last on ${fmtDateTime(seen[0].t)}` : ''}${seen.length > 1 ? `, first on ${fmtDate(seen[seen.length - 1].t)}` : ''}.</div>
-      ${a.read || a.skim ? `<div class="readsum">${readMark({ depth: 'read' }, { button: false })} read ${plural(a.read, 'time')} <span class="sep">·</span> ${readMark({ depth: 'skim' }, { button: false })} skimmed ${plural(a.skim, 'time')}${a.visits - a.read - a.skim > 0 ? ` <span class="sep">·</span> ${a.visits - a.read - a.skim} not known` : ''}</div>` : ''}
+      ${a.reading?.depth || a.reading?.secs != null ? `<div class="readsum">${readMark(a.reading, { button: false })} ${a.reading.depth === 'read' ? 'Read' : a.reading.depth === 'skim' ? 'Skimmed' : 'Not known'}${a.reading.secs != null ? ` <span class="sep">·</span> ${a.reading.measured ? `${dur(a.reading.secs)} on it in total` : `about ${dur(a.reading.secs)} before the next page (guessed)`}` : ''}${a.reading.depth && !a.reading.guessed ? ' <span class="sep">·</span> you marked it' : ''}</div>` : ''}
       <div class="actions">
         <button class="btn small" id="d-start">Start a trail here</button>
         <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>

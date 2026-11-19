@@ -6,7 +6,7 @@
 //  - push: a couple of seconds after you change something here. What changed is found by comparing
 //    each trail with the copy last synced (`base`), so every kind of change (recording by hand,
 //    marking, renaming, deleting, undo, opening a file) is covered the same way.
-import { app, on, emit, commit, snapshot } from './app.js';
+import { app, on, emit, commit, snapshot, ownHistory } from './app.js';
 import { validate } from './model.js';
 import { idbGet, idbSet, saveLocal } from './storage.js';
 import { client, pathOf, mergeTrail, SyncError } from './sync-core.js';
@@ -251,6 +251,7 @@ export async function connect(repo, token, keep) {
   const gh = client({ repo, token });
   const info = await gh.info();
   if (!info.canWrite) throw new SyncError(403, "The token isn't allowed to write to this repository.");
+  ownHistory(); // someone's published history isn't yours to sync
   const head = await gh.head(info.branch);
   const files = head ? await gh.files(head) : [];
   const got = await pool(files, 6, async (f) => ({ f, file: await gh.blob(f.sha) }));

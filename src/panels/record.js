@@ -1,5 +1,5 @@
 // Record: the trail you're building, as a numbered list of steps, plus one input for the next page.
-import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading } from '../app.js';
+import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading, ownHistory } from '../app.js';
 import { uid, normTitle, langFromUrl, trailShape } from '../model.js';
 import { $, esc, stepsHTML, blip, toast, plural } from '../ui.js';
 import { ext, setRecording } from '../extlink.js';
@@ -38,8 +38,9 @@ export function initRecord({ showLeft }) {
   function add() {
     const raw = $('next').value, title = normTitle(raw);
     if (!title) { $('next').focus(); return; }
-    const v = cursorVisit();
+    let v = cursorVisit();
     if (v && v.article === title) { msg('That is the page you are on.', true); return; }
+    if (ownHistory()) v = null; // the first page of your own history
     snapshot();
     const lang = langFromUrl(raw);
     if (lang && !app.state.trails.length) app.state.lang = lang;
@@ -106,6 +107,7 @@ export function initRecord({ showLeft }) {
     /** Start a new trail whose first page is this article. */
     startAt(title) {
       showLeft();
+      ownHistory();
       snapshot();
       const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
       app.state.trails.push(t);
