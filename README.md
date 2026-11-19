@@ -7,6 +7,7 @@ Click any article and the trails that went through it light up, and you can read
 - **Each trail has its own colour.**
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.
+- **How you read each page:** on a trail, a page you read thoroughly is a solid bead and one you skimmed an open ring. In the overview, pages you mostly read are strong and pages you mostly skimmed pale.
 - **The newest trail is the solid one,** and each older trail is fainter than the one before, so you can tell the order without reading any dates. Only the newest carries the moving light. How strongly they fade is a setting.
 
 The camera turns to the angle where the trails spread out best and fills the window with them. Click a trail anywhere and it's shown in full while the others step back; the side panel explains it. Zoom out and you're back to your whole history.
@@ -21,6 +22,7 @@ The window has one map and two side panels, and both panels can be collapsed.
 - **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
 - **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, choose *Custom…* to enter a start and end date, or drag across the timeline to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
 - **Record** (left). Paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
+- **Skimmed or read.** For the page you're on, click *Skimmed* or *Read*. If you don't, it's guessed from how long it was until you opened the next page: one minute or more counts as read (you can change that in Settings). Each step shows a small mark: a filled dot for read, a ring for skimmed, dotted when it's only a guess. Click a mark to change it.
 - **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
 - **Details** (right). Shows what you selected:
   - **An article:** how often you saw it, first and last; where you came from and where you went on to; buttons to start a new trail there or open it on Wikipedia.
@@ -31,6 +33,18 @@ The window has one map and two side panels, and both panels can be collapsed.
 
 ![One trail, thin at its start (Theatre) and bold at its end (Zebra)](.github/screenshot-trail.png)
 
+### Stats
+
+The **Stats** tab next to *Map* shows how much you browsed and how deeply you read: **weekly**, **every 2 weeks** or **monthly**.
+
+- **Tiles for the chosen period**, each compared with the period before: pages opened, how many you read thoroughly, different pages, pages that were new to you, trails started, and the longest trail.
+- **Pages per period**, split into read, skimmed and not known, and the **share of pages you read thoroughly** over time. Hover a column for its numbers; click it (or use ‹ ›) to look at that period.
+- **Lists for the period:** most visited, read most, skimmed most, and where your trails started. Click a page or the longest trail to open it on the map.
+- **A table** of every period, for exact numbers.
+- **Time period:** the top bar's choice (30 days, 1 year, custom) limits the stats too.
+
+![Stats, every two weeks](.github/stats.png)
+
 ### Built to last for years
 
 It should still feel like day one after years of use.
@@ -40,7 +54,7 @@ It should still feel like day one after years of use.
 - **Fading.** Connections you haven't used for a while fade.
 - **Stable layout.** Positions are saved, so the network doesn't reshuffle from day to day. New articles settle next to the page you came from.
 
-![Two years of browsing: 20,000 clicks, 3,145 articles](.github/whole.png)
+![Two years of browsing: 20,000 clicks, 3,117 articles](.github/whole.png)
 
 ![The latest ten trails through Communication](.github/two-years.png)
 
@@ -58,6 +72,7 @@ The ⚙ button opens Settings:
 - **Light or dark.** Follows your system by default.
 - **Look.** Plain is the default, and 27 optional looks are available. Hover a card to try one, click to keep it.
 - **Map:** how many connections to show, fade old connections, how much older threads fade, turn the map slowly when you're not using it, and re-arrange it from scratch.
+- **Reading:** colour pages by how you read them or by how often you were there; guess from the time between pages whether you read or skimmed (on or off); and how long a page has to stay open to count as read.
 - **Other:** the Wikipedia language for links, and optional sounds.
 
 ![Settings](.github/gallery.png)
@@ -93,7 +108,7 @@ Drag to turn the map, scroll to zoom.
 
 ### Try it with real data
 
-**File → Examples** loads real human trails from the Wikispeedia game: *30 days* (1,000 clicks) or *2 years* (20,000 clicks, 3,145 articles). The 2-year example shows how the map feels after long use. Loading it replaces your history, but you can undo that.
+**File → Examples** loads real human trails from the Wikispeedia game: *30 days* (1,000 clicks) or *2 years* (20,000 clicks, 3,117 articles). The 2-year example shows how the map feels after long use. Loading it replaces your history, but you can undo that.
 
 ## Run it
 
@@ -129,7 +144,7 @@ src/storage.js        IndexedDB, history files (save/open/merge), data/trails.js
 src/appearance.js     light/dark and looks
 src/skins.js          the list of looks: map palette, dot shape, background effect
 src/ui.js             small helpers (dates, toasts, the steps list)
-src/panels/           record, trails, details, search, timeline, menus
+src/panels/           record, trails, details, search, timeline, menus, stats
 src/views/map3d.js    the 3D network (3d-force-graph), threads drawn with three.js, labels, camera
 src/views/effects.js  animated backgrounds for some looks
 src/example.js        tiny example
@@ -155,7 +170,7 @@ The Settings gallery picks it up automatically.
     {
       "id": "k3j2…", "name": "", "created": "2026-11-18T09:00:00.000Z",
       "visits": [
-        { "id": "a", "article": "Brain",   "parent": null, "t": 1763456400000 },
+        { "id": "a", "article": "Brain",   "parent": null, "t": 1763456400000, "read": "read" },
         { "id": "b", "article": "Neuron",  "parent": "a",  "t": 1763456460000 },
         { "id": "c", "article": "Synapse", "parent": "b",  "t": 1763456520000 },
         { "id": "d", "article": "Axon",    "parent": "b",  "t": 1763456600000 }
@@ -169,20 +184,22 @@ The Settings gallery picks it up automatically.
 - **A trail is a tree of visits.** A visit's `parent` is the page you clicked from. Going back and branching means attaching a new visit to an earlier one; in the example, you read Synapse, went back to Neuron and clicked Axon.
 - **Going back is not a click** and adds no connection.
 - **`t`** is when you opened the page, in milliseconds since 1970.
+- **`read`** is optional: `"read"` or `"skim"` when you said how you read the page. Without it, the app guesses from the time until the next page.
 - **`layout`** is optional and keeps the network looking the same after you open the file: each article's position in 3D. Files from the older flat map have two numbers per article; those positions are ignored and the network is arranged afresh.
 - **Derived data.** Articles and connections are computed from the visits. A connection's weight is the number of clicks between its two articles, in either direction, over all trails.
 
 ## Test data: Wikispeedia
 
-The examples are real human navigation paths from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page, and a `<` in their path means they went back, which maps directly to branching here. The timestamps are spread over 30 days or 2 years so the time lens has something to show.
+The examples are real human navigation paths from the [Wikispeedia](https://snap.stanford.edu/data/wikispeedia.html) dataset. Players went from one article to a target article by clicking links on the page, and a `<` in their path means they went back, which maps directly to branching here. The timestamps are spread over 30 days or 2 years so the time lens has something to show. Players raced, so their own timings are all a few seconds per page; the time on each page is simulated instead (about a third read for minutes, the rest skimmed), so reading depth and the stats have something to show.
 
 - `data/wikispeedia-1000.json` (also `.js`, so it loads from disk): 176 paths, 1,000 clicks, 401 articles. Most come from the four most-played games (Brain → Telephone, Asteroid → Viking, Theatre → Zebra, Pyramid → Bean), so shared routes build up thick connections.
-- `data/wikispeedia-2years.js`: 3,700 paths, 20,005 clicks, 3,145 articles.
+- `data/wikispeedia-2years.js`: 3,763 paths, 20,008 clicks, 3,117 articles.
 
 To regenerate or resize them:
 
 ```bash
-python3 scripts/build_test_data.py path/to/paths_finished.tsv data/wikispeedia-1000.json 1000
+python3 scripts/build_test_data.py path/to/paths_finished.tsv data/wikispeedia-1000.json 1000 30      # 30 days
+python3 scripts/build_test_data.py path/to/paths_finished.tsv /tmp/wikispeedia-2years.json 20000 730  # 2 years, then copy the .js into data/
 ```
 
 Sources:

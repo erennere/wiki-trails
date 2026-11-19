@@ -3,9 +3,11 @@
 // state = {
 //   version: 2,
 //   lang: 'en',
-//   trails: [{ id, name, created, visits: [{ id, article, parent }] }]
+//   trails: [{ id, name, created, visits: [{ id, article, parent, t, read? }] }]
 // }
 // A visit's `parent` is the visit you clicked from (null for the trail's first page).
+// `read` is how you read the page, if you said so: 'read' (thoroughly) or 'skim'.
+// Otherwise it's guessed from how long it was until you opened the next page.
 // Going "back" in the browser is not a click, so it creates no connection.
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -43,7 +45,7 @@ export function validate(raw) {
       if (v.parent != null && !ids.has(v.parent)) continue; // parents must come first
       ids.add(v.id);
       const t = Number(v.t); 
-      visits.push({ id: String(v.id), article, parent: v.parent ?? null, ...(t > 0 ? { t } : {}) });
+      visits.push({ id: String(v.id), article, parent: v.parent ?? null, ...(t > 0 ? { t } : {}), ...(v.read === 'read' || v.read === 'skim' ? { read: v.read } : {}) });
     }
     if (visits.length) s.trails.push({ id: String(t.id || uid()), name: String(t.name || ''), created: t.created || new Date().toISOString(), visits });
   }
@@ -54,11 +56,29 @@ export const pairKey = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
 
 /**
  * Derive everything the graph needs.
- * articles: Map title -> { title, visits, trails:Set, starts:Set(trailId) }
+ * articles: Map title -> { title, visits, read, skim, trails:Set, starts:Set(trailId) }
  * links:    Map pairKey -> { key, a, b, ab, ba, total }   (a < b alphabetically)
  */
 /** Time of a visit in ms (older files have no per-visit time: fall back to the trail's start). */
 export const visitTime = (tr, v) => v.t || Date.parse(tr.created) || 0;
+
+/* ---------- how you read a page ---------- */
+// A page counts as read when you stayed at least `readAfter` seconds before opening the next one.
+// Gaps under 3 s or over 2 h say nothing (typed in afterwards, or left open), so those stay unknown.
+const reading = { guess: true, readAfter: 60 };
+export function setReadingRule(r) { Object.assign(reading, r); }
+/** For every visit of a trail: { depth: 'read' | 'skim' | null, guessed, secs } */
+export function readingOfTrail(tr) {
+  const out = new Map(), order = tr.visits.filter((v) => v.t).sort((a, b) => a.t - b.t), next = new Map();
+  for (let i = 0; i + 1 < order.length; i++) next.set(order[i].id, order[i + 1].t - order[i].t);
+  for (const v of tr.visits) {
+    const gap = next.get(v.id), secs = gap != null ? gap / 1000 : null;
+    if (v.read) { out.set(v.id, { depth: v.read, guessed: false, secs }); continue; }
+    const ok = reading.guess && secs != null && secs >= 3 && secs <= 7200;
+    out.set(v.id, { depth: ok ? (secs >= reading.readAfter ? 'read' : 'skim') : null, guessed: ok, secs });
+  }
+  return out;
+}
 
 /** First and last visit time over the whole history. */
 export function timeSpan(state) {
@@ -75,7 +95,7 @@ export function derive(state, range = null) {
   const links = new Map();
   const inRange = (t) => !range || (t >= range[0] && t <= range[1]);
   const art = (t) => {
-    if (!articles.has(t)) articles.set(t, { title: t, visits: 0, trails: new Set(), starts: new Set(), last: 0 });
+    if (!articles.has(t)) articles.set(t, { title: t, visits: 0, read: 0, skim: 0, trails: new Set(), starts: new Set(), last: 0 });
     return articles.get(t);
   };
   const trailIndex = new Map();
@@ -83,13 +103,15 @@ export function derive(state, range = null) {
     const byId = new Map(tr.visits.map((v) => [v.id, v]));
     const children = new Map(tr.visits.map((v) => [v.id, []]));
     let root = null;
+    const depth = readingOfTrail(tr);
     for (const v of tr.visits) {
       if (v.parent != null) children.get(v.parent)?.push(v.id);
       if (v.parent == null && !root) root = v;
       const t = visitTime(tr, v);
       if (!inRange(t)) continue;
-      const a = art(v.article);
+      const a = art(v.article), d = depth.get(v.id).depth;
       a.visits++; a.trails.add(tr.id); if (t > a.last) a.last = t;
+      if (d === 'read') a.read++; else if (d === 'skim') a.skim++;
       if (v.parent == null) { a.starts.add(tr.id); continue; }
       const from = byId.get(v.parent).article, to = v.article;
       if (from === to) continue;
@@ -100,7 +122,7 @@ export function derive(state, range = null) {
       l.total++; l.trails.add(tr.id); if (t > l.last) l.last = t;
       art(from); // make sure the source exists even if its own visit was out of range
     }
-    trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root });
+    trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root, depth });
   });
   return { articles, links, trailIndex };
 }

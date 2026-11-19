@@ -76,6 +76,7 @@
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --font-title: var(--font-ui); --font-label: var(--font-ui); --font-size: 13.5px;
   --title-size: 11.5px; --title-weight: 650; --title-case: uppercase; --title-spacing: .07em; --title-pad: 11px 12px 8px; --title-border: none; --label-weight: 500;
   --desk: #f2f2f0; --fg: #1f1f1d; --muted: #75736d; --accent: #2f6fdb; --accent-fg: #fff; --line: #dedcd7; --line-soft: #ebeae6;
+  --read: #1c5cab; --skim: #6da7ec; --unread: #e1e0d9;
   --win-bg: #ffffff; --win-bg-solid: #ffffff; --win-fg: #1f1f1d; --win-border: 1px solid #e3e2de; --win-shadow: 0 1px 2px rgba(20,20,20,.04); --win-pad: 0px; --radius: 12px;
   --title-bg: transparent; --title-fg: #75736d;
   --btn-bg: #ffffff; --btn-fg: #1f1f1d; --btn-border: 1px solid #dcdbd6; --btn-shadow: none; --btn-radius: 8px; --btn-pad: 5px 12px;
@@ -90,6 +91,7 @@
 }
 [data-skin="plain"][data-theme="dark"] {
   --desk: #111113; --fg: #e8e8ea; --muted: #9b9ba3; --accent: #7aa2f7; --accent-fg: #0d1322; --line: #34343a; --line-soft: #2a2a2f;
+  --read: #9ec5f4; --skim: #2a78d6; --unread: #45443f;
   --win-bg: #1a1a1d; --win-bg-solid: #1a1a1d; --win-fg: #e8e8ea; --win-border: 1px solid #2a2a2f; --win-shadow: none;
   --title-fg: #9b9ba3;
   --btn-bg: #232327; --btn-fg: #e8e8ea; --btn-border: 1px solid #36363c; --btn-bg-active: #2c2c31; --btn-fg-active: #e8e8ea;

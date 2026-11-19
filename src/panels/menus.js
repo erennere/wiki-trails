@@ -1,5 +1,5 @@
 // File menu (save, open, examples, clear) and the Settings dialog (appearance, map, other).
-import { app, on, replaceState, commit, snapshot, setSetting, totalClicks } from '../app.js';
+import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, applyReadingRule } from '../app.js';
 import { validate, emptyState } from '../model.js';
 import { saveToFile, pickFile, readFile, merge } from '../storage.js';
 import { exampleState } from '../example.js';
@@ -129,6 +129,9 @@ export function initMenus({ graph }) {
     $('density').value = app.settings.density;
     $('fade').checked = app.settings.fade;
     $('agefade').value = app.settings.ageFade;
+    $('colourby').value = app.settings.colourBy;
+    $('guessread').checked = app.settings.guessReading;
+    $('readafter').value = String(app.settings.readAfter);
     $('rotate').checked = app.settings.rotate;
     $('sound').checked = app.settings.sound;
     $('lang').value = app.state.lang || 'en';
@@ -147,6 +150,9 @@ export function initMenus({ graph }) {
   grid.addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) { applySkin(c.dataset.id); renderSkins(); } });
   $('density').oninput = () => { setSetting('density', +$('density').value); graph.setView({ density: app.settings.density }); };
   $('fade').onchange = () => { setSetting('fade', $('fade').checked); graph.setView({ fade: app.settings.fade }); };
+  $('colourby').onchange = () => { setSetting('colourBy', $('colourby').value); graph.setView({ colourBy: app.settings.colourBy }); };
+  $('guessread').onchange = () => { setSetting('guessReading', $('guessread').checked); applyReadingRule(); };
+  $('readafter').onchange = () => { setSetting('readAfter', +$('readafter').value); applyReadingRule(); };
   $('agefade').oninput = () => { setSetting('ageFade', +$('agefade').value); graph.setView({ ageFade: app.settings.ageFade }); };
   $('rotate').onchange = () => { setSetting('rotate', $('rotate').checked); graph.setView({ rotate: app.settings.rotate }); };
   $('sound').onchange = () => setSetting('sound', $('sound').checked);

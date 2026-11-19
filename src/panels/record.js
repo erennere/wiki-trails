@@ -1,5 +1,5 @@
 // Record: the trail you're building, as a numbered list of steps, plus one input for the next page.
-import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo } from '../app.js';
+import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading } from '../app.js';
 import { uid, normTitle, langFromUrl, trailShape } from '../model.js';
 import { $, esc, stepsHTML, blip, toast, plural } from '../ui.js';
 
@@ -8,7 +8,15 @@ export function initRecord({ showLeft }) {
     const v = cursorVisit();
     const tr = app.cur && trailOf(app.cur.trailId);
     const steps = $('steps');
-    steps.innerHTML = tr ? stepsHTML(tr, trailShape(tr), { cursorId: app.cur.visitId }) : '';
+    steps.innerHTML = tr ? stepsHTML(tr, trailShape(tr), { cursorId: app.cur.visitId, depth: app.D.trailIndex.get(tr.id)?.depth }) : '';
+    // how you read the page you're on
+    const rr = $('readrow');
+    rr.hidden = !v;
+    if (v) {
+      const r = depthOf(app.cur.trailId, v.id);
+      $('readq').innerHTML = `How did you read <em>${esc(v.article)}</em>?${r.guessed ? ' <span class="hint">(guessed)</span>' : ''}`;
+      rr.querySelectorAll('[data-rd]').forEach((b) => b.classList.toggle('on', b.dataset.rd === r.depth));
+    }
     steps.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
     $('reclabel').innerHTML = v ? `Next page after <em>${esc(v.article)}</em>` : app.state.trails.length ? 'First page of a new trail' : 'First page';
     $('next').placeholder = v ? 'Paste the link you clicked, or type its title' : 'Paste a Wikipedia link or type a title';
@@ -54,7 +62,16 @@ export function initRecord({ showLeft }) {
   $('next').addEventListener('input', hint);
   $('newtrail').onclick = () => { setCursor(null); $('next').focus(); };
   $('undo').onclick = () => { if (undo()) toast('Undone'); };
+  $('readrow').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rd]'), v = cursorVisit(); if (!b || !v) return;
+    markReading(app.cur.trailId, v.id, b.dataset.rd);
+  });
   $('steps').addEventListener('click', (e) => {
+    const rd = e.target.closest('[data-rd-v]');
+    if (rd) { // flip between read and skimmed
+      const r = depthOf(rd.dataset.rdT, rd.dataset.rdV);
+      return markReading(rd.dataset.rdT, rd.dataset.rdV, r.depth === 'read' ? 'skim' : 'read');
+    }
     const li = e.target.closest('.step'); if (!li || !app.cur) return;
     setCursor({ trailId: app.cur.trailId, visitId: li.dataset.v });
     $('next').focus();

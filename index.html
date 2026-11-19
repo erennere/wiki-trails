@@ -32,6 +32,7 @@
     <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 22 Q12 8 16 14 T26 9" fill="none" stroke="var(--path-before)" stroke-width="3" stroke-linecap="round"/><circle cx="7" cy="22" r="4" fill="var(--path-before)"/><circle cx="16" cy="14" r="3.5" fill="var(--path-after)"/><circle cx="26" cy="9" r="3" fill="var(--path-after)"/></svg>
     Wiki Trails
   </div>
+  <div class="seg" id="viewseg" role="tablist" aria-label="View"><button data-view="map" class="on" role="tab">Map</button><button data-view="stats" role="tab">Stats</button></div>
   <div class="search">
     <input id="search" type="search" placeholder="Find an article or trail   ( / )" autocomplete="off" aria-label="Find an article or trail">
     <div class="results" id="results" hidden></div>
@@ -73,6 +74,7 @@
       <div class="panel-head"><span class="grow">Record</span><button class="btn small" id="newtrail">New trail</button><button class="collapse" data-close="left" title="Hide this side">‹</button></div>
       <div class="rec-body">
         <ol class="steps" id="steps"></ol>
+        <div class="readrow" id="readrow" hidden><span class="grow" id="readq"></span><div class="seg small" role="group" aria-label="How you read it"><button data-rd="skim"><span class="rd rd-skim"></span>Skimmed</button><button data-rd="read"><span class="rd rd-read"></span>Read</button></div></div>
         <label id="reclabel" for="next">First page</label>
         <div class="row">
           <input id="next" list="titles" autocomplete="off">
@@ -91,10 +93,12 @@
   </div>
 
   <section class="panel" id="center">
+    <div class="statsview" id="statsview" hidden></div>
     <div class="viewport crt" id="stage">
       <canvas id="fx"></canvas>
       <div id="graph" role="img" aria-label="3D map of your Wikipedia trails"></div>
       <div class="threadbar" id="threadbar" hidden></div>
+      <div class="readlegend" id="readlegend" hidden><span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span></div>
       <div class="mapctl">
         <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="btn" id="zoomout" title="Zoom out" aria-label="Zoom out">−</button>
@@ -136,6 +140,9 @@
       <h4>Map</h4>
       <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
       <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
+      <div class="setrow"><span>Colour pages by</span><select id="colourby"><option value="reading">how you read them</option><option value="visits">how often you were there</option></select></div>
+      <div class="setrow"><span>Guess from the time until the next page whether you read a page or skimmed it</span><input type="checkbox" id="guessread"></div>
+      <div class="setrow"><span>A page counts as read after</span><select id="readafter"><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option></select></div>
       <div class="setrow"><span>How much older threads fade</span><span class="hint">a little</span><input type="range" id="agefade" min="0" max="1" step="0.05"><span class="hint">a lot</span></div>
       <div class="setrow"><span>Turn the map slowly when you're not using it</span><input type="checkbox" id="rotate"></div>
       <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>

@@ -51,8 +51,16 @@ export function confirmClick(btn, label, fn) {
   };
 }
 
-/** The numbered steps of a trail (side branches indented). */
-export function stepsHTML(tr, shape, { cursorId = null, clickable = true } = {}) {
-  return shape.lines.map(({ v, n, depth, side }) =>
-    `<li class="step${side ? ' side' : ''}${v.id === cursorId ? ' cur' : ''}${clickable ? '' : ' static'}" data-v="${v.id}" data-a="${esc(v.article)}" style="padding-left:${6 + depth * 16}px" title="${esc(v.article)}"><span class="n">${n}</span><span class="t">${esc(v.article)}</span></li>`).join('');
+/** A small mark for how you read a page: a filled dot (read), a ring (skimmed), a dash (don't know). */
+export function readMark(r, { button = true, trailId = '', visitId = '' } = {}) {
+  const d = r?.depth, cls = `rd ${d === 'read' ? 'rd-read' : d === 'skim' ? 'rd-skim' : 'rd-none'}${r?.guessed ? ' guessed' : ''}`;
+  const what = d === 'read' ? 'Read' : d === 'skim' ? 'Skimmed' : 'Not marked';
+  const tip = `${what}${r?.guessed ? ` (guessed: ${Math.round(r.secs)} s before the next page)` : ''}${button ? ' · click to change' : ''}`;
+  return button ? `<button class="${cls}" data-rd-t="${trailId}" data-rd-v="${visitId}" title="${tip}" aria-label="${tip}"></button>` : `<span class="${cls}" title="${tip}"></span>`;
+}
+
+/** The numbered steps of a trail (side branches indented), with how you read each page. */
+export function stepsHTML(tr, shape, { cursorId = null, clickable = true, depth = null } = {}) {
+  return shape.lines.map(({ v, n, depth: lvl, side }) =>
+    `<li class="step${side ? ' side' : ''}${v.id === cursorId ? ' cur' : ''}${clickable ? '' : ' static'}" data-v="${v.id}" data-a="${esc(v.article)}" style="padding-left:${6 + lvl * 16}px" title="${esc(v.article)}"><span class="n">${n}</span>${depth ? readMark(depth.get(v.id), { trailId: tr.id, visitId: v.id }) : ''}<span class="t">${esc(v.article)}</span></li>`).join('');
 }

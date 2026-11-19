@@ -1,11 +1,11 @@
 // The app's shared state and the few actions that change it.
 // Panels and views never talk to each other directly: they call these
 // actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'pin', 'skin', 'settings', 'dirty').
-import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips } from './model.js';
+import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, sideTrips, setReadingRule } from './model.js';
 import { saveLocal } from './storage.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
-const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, sound: false, left: true, right: true };
+const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, colourBy: 'reading', sound: false, left: true, right: true };
 
 export const app = {
   state: emptyState(),
@@ -22,6 +22,7 @@ export const app = {
   colors: [],       // trail colours of the current skin
   settings: loadSettings(),
 };
+setReadingRule({ guess: app.settings.guessReading, readAfter: app.settings.readAfter });
 app.D = app.DV = derive(app.state);
 
 /* ---------- events ---------- */
@@ -55,6 +56,21 @@ export function commit(opts = {}) {
   if (s && ((s.kind === 'trail' && !trailOf(s.id)) || (s.kind === 'article' && !app.D.articles.has(s.id)))) app.sel = null;
   app.threads = threadsFor(app.sel); keepPin();
   emit('data', opts);
+}
+
+/** How you read a page on a trail: { depth: 'read' | 'skim' | null, guessed, secs } */
+export const depthOf = (trailId, visitId) => app.D.trailIndex.get(trailId)?.depth.get(visitId) || { depth: null, guessed: false, secs: null };
+/** Say how you read a page ('read', 'skim', or null to go back to the guess). */
+export function markReading(trailId, visitId, depth) {
+  const v = app.D.trailIndex.get(trailId)?.byId.get(visitId); if (!v) return;
+  snapshot();
+  if (depth) v.read = depth; else delete v.read;
+  commit();
+}
+/** After changing how reading is guessed. */
+export function applyReadingRule() {
+  setReadingRule({ guess: app.settings.guessReading, readAfter: app.settings.readAfter });
+  commit();
 }
 
 const undoStack = [];
@@ -109,13 +125,21 @@ export const pinned = () => (app.pin && app.threads?.threads.find((t) => t.key =
 function keepPin() { if (app.pin && !pinned()) app.pin = null; }
 
 /* ---------- what to highlight ---------- */
-const collapse = (titles) => titles.filter((t, i) => i === 0 || t !== titles[i - 1]);
+/** A list of visits as a path of pages (a page clicked into itself counts once), with how each was read. */
+function pathOf(ti, visits) {
+  const path = [], depths = [], ids = [];
+  for (const v of visits) {
+    if (path.length && path[path.length - 1] === v.article) continue;
+    path.push(v.article); depths.push(ti.depth.get(v.id)?.depth || null); ids.push(v.id);
+  }
+  return { path, depths, ids };
+}
 /**
  * One rule for every selection: the threads that went through it, newest first, each from where
  * it started to where it ended.
  *  - an article: every trail that passed through it (at its latest pass in the period)
  *  - a trail: that trail's main line, with its side trips
- * Returns { kind, anchor, threads: [{ key, trailId, visitId, t, path, passes, sides, color, rec }], total, times }.
+ * Returns { kind, anchor, threads: [{ key, trailId, visitId, t, path, depths, ids, passes, sides, color, rec }], total, times }.
  * `times` are all the moments you were there (in the time lens), for the timeline.
  */
 export function threadsFor(target) {
@@ -126,12 +150,12 @@ export function threadsFor(target) {
   const all = [], times = [];
   const kind = target.kind;
   let anchor = null;
-  const add = (ti, v, passes) => all.push({ trailId: ti.trail.id, visitId: v.id, t: visitTime(ti.trail, v), path: collapse(threadOf(ti, v.id).map((x) => x.article)), passes, sides: [] });
+  const add = (ti, v, passes) => all.push({ trailId: ti.trail.id, visitId: v.id, t: visitTime(ti.trail, v), ...pathOf(ti, threadOf(ti, v.id)), passes, sides: [] });
   if (kind === 'trail') {
     const ti = D.trailIndex.get(target.id); if (!ti) return null;
     const vs = ti.trail.visits, last = vs[vs.length - 1];
     const main = chainTo(ti, last.id);
-    all.push({ trailId: ti.trail.id, visitId: last.id, t: visitTime(ti.trail, vs[0]), path: collapse(main.map((x) => x.article)), passes: 1, sides: sideTrips(ti, new Set(main.map((x) => x.id))) });
+    all.push({ trailId: ti.trail.id, visitId: last.id, t: visitTime(ti.trail, vs[0]), ...pathOf(ti, main), passes: 1, sides: sideTrips(ti, new Set(main.map((x) => x.id))) });
   } else if (kind === 'article') {
     const a = D.articles.get(target.id); if (!a) return null;
     anchor = a.title;

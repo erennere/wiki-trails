@@ -22,8 +22,8 @@ export function createGraph(el, handlers) {
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
   let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
-  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true };
-  let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff' };
+  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, colourBy: 'reading' };
+  let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6' };
   let hub = d3.interpolateRgbBasis(['#d3d8e0', '#38404d']);
 
   const G = new ForceGraph3D(el, { controlType: 'orbit' })
@@ -62,6 +62,9 @@ export function createGraph(el, handlers) {
   const rgba = (c, a) => { const k = d3.color(c) || d3.color('#888'); k.opacity = a; return k.formatRgb(); };
   function nodeColor(n) {
     if (threads) return threads.on.has(n.id) ? rgba(style.link, 0.55) : rgba(style.link, 0.07);
+    // pages you read are strong, pages you skimmed pale; pages without either keep the plain colour
+    const known = (n.read || 0) + (n.skim || 0);
+    if (view.colourBy === 'reading' && known) return d3.interpolateRgb(style.skim, style.read)(n.read / known);
     return hub(Math.sqrt(n.visits / maxVisits));
   }
   const nodeSize = (n) => 0.35 + 5 * Math.sqrt(n.visits / maxVisits);
@@ -98,6 +101,8 @@ export function createGraph(el, handlers) {
       anchor: v('--label', dark ? '#f1f1f1' : '#1d2330'), bg: v('--screen-bg', dark ? '#16181d' : '#fafbfc'),
     };
     const c = d3.color(style.bg); if (!c || c.opacity === 0) style.bg = dark ? '#16181d' : '#fafbfc';
+    style.read = d3.color(v('--read', '')) ? v('--read', '') : (d3.color(v('--accent', '')) ? v('--accent', '') : '#2b59c3');
+    style.skim = d3.color(v('--skim', '')) ? v('--skim', '') : d3.interpolateRgb(style.read, style.bg)(0.6);
   }
 
   /* ---------- data ---------- */
@@ -119,7 +124,7 @@ export function createGraph(el, handlers) {
         const p = posCache.get(a.title);
         if (p) { [n.x, n.y, n.z] = p; n.fx = n.x; n.fy = n.y; n.fz = n.z; } else fresh++;
       }
-      n.visits = a.visits; n.last = a.last;
+      n.visits = a.visits; n.last = a.last; n.read = a.read; n.skim = a.skim;
       nodeBy.set(a.title, n); nodes.push(n);
     }
     links = [...D.links.values()].map((l) => ({ key: l.key, source: l.a, target: l.b, total: l.total, last: l.last }));
@@ -199,6 +204,12 @@ export function createGraph(el, handlers) {
       g.lineWidth = 20; g.strokeStyle = col; g.stroke();
       g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(64, 64, 57, 0, Math.PI * 2); g.stroke();
       g.beginPath(); g.arc(64, 64, 14, 0, Math.PI * 2); g.fillStyle = col; g.fill();
+    } else if (kind === 'bead-read') { // a page you read: a solid dot
+      g.beginPath(); g.arc(64, 64, 50, 0, Math.PI * 2); g.fillStyle = col; g.fill();
+      g.lineWidth = 12; g.strokeStyle = '#ffffff'; g.stroke();
+    } else if (kind === 'bead-skim') { // a page you skimmed: an open ring
+      g.beginPath(); g.arc(64, 64, 44, 0, Math.PI * 2); g.lineWidth = 26; g.strokeStyle = '#ffffff'; g.stroke();
+      g.lineWidth = 13; g.strokeStyle = col; g.stroke();
     } else { // a pin: where you ended up
       g.beginPath(); g.moveTo(64, 156);
       g.bezierCurveTo(40, 112, 12, 92, 12, 60); g.arc(64, 60, 52, Math.PI, 0); g.bezierCurveTo(116, 92, 88, 112, 64, 156); g.closePath();
@@ -212,7 +223,7 @@ export function createGraph(el, handlers) {
   function marker(kind, color, pos, px, opacity, data, fan = 0) {
     const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: badge(kind, color), sizeAttenuation: false, depthTest: false, depthWrite: false, transparent: true, opacity }));
     const s = px * 2 * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, H);
-    m.scale.set(s, s * 1.25, 1);
+    m.scale.set(s, kind.startsWith('bead') ? s : s * 1.25, 1);
     // several threads ending (or starting) on one page fan out side by side, so you can count them
     m.center.set(0.5 - fan * 0.8, kind === 'end' ? 0.02 : 0.5); // the pin's tip sits on the page
     m.position.copy(pos); m.renderOrder = 100 + (data?.order || 0); Object.assign(m.userData, data || {});
@@ -342,11 +353,13 @@ export function createGraph(el, handlers) {
           strands.push({ curve, L, comet, phase: -i * 0.35, pause: 0.6 + 2.2 * (1 - th.rec), gap: 7 * unit, speed: 220 * unit });
         }
       }
-      // small beads on the pages in between
+      // the pages in between: a solid dot if you read it, an open ring if you skimmed it
       const last = th.path.length - 1, tmpc = new THREE.Color();
       th.path.forEach((t, k) => {
         if (k === 0 || k === last || threads.anchor === t) return;
-        ball(pts[k], (1.8 + 1.2 * k / last) * unit * w, tmpc.copy(pale).lerp(col, k / last), op, { ...data, title: t });
+        const d = th.depths?.[k];
+        if (d) marker(d === 'read' ? 'bead-read' : 'bead-skim', th.color, pts[k], (d === 'read' ? 17 : 16) * (focused ? 1.15 : 0.85 + 0.15 * th.rec), Math.max(0.18, op), { ...data, title: t });
+        else ball(pts[k], (1.8 + 1.2 * k / last) * unit * w, tmpc.copy(pale).lerp(col, k / last), op, { ...data, title: t });
       });
       // start: a ring; end: a pin (unless the thread starts or ends on the page you clicked)
       const big = focused ? 1.25 : 0.8 + 0.2 * th.rec, fade = pin && !focused ? 0.3 : Math.max(0.2, op);
@@ -552,6 +565,7 @@ export function createGraph(el, handlers) {
     if ('rotate' in v) { ctl.autoRotate = !!v.rotate && !threads; lastTouch = v.rotate ? -1e9 : lastTouch; }
     if ('density' in v || 'fade' in v) { rebudget(); restyle(); }
     if ('ageFade' in v && threads) drawThreads();
+    if ('colourBy' in v) restyle();
   }
   function neighbourhood(title, hops = 1) {
     const s = new Set([title]); let frontier = [title];
@@ -573,6 +587,6 @@ export function createGraph(el, handlers) {
     },
     stats: () => ({ nodes: vis ? vis.size : nodes.length, links: budget.size, drawn: budget.size, strands: strands.length, labels: wanted.length }),
     drawMs: () => Math.round(frameMs * 10) / 10,
-    pause: () => {},
+    pause: (p) => (p ? G.pauseAnimation() : G.resumeAnimation()),
   };
 }

@@ -10,6 +10,7 @@ import { initTrails } from './panels/trails.js';
 import { initDetails } from './panels/details.js';
 import { initSearch } from './panels/search.js';
 import { initTimeline } from './panels/timeline.js';
+import { initStats } from './panels/stats.js';
 import { initMenus } from './panels/menus.js';
 import { $, esc, plural, fmtDate, fmtDateTime, toast } from './ui.js';
 
@@ -74,6 +75,7 @@ $('graph').addEventListener('mouseleave', () => { tip.hidden = true; });
 function showThreads(frame = true) {
   graph.setHighlight(app.threads, app.pin);
   renderThreadbar();
+  renderLegend();
   if (!frame) return;
   if (app.threads) graph.frameThreads(); else graph.fit(true);
 }
@@ -81,6 +83,20 @@ function fitWhenSettled() {
   graph.settleAndFit();
   const iv = setInterval(() => { if (!graph.isSettling()) { clearInterval(iv); app.threads ? graph.frameThreads() : graph.fit(true); } }, 250);
 }
+
+/* the key for read and skimmed pages, shown once there's anything to tell apart */
+function renderLegend() {
+  let any = false;
+  for (const a of app.DV.articles.values()) if (a.read || a.skim) { any = true; break; }
+  const lg = $('readlegend');
+  lg.hidden = !any || (!app.threads && app.settings.colourBy !== 'reading');
+  if (lg.hidden) return;
+  // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
+  lg.innerHTML = app.threads
+    ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
+    : '<span><i class="sw2" style="background:var(--read)"></i>mostly read</span><span><i class="sw2" style="background:var(--skim)"></i>mostly skimmed</span>';
+}
+on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
 
 /* the bar over the map: how many threads, and which period */
 const LIMITS = [1, 3, 5, 10, 20, 50];
@@ -124,6 +140,22 @@ const record = initRecord({ showLeft: () => setPanel('left', true) });
 const menus = initMenus({ graph });
 initTrails();
 initDetails({ record, loadTest: menus.loadTest });
+
+/* ---------- Map or Stats ---------- */
+const stats = initStats({
+  openArticle: (t) => { setViewMode('map'); select({ kind: 'article', id: t }, { force: true }); },
+  openTrail: (id) => { setViewMode('map'); select({ kind: 'trail', id }, { force: true }); },
+});
+function setViewMode(v) {
+  document.documentElement.dataset.view = v;
+  document.querySelectorAll('#viewseg [data-view]').forEach((b) => { b.classList.toggle('on', b.dataset.view === v); b.setAttribute('aria-selected', String(b.dataset.view === v)); });
+  $('statsview').hidden = v !== 'stats';
+  tip.hidden = true;
+  graph.pause(v === 'stats'); // no need to draw the map while it's hidden
+  if (v === 'stats') stats.render();
+}
+$('viewseg').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setViewMode(b.dataset.view); });
+document.documentElement.dataset.view = 'map';
 initSearch();
 initTimeline();
 document.querySelectorAll('[data-example]').forEach((b) => { if (!b.onclick) b.onclick = () => menus.loadTest(b.dataset.example); });
@@ -138,7 +170,7 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- start ---------- */
 (async () => {
-  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate });
+  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
   app.state = (await loadLocal()) || (await loadPublished()) || emptyState();
   commit({ fresh: true });
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };

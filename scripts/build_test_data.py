@@ -53,21 +53,30 @@ if spread_days:
     t0, t1 = chosen[0][0], chosen[-1][0]
     chosen = [(now - span + int((ts - t0) / max(1, t1 - t0) * span), p, d) for ts, p, d in chosen]
     chosen = [((ts // 86400) * 86400 + 9 * 3600 + (ts % 50400), p, d) for ts, p, d in chosen]
+import math
+t_first, t_last = chosen[0][0], chosen[-1][0]
+def dwell(ts):
+    """Seconds spent on a page, simulated (game players race, so the real timings are all quick).
+    About a third of pages are read for minutes, the rest skimmed; the share drifts slowly over time."""
+    f = (ts - t_first) / max(1, t_last - t_first)
+    p_read = 0.33 + 0.12 * math.sin(f * math.pi * 5)
+    return int(rnd.uniform(90, 540)) if rnd.random() < p_read else int(rnd.uniform(6, 45))
 trails = []
 for i, (ts, p, dur) in enumerate(chosen):
-    visits, stack = [], []
+    visits, stack, t = [], [], ts
     for j, tok in enumerate(p):
         if tok == '<':
             if len(stack) > 1: stack.pop()
+            t += 3  # going back takes a moment
             continue
         vid = f'{i:x}-{j:x}'
-        step = max(4, dur // max(1, len(p)))
-        visits.append({'id': vid, 'article': title(tok), 'parent': stack[-1] if stack else None, 't': (ts + j * step) * 1000})
+        visits.append({'id': vid, 'article': title(tok), 'parent': stack[-1] if stack else None, 't': t * 1000})
         stack.append(vid)
+        t += dwell(ts)
     trails.append({
         'id': f't{i:04x}',
         'name': f'{title(p[0])} → {title(p[-1])}',
-        'created': datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+        'created': datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z'),
         'visits': visits,
     })
 

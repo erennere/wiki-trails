@@ -1,7 +1,7 @@
 // Details: explains whatever is selected. Nothing selected → an overview of your history.
-import { app, on, select, trailOf, commit, snapshot, pinThread, pinned } from '../app.js';
+import { app, on, select, trailOf, commit, snapshot, pinThread, pinned, depthOf, markReading } from '../app.js';
 import { trailLabel, trailShape, visitTime, timeSpan } from '../model.js';
-import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, confirmClick, toast } from '../ui.js';
+import { $, esc, plural, fmtDate, fmtDateTime, fmtAgo, wikiUrl, stepsHTML, readMark, confirmClick, toast } from '../ui.js';
 
 export function initDetails({ record, loadTest }) {
   const box = $('details');
@@ -68,6 +68,7 @@ export function initDetails({ record, loadTest }) {
     const list = (m) => [...m].sort((p, q) => q[1] - p[1]).slice(0, 8).map(([t, n]) => `<div class="lrow" data-a="${esc(t)}"><span class="l">${esc(t)}</span><span class="c">${n}×</span></div>`).join('') || '<p class="explain">None.</p>';
     box.innerHTML = `<h3>${esc(title)}</h3>
       <div class="sub">You saw this page ${plural(seen.length, 'time')}${seen.length ? `, last on ${fmtDateTime(seen[0].t)}` : ''}${seen.length > 1 ? `, first on ${fmtDate(seen[seen.length - 1].t)}` : ''}.</div>
+      ${a.read || a.skim ? `<div class="readsum">${readMark({ depth: 'read' }, { button: false })} read ${plural(a.read, 'time')} <span class="sep">·</span> ${readMark({ depth: 'skim' }, { button: false })} skimmed ${plural(a.skim, 'time')}${a.visits - a.read - a.skim > 0 ? ` <span class="sep">·</span> ${a.visits - a.read - a.skim} not known` : ''}</div>` : ''}
       <div class="actions">
         <button class="btn small" id="d-start">Start a trail here</button>
         <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
@@ -91,7 +92,7 @@ export function initDetails({ record, loadTest }) {
         <button class="btn small" id="d-cont">Continue this trail</button>
       </div>
       <section><h4>The way it went</h4><ol class="steps thread">${th.path.map((t, k) => `<li class="${k === 0 ? 'first' : ''}${k === last ? ' last' : ''}${t === at ? ' here' : ''}" data-a="${esc(t)}" title="Show ${esc(t)}">
-          <span class="num">${k + 1}</span><span class="l">${esc(t)}</span>${k === 0 ? '<span class="stag">start</span>' : k === last ? '<span class="stag">end</span>' : t === at ? '<span class="stag">here</span>' : ''}</li>`).join('')}</ol>
+          <span class="num">${k + 1}</span>${readMark(depthOf(th.trailId, th.ids[k]), { trailId: th.trailId, visitId: th.ids[k] })}<span class="l">${esc(t)}</span>${k === 0 ? '<span class="stag">start</span>' : k === last ? '<span class="stag">end</span>' : t === at ? '<span class="stag">here</span>' : ''}</li>`).join('')}</ol>
         ${th.passes > 1 ? `<p class="explain">This trail was on ${esc(at)} ${th.passes} times; this is its last visit.</p>` : ''}
         ${th.sides.length ? `<p class="explain">It also went off on ${plural(th.sides.length, 'side trip')}.</p>` : ''}</section>
       <div class="actions"><button class="btn small" id="d-trail">Show the whole trail</button></div>`;
@@ -116,7 +117,7 @@ export function initDetails({ record, loadTest }) {
         <button class="btn small" id="d-rename">Rename</button>
         <button class="btn small danger" id="d-del">Delete</button>
       </div>
-      <section><h4>Steps</h4><ol class="steps">${stepsHTML(tr, sh, { cursorId: app.cur?.trailId === tr.id ? app.cur.visitId : null })}</ol>
+      <section><h4>Steps</h4><ol class="steps">${stepsHTML(tr, sh, { cursorId: app.cur?.trailId === tr.id ? app.cur.visitId : null, depth: app.D.trailIndex.get(tr.id)?.depth })}</ol>
       <p class="explain">Indented steps are pages you opened and then went back from.</p></section>`;
     $('d-cont').onclick = () => record.continueTrail(tr.id);
     $('d-rename').onclick = () => {
@@ -137,6 +138,8 @@ export function initDetails({ record, loadTest }) {
   }
 
   box.addEventListener('click', (e) => {
+    const rd = e.target.closest('[data-rd-v]');
+    if (rd) { const r = depthOf(rd.dataset.rdT, rd.dataset.rdV); return markReading(rd.dataset.rdT, rd.dataset.rdV, r.depth === 'read' ? 'skim' : 'read'); }
     const a = e.target.closest('[data-a]'); if (a && !e.target.closest('.btn')) return select({ kind: 'article', id: a.dataset.a }, { zoom: true });
     const t = e.target.closest('[data-t]'); if (t) return select({ kind: 'trail', id: t.dataset.t }, { zoom: true });
   });
