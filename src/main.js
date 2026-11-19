@@ -103,9 +103,11 @@ function renderLegend() {
   lg.hidden = !th && (!any || (!app.threads && app.settings.colourBy !== 'reading'));
   if (lg.hidden) return;
   // what the colours of a trail mean when a page is selected
-  const sw = (c) => `<i class="ln" style="background:${c}"></i>`;
-  const of = (kind) => (th?.groups || []).filter((g) => g.startsWith(kind)).slice(0, 3).map((g) => sw(th.colorOf[g])).join('');
-  const roles = th ? `<span>${sw('var(--label)')}the way here</span>${of('down') ? `<span>${of('down')}on from here</span>` : ''}${of('side') ? `<span>${of('side')}other branches on the way</span>` : ''}` : '';
+  const sw = (c) => `<i class="ln" style="background:${c}"></i>`, R = graph.roleColors();
+  const n = (kind) => (th?.groups || []).filter((g) => g.startsWith(kind)).length;
+  const downs = R.down.slice(0, Math.min(R.down.length, Math.max(1, n('down')))).map(sw).join('');
+  // cool before the page, warm after it
+  const roles = th ? `<span>${sw(R.up)}the way here</span>${n('side') ? `<span>${R.side.slice(0, Math.min(2, n('side'))).map(sw).join('')}branches off it</span>` : ''}${n('down') ? `<span>${downs}where you went on</span>` : ''}` : '';
   // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
   const reads = !any ? '' : app.threads
     ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
@@ -113,6 +115,7 @@ function renderLegend() {
   lg.innerHTML = roles + reads;
 }
 on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
+on('skin', () => renderLegend());
 
 /* the bar over the map: how many threads, and which period */
 const LIMITS = [1, 3, 5, 10, 20, 50];

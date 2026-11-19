@@ -6,7 +6,7 @@ import { saveLocal } from './storage.js';
 import { orderVisits } from './sync-core.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
-const DEFAULTS = { skin: 'plain', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, colourBy: 'reading', sound: false, left: true, right: true };
+const DEFAULTS = { skin: 'desktop95', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, colourBy: 'reading', sound: false, left: true, right: true };
 
 export const app = {
   state: emptyState(),
@@ -307,11 +307,8 @@ export function threadsFor(target) {
   threads.forEach((th, i) => {
     th.key = th.trailId + ':' + th.visitId;
     th.color = pal[i % pal.length];
-    // within a trail, colours say how each part relates to the selected page: the way here in ink
-    // (null: the map uses its label colour), each way on from here its own colour, then the branches
-    // off the way here; a single trail on its own keeps one colour
-    th.colorOf = { all: th.color, up: kind === 'article' ? null : th.color };
-    (th.groups || []).forEach((g, j) => { th.colorOf[g] = pal[j % pal.length]; });
+    // within a trail, the map colours each part by how it relates to the selected page (th.groups,
+    // see roleColors in views/map3d.js); a single trail on its own keeps one colour
     th.rank = i;
     th.rec = Math.pow(0.6, i); // 1 for the newest, then 0.6, 0.36, …
   });

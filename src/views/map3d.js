@@ -270,6 +270,21 @@ export function createGraph(el, handlers) {
     drawThreads();
     placeLabels(true);
   }
+  /**
+   * Colours with a meaning: what came before the selected page is cool, what came after is warm.
+   *  up    the way here: blue
+   *  side  branches off the way here: teal, lighter the further back they leave it
+   *  down  each way on from the page: its own warm colour (orange, then the others)
+   * Two sets, for light and dark map backgrounds; checked so that every pair stays apart, also for
+   * red-green colour blindness (OKLab ΔE ≥ 15 normal, ≥ 9 simulated). Labels name every branch end.
+   */
+  function roleColors() {
+    let dark = false;
+    try { dark = new THREE.Color(style.bg).getHSL({}).l < 0.45; } catch { /* keep light */ }
+    return dark
+      ? { up: '#6ea8fe', side: ['#2fbfae', '#a3e3da'], down: ['#ff8a3d', '#ee3341', '#c74fb3', '#f2cf3b'] }
+      : { up: '#1d4ed8', side: ['#0d9488', '#7ccfc4'], down: ['#e8590c', '#8e107e', '#8e3412', '#d974c5'] };
+  }
   function unitAt(d) { return 2 * d * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, H); }
   /** Focus one thread: it's drawn in full, the others step back. */
   function setPin(key) { pin = key; drawThreads(); placeLabels(true); }
@@ -295,7 +310,14 @@ export function createGraph(el, handlers) {
     const thin = (d) => (d <= 1 ? 1 : Math.max(0.3, Math.pow(0.8, d - 1)));
     // colour of a part of a trail (see threadsFor in app.js): the way here in ink, each way on and
     // each branch off the way here in its own colour
-    const hexOf = (th, g) => (g === 'up' && !th.colorOf?.up ? style.anchor : th.colorOf?.[g] || th.color);
+    const R = roleColors();
+    const hexOf = (th, g) => {
+      if (!g || g === 'all') return th.color;
+      if (g === 'up') return R.up;
+      if (g.startsWith('side:')) return R.side[Math.max(0, Math.min(R.side.length, +g.slice(5) || 1) - 1)];
+      const downs = (th.groups || []).filter((x) => x.startsWith('down:'));
+      return R.down[Math.max(0, downs.indexOf(g)) % R.down.length];
+    };
     const shade = (out, d) => out.lerp(bg, far(d));
     // where a trail starts (ring) and where each of its branches ends (pin)
     const endsOf = (th) => {
@@ -633,7 +655,7 @@ export function createGraph(el, handlers) {
   }
 
   return {
-    update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView,
+    update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView, roleColors,
     fit, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood,
     nodeCount: () => nodes.length,
     isSettling: () => settling,
