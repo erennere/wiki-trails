@@ -6,7 +6,7 @@ import { saveLocal } from './storage.js';
 import { orderVisits } from './sync-core.js';
 
 const SETTINGS_KEY = 'wiki-trails.settings';
-const DEFAULTS = { skin: 'desktop95', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, colourBy: 'reading', sound: false, left: false, right: false };
+const DEFAULTS = { skin: 'desktop95', theme: 'system', density: 1, fade: true, ageFade: 0.85, rotate: true, threads: 5, guessReading: true, readAfter: 60, mark: 'ends', sound: false, left: false, right: false };
 
 export const app = {
   state: emptyState(),

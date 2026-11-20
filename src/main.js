@@ -101,27 +101,31 @@ function fitWhenSettled() {
   const iv = setInterval(() => { if (!graph.isSettling()) { clearInterval(iv); app.threads ? graph.frameThreads() : graph.fit(true); } }, 250);
 }
 
-/* the key for read and skimmed pages, shown once there's anything to tell apart */
+/* the key: on the whole map, what the coloured pages mean; on trails, what the lines and beads mean */
 function renderLegend() {
-  let any = false;
-  for (const a of app.DV.articles.values()) if (a.read || a.skim) { any = true; break; }
   const lg = $('readlegend');
   const th = app.threads?.kind === 'article' ? app.threads.threads[0] : null;
-  lg.hidden = !th && (!any || (!app.threads && app.settings.colourBy !== 'reading'));
-  if (lg.hidden) return;
-  // what the colours of a trail mean when a page is selected
-  const sw = (c) => `<i class="ln" style="background:${c}"></i>`, R = graph.roleColors();
-  const n = (kind) => (th?.groups || []).filter((g) => g.startsWith(kind)).length;
-  const downs = R.down.slice(0, Math.min(R.down.length, Math.max(1, n('down')))).map(sw).join('');
-  // cool before the page, warm after it
-  const roles = th ? `<span>${sw(R.up)}the way here</span>${n('side') ? `<span>${R.side.slice(0, Math.min(2, n('side'))).map(sw).join('')}branches off it</span>` : ''}${n('down') ? `<span>${downs}where you went on</span>` : ''}` : '';
-  // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
-  const reads = !any ? '' : app.threads
-    ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
-    : '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim, color-mix(in srgb, var(--read) 45%, transparent))"></i>skimmed</span>';
-  lg.innerHTML = roles + reads;
+  const mark = app.settings.mark;
+  let any = false, ends = false;
+  for (const a of app.DV.articles.values()) { if (a.read || a.skim) any = true; if (a.begins || a.ends) ends = true; }
+  const sw = (c) => `<i class="ln" style="background:${c}"></i>`, dot = (c) => `<i class="sw2" style="background:${c}"></i>`, R = graph.roleColors();
+  let html = '';
+  if (th) {
+    // what the colours of a trail mean when a page is selected: cool before the page, warm after it
+    const n = (kind) => (th.groups || []).filter((g) => g.startsWith(kind)).length;
+    const downs = R.down.slice(0, Math.min(R.down.length, Math.max(1, n('down')))).map(sw).join('');
+    html = `<span>${sw(R.up)}the way here</span>${n('side') ? `<span>${R.side.slice(0, Math.min(2, n('side'))).map(sw).join('')}branches off it</span>` : ''}${n('down') ? `<span>${downs}where you went on</span>` : ''}`;
+    // on threads, read pages are solid beads and skimmed ones open rings
+    if (any) html += '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>';
+  } else if (!app.threads) {
+    if (mark === 'ends' && ends) html = `<span>${dot(R.up)}where you began</span><span>${dot(R.down[0])}where you stopped</span>`;
+    else if (mark === 'reading' && any) html = '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim, color-mix(in srgb, var(--read) 45%, transparent))"></i>skimmed</span>';
+    if (html) html += '<span class="hint">bigger: more visits</span>';
+  }
+  lg.hidden = !html;
+  lg.innerHTML = html;
 }
-on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
+on('settings', (k) => { if (k === 'mark') renderLegend(); });
 on('skin', () => renderLegend());
 
 /* the bar over the map: how many threads, and which period */
@@ -209,7 +213,7 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- start ---------- */
 (async () => {
-  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, colourBy: app.settings.colourBy });
+  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, mark: app.settings.mark });
   // your own history: anything you recorded, opened or synced here (examples don't count)
   const local = await loadLocal();
   let synced = false; try { synced = !!JSON.parse(localStorage.getItem('wiki-trails.sync'))?.token; } catch { /* not connected */ }

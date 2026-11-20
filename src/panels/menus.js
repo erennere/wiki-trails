@@ -132,7 +132,7 @@ export function initMenus({ graph }) {
     $('density').value = app.settings.density;
     $('fade').checked = app.settings.fade;
     $('agefade').value = app.settings.ageFade;
-    $('colourby').value = app.settings.colourBy;
+    $('colourby').value = app.settings.mark;
     $('guessread').checked = app.settings.guessReading;
     $('readafter').value = String(app.settings.readAfter);
     $('rotate').checked = app.settings.rotate;
@@ -153,7 +153,7 @@ export function initMenus({ graph }) {
   grid.addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) { applySkin(c.dataset.id); renderSkins(); } });
   $('density').oninput = () => { setSetting('density', +$('density').value); graph.setView({ density: app.settings.density }); };
   $('fade').onchange = () => { setSetting('fade', $('fade').checked); graph.setView({ fade: app.settings.fade }); };
-  $('colourby').onchange = () => { setSetting('colourBy', $('colourby').value); graph.setView({ colourBy: app.settings.colourBy }); };
+  $('colourby').onchange = () => { setSetting('mark', $('colourby').value); graph.setView({ mark: app.settings.mark }); };
   $('guessread').onchange = () => { setSetting('guessReading', $('guessread').checked); applyReadingRule(); };
   $('readafter').onchange = () => { setSetting('readAfter', +$('readafter').value); applyReadingRule(); };
   $('agefade').oninput = () => { setSetting('ageFade', +$('agefade').value); graph.setView({ ageFade: app.settings.ageFade }); };

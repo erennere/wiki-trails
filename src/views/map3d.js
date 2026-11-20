@@ -22,9 +22,8 @@ export function createGraph(el, handlers) {
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
   let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
-  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, colourBy: 'reading' };
-  let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6' };
-  let hub = d3.interpolateRgbBasis(['#d3d8e0', '#38404d']);
+  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends' };
+  let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
   const G = new ForceGraph3D(el, { controlType: 'orbit' })
     .backgroundColor('rgba(0,0,0,0)').showNavInfo(false).enableNodeDrag(false)
@@ -62,10 +61,14 @@ export function createGraph(el, handlers) {
   const rgba = (c, a) => { const k = d3.color(c) || d3.color('#888'); k.opacity = a; return k.formatRgb(); };
   function nodeColor(n) {
     if (threads) return threads.on.has(n.id) ? rgba(style.link, 0.55) : rgba(style.link, 0.07);
-    // pages you read are strong, pages you skimmed pale; pages without either keep the plain colour
-    const known = (n.read || 0) + (n.skim || 0);
-    if (view.colourBy === 'reading' && known) return d3.interpolateRgb(style.skim, style.read)(n.read / known);
-    return hub(Math.sqrt(n.visits / maxVisits));
+    // colour only where it says something: where explorations began and ended (cool before, warm after,
+    // as on the trails), or read against skimmed; every other page is the same plain colour
+    if (view.mark === 'ends') {
+      const R = roleColors();
+      if (n.begins) return R.up;
+      if (n.ends) return R.down[0];
+    } else if (view.mark === 'reading' && (n.read || n.skim)) return n.read ? style.read : style.skim;
+    return style.node;
   }
   const nodeSize = (n) => 0.35 + 5 * Math.sqrt(n.visits / maxVisits);
   function linkStrength(l) { return Math.sqrt(l.total / maxTotal) * (view.fade ? recencyOf(l.last) : 1); }
@@ -100,9 +103,13 @@ export function createGraph(el, handlers) {
       labelBg: v('--label-bg', dark ? '#1b1e24' : '#ffffff'), cursor: v('--cursor', '#e8641c'),
       anchor: v('--label', dark ? '#f1f1f1' : '#1d2330'), bg: v('--screen-bg', dark ? '#16181d' : '#fafbfc'),
     };
+    // a gradient background counts as its first colour; the map's fades and palette depend on it
+    if (!d3.color(style.bg)) style.bg = (style.bg.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/i) || [])[0] || v('--label-bg', '');
     const c = d3.color(style.bg); if (!c || c.opacity === 0) style.bg = dark ? '#16181d' : '#fafbfc';
+    style.bg = d3.color(style.bg).formatHex();
     style.read = d3.color(v('--read', '')) ? v('--read', '') : (d3.color(v('--accent', '')) ? v('--accent', '') : '#2b59c3');
     style.skim = d3.color(v('--skim', '')) ? v('--skim', '') : d3.interpolateRgb(style.read, style.bg)(0.6);
+    style.node = d3.interpolateRgb(style.bg, style.label)(0.5);
   }
 
   /* ---------- data ---------- */
@@ -124,7 +131,7 @@ export function createGraph(el, handlers) {
         const p = posCache.get(a.title);
         if (p) { [n.x, n.y, n.z] = p; n.fx = n.x; n.fy = n.y; n.fz = n.z; } else fresh++;
       }
-      n.visits = a.visits; n.last = a.last; n.read = a.read; n.skim = a.skim;
+      n.visits = a.visits; n.last = a.last; n.read = a.read; n.skim = a.skim; n.begins = a.begins; n.ends = a.ends;
       nodeBy.set(a.title, n); nodes.push(n);
     }
     links = [...D.links.values()].map((l) => ({ key: l.key, source: l.a, target: l.b, total: l.total, last: l.last }));
@@ -162,6 +169,8 @@ export function createGraph(el, handlers) {
   }
   function setVisible(DV, apply = true) {
     vis = DV && DV.articles.size !== nodeBy.size ? new Set(DV.articles.keys()) : null;
+    // where explorations began and ended within the period shown
+    if (DV) for (const n of nodes) { const a = DV.articles.get(n.id); n.begins = a?.begins || 0; n.ends = a?.ends || 0; }
     visLinks = vis ? new Set(DV.links.keys()) : null;
     rebudget();
     if (apply) { restyle(); placeLabels(true); }
@@ -449,7 +458,7 @@ export function createGraph(el, handlers) {
   function drawCursor() {
     if (!cursor) return;
     const p = posOf(cursor); if (!p) return;
-    const m = ball(p, 9 * unit, style.cursor, 0.35); m.userData.cursor = true; m.userData.r = 9 * unit;
+    const m = ball(p, 9 * unit, style.label, 0.3); m.userData.cursor = true; m.userData.r = 9 * unit;
   }
   function setCursor(title) { if (title === cursor) return; cursor = title; if (!threads) unit = unitAt(cam.position.distanceTo(ctl.target)); drawThreads(); placeLabels(true); }
 
@@ -678,10 +687,8 @@ export function createGraph(el, handlers) {
   }).observe(el);
   G.width(W).height(H);
 
-  function setPalette(s) {
+  function setPalette() {
     readStyle();
-    const dark = document.documentElement.dataset.theme === 'dark';
-    hub = d3.interpolateRgbBasis((dark && s.dark?.hub) || s.hub || ['#d3d8e0', '#38404d']);
     restyle(); drawThreads();
   }
   function setView(v) {
@@ -689,7 +696,7 @@ export function createGraph(el, handlers) {
     if ('rotate' in v) { ctl.autoRotate = !!v.rotate && !threads; lastTouch = v.rotate ? -1e9 : lastTouch; }
     if ('density' in v || 'fade' in v) { rebudget(); restyle(); }
     if ('ageFade' in v && threads) drawThreads();
-    if ('colourBy' in v) restyle();
+    if ('mark' in v) restyle();
   }
   function neighbourhood(title, hops = 1) {
     const s = new Set([title]); let frontier = [title];

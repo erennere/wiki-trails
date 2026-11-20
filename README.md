@@ -10,6 +10,7 @@ Click any article and every trail that went through it lights up whole, as a tre
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.
 - **How you read each page:** on a trail, a page you read thoroughly is a solid bead and one you skimmed an open ring. In the overview, pages you mostly read are strong and pages you mostly skimmed pale.
 - **Colours say which way the trail flows:** cool for what came before the page, warm for what came after. The way here is blue; branches you took off the way here are teal (lighter the further back they leave it); each way you went on from the page has its own warm colour (orange, then red or plum, and so on), carried through everything after it. The legend at the bottom left says which is which. Both sets were checked to stay apart for colour-blind readers too.
+- **On the whole map, colour only where it says something:** blue pages are where an exploration began, orange ones where you stopped going on (the tip of a branch), in the same cool-before, warm-after sense; every other page is one plain colour, and bigger means more visits. Settings can switch this to read against skimmed, or to no colour at all.
 - **Trails that continue each other are one:** if a trail starts on a page you were on in another trail within three hours (you reopened it from a search, a bookmark, a restored tab or Wiki Trails), the two are drawn as one tree, joined at that page.
 - **Near is strong, far is faint:** the further a page is from the one you clicked (in clicks), the thinner and paler its part of the trail, so you see the whole trail but read the near part first. Every page on it is named where there's room.
 - **The newest trail is the solid one,** and each older trail is fainter than the one before, so you can tell the order without reading any dates. Only the newest carries the moving light. How strongly they fade is a setting.
@@ -79,7 +80,7 @@ The ⚙ button opens Settings:
 - **Light or dark.** Follows your system by default.
 - **Look.** Desktop 95 is the default, and six other looks are available. Hover a card to try one, click to keep it.
 - **Map:** how many connections to show, fade old connections, how much older threads fade, turn the map slowly when you're not using it, and re-arrange it from scratch.
-- **Reading:** colour pages by how you read them or by how often you were there; how much time in total a page needs to count as read; and, for pages you recorded by hand (which have no measured time), whether to guess from the time until the next page.
+- **Reading:** what the whole map colours (where explorations began and ended, read and skimmed, or nothing); how much time in total a page needs to count as read; and, for pages you recorded by hand (which have no measured time), whether to guess from the time until the next page.
 - **Other:** the Wikipedia language for links, and optional sounds.
 
 ![Settings](.github/gallery.png)

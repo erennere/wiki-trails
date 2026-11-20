@@ -155,8 +155,21 @@ export function derive(state, range = null) {
     }
     trailIndex.set(tr.id, { trail: tr, index: i, byId, children, root, depth });
   });
-  for (const a of articles.values()) { const r = pages.get(a.title); a.reading = r; a.read = r?.depth === 'read' ? 1 : 0; a.skim = r?.depth === 'skim' ? 1 : 0; }
-  return { articles, links, trailIndex, pages, ...explorations(state, trailIndex) };
+  for (const a of articles.values()) { const r = pages.get(a.title); a.reading = r; a.read = r?.depth === 'read' ? 1 : 0; a.skim = r?.depth === 'skim' ? 1 : 0; a.begins = 0; a.ends = 0; }
+  const ex = explorations(state, trailIndex);
+  // where explorations began (a trail's first page, unless the trail continues another one) and where you
+  // stopped going on (the tip of every branch, as the pins on a drawn trail); a page you only looked up
+  // on its own is just a beginning
+  const goesOn = new Set([...ex.join.values()].map((j) => j.trailId + '\u0001' + j.visitId));
+  for (const ti of trailIndex.values()) {
+    const tr = ti.trail;
+    if (!ex.join.has(tr.id) && ti.root && inRange(visitTime(tr, ti.root))) articles.get(ti.root.article).begins++;
+    for (const v of tr.visits) {
+      if (v.parent == null || ti.children.get(v.id).length || goesOn.has(tr.id + '\u0001' + v.id) || !inRange(visitTime(tr, v))) continue;
+      articles.get(v.article).ends++;
+    }
+  }
+  return { articles, links, trailIndex, pages, ...ex };
 }
 
 /*
