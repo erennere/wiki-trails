@@ -201,7 +201,7 @@ Safari on iPhone and iPad also takes extensions only inside an app, and you inst
 
 **Every 7 days.** With a free Apple ID, the app you install this way stops working after 7 days. Connect the iPhone and press Run in Xcode again; your history is safe in the repository. A paid Apple Developer Program membership makes it last a year, or lets you install it through TestFlight.
 
-**No Mac?** Then Safari on iPhone can't get the extension. Two ways instead: read Wikipedia in the Wikipedia app, which records everything by itself (next section), or try [Orion](https://kagi.com/orion/), a free iPhone browser that installs Chrome and Firefox extensions. In Orion, download `wiki-trails-extension.zip` from the [latest release](https://github.com/erennere/wiki-trails/releases/latest), then open **⋯ → Extensions → + → Install from file**. Orion's extension support is a beta and leaves out some features, so this is untested: if pages don't show up, the Wikipedia app is the sure way.
+**No Mac?** Then Safari on iPhone can't get the extension. Two ways instead: read Wikipedia in the Wikipedia app, which records everything by itself (next section), or try [Orion](https://kagi.com/orion/), a free iPhone browser that installs Chrome and Firefox extensions. In Orion, download the extension from the site (`wiki-trails-extension.zip` next to `index.html`; for this repository [erennere.github.io/wiki-trails/wiki-trails-extension.zip](https://erennere.github.io/wiki-trails/wiki-trails-extension.zip)), then open **⋯ → Extensions → + → Install from file**. Orion's extension support is a beta and leaves out some features, so this is untested: if pages don't show up, the Wikipedia app is the sure way.
 
 ### The Wikipedia app on iPhone and iPad
 

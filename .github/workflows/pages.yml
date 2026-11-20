@@ -49,6 +49,14 @@ jobs:
         if: env.HAS_HISTORY == 'true'
         run: node site/scripts/publish_history.mjs history site/data/trails.json "${{ vars.OWNER_NAME || github.repository_owner }}"
 
+      - name: Put the browser extension on the site (wiki-trails-extension.zip), for phones to download
+        working-directory: site
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/build_extension.mjs
+          cp dist/wiki-trails-extension.zip wiki-trails-extension.zip
+          rm -rf node_modules dist
+
       - id: pages
         uses: actions/configure-pages@v6
 
