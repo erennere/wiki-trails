@@ -21,9 +21,15 @@ const html = document.documentElement;
 /* ---------- someone's published history, shown until you start your own ---------- */
 function renderPublished() {
   const who = app.published;
-  $('pubnote').hidden = !who;
-  if (who) $('pubnote-text').innerHTML = `You're looking at <b>${esc(who)}</b>'s Wikipedia trails. Record a page or open a history file and the map is yours.`;
+  let min = false; try { min = localStorage.getItem('wiki-trails.pubnote') === 'min'; } catch { /* storage unavailable */ }
+  $('pubnote').hidden = !who || min;
+  $('pubchip').hidden = !who || !min;
+  if (who) {
+    $('pubnote-text').innerHTML = `You're looking at <b>${esc(who)}</b>'s Wikipedia trails. Record a page or open a history file and the map is yours.`;
+    $('pubchip').textContent = `${who}'s trails`;
+  }
 }
+const minimizeNote = (min) => { try { localStorage.setItem('wiki-trails.pubnote', min ? 'min' : 'open'); } catch { /* storage unavailable */ } renderPublished(); };
 on('published', renderPublished);
 
 /* ---------- side panels: open / closed ---------- */
@@ -33,8 +39,9 @@ function setPanel(side, open) {
 }
 document.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => setPanel(b.dataset.close, false));
 document.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => setPanel(b.dataset.open, true));
-setPanel('left', app.settings.left);
-setPanel('right', app.settings.right);
+// the map gets the room when the page opens; the side panels open from their rails
+setPanel('left', false);
+setPanel('right', false);
 
 /* ---------- the map ---------- */
 let rz;
@@ -111,7 +118,7 @@ function renderLegend() {
   // on threads, read pages are solid beads and skimmed ones open rings; in the overview, strong and pale dots
   const reads = !any ? '' : app.threads
     ? '<span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span>'
-    : '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim)"></i>skimmed</span>';
+    : '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim, color-mix(in srgb, var(--read) 45%, transparent))"></i>skimmed</span>';
   lg.innerHTML = roles + reads;
 }
 on('settings', (k) => { if (k === 'colourBy') renderLegend(); });
@@ -168,6 +175,8 @@ const menus = initMenus({ graph });
 initSyncUI({ openSettings: () => menus.openSettings() });
 $('pub-own').onclick = () => { if (ownHistory()) { graph.reset(); commit({ fresh: true }); } setPanel('left', true); $('next').focus(); };
 $('pub-open').onclick = () => menus.open();
+$('pub-min').onclick = () => minimizeNote(true);
+$('pubchip').onclick = () => minimizeNote(false);
 initTrails();
 initDetails({ record, loadTest: menus.loadTest });
 

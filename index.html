@@ -11,12 +11,12 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 22 Q12 8 16 14 T26 9' fill='none' stroke='%232563d9' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='7' cy='22' r='4' fill='%232563d9'/%3E%3Ccircle cx='16' cy='14' r='3.5' fill='%23e8641c'/%3E%3Ccircle cx='26' cy='9' r='3' fill='%23e8641c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Press+Start+2P&family=Orbitron:wght@500;700&family=Audiowide&family=Share+Tech+Mono&family=Major+Mono+Display&family=DotGothic16&family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700&family=Michroma&family=Nunito:wght@400;700&family=Comic+Neue:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Bungee&family=Quicksand:wght@400;600;700&family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=53245cecc4">
-<link rel="stylesheet" href="css/skins.css?v=b6c59db976">
-<script src="js/early.js?v=c6b5d92a6e"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=7241d39f3d">
+<link rel="stylesheet" href="css/skins.css?v=603ac25061">
+<script src="js/early.js?v=d75d9f19bc"></script>
 <script src="vendor/d3.min.js?v=f2094bbf61"></script>
-<script src="js/app.js?v=e1895ad99e" defer></script>
+<script src="js/app.js?v=ba3f60719f" defer></script>
 </head>
 <body>
 
@@ -93,7 +93,8 @@
       <canvas id="fx"></canvas>
       <div id="graph" role="img" aria-label="3D map of your Wikipedia trails"></div>
       <div class="threadbar" id="threadbar" hidden></div>
-      <div class="pubnote" id="pubnote" hidden><span id="pubnote-text"></span><button class="btn small" id="pub-own">Start my own</button><button class="btn small" id="pub-open">Open my history file…</button></div>
+      <div class="pubnote" id="pubnote" hidden><span id="pubnote-text"></span><button class="btn small" id="pub-own">Start my own</button><button class="btn small" id="pub-open">Open my history file…</button><button class="collapse" id="pub-min" title="Make this smaller">–</button></div>
+      <button class="btn small pubchip" id="pubchip" hidden title="Whose trails these are"></button>
       <div class="readlegend" id="readlegend" hidden><span><span class="rd rd-read"></span>read</span><span><span class="rd rd-skim"></span>skimmed</span></div>
       <div class="mapctl">
         <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
@@ -116,7 +117,7 @@
   </section>
 
   <div class="col" id="right">
-    <button class="panel rail" data-open="right" title="Show Details">‹ Details</button>
+    <button class="panel rail" data-open="right" title="Show the overview and details">‹ Overview · Details</button>
     <section class="panel grow" id="detailspanel">
       <div class="panel-head"><span class="grow" id="dtitle">Overview</span><button class="collapse" data-close="right" title="Hide this side">›</button></div>
       <div class="details" id="details"></div>

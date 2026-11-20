@@ -37,7 +37,8 @@
   const doc = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const send = (msg) => { try { api.runtime.sendMessage({ wikiTrails: 1, doc, ...msg }); } catch { /* extension reloaded */ } };
 
-  send({ type: 'open', title, lang: langOf(location.hostname), from, fromNs, nav, t: Date.now() });
+  // wasDiscarded: the browser had put this tab to sleep and is loading it again, which isn't you opening it
+  send({ type: 'open', title, lang: langOf(location.hostname), from, fromNs, nav, restored: !!document.wasDiscarded, t: Date.now() });
 
   // time on the page: only while you're actually on it — the tab is showing, the browser window is the
   // one you're using, and you moved, scrolled or typed in the last 45 seconds. A page left open, in a

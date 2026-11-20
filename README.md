@@ -26,6 +26,7 @@ The window has one map and two side panels, and both panels can be collapsed.
 - **Latest N threads** (over the map, while something is selected): show the latest 1, 3, 5, 10, 20 or 50 trails through it.
 - **Older ones: faint ↔ clear** (next to it): drag to see older trails as clearly as the newest, or to let them fade so the newest stands out. It's the same as Settings → *How much older threads fade*.
 - **Timeline** (under the map). It shows your clicks over time; pick *30 days*, *1 year* or *All time* in the top bar, choose *Custom…* to enter a start and end date, or drag across the timeline to look at any period. With an article selected, it marks each time you were on that page, and dragging picks the period whose trails are drawn.
+- **The side panels** start closed so the map has the room; open them from the slim bars on the left (Record and Trails) and right (Overview and Details).
 - **Record** (left). With the extension, it shows whether pages are being recorded, with a *Pause* button. To record by hand, paste a Wikipedia link or type a title for the first page, then add each page you clicked next. To go back like the browser's back button, click an earlier step and continue from there; your trail then branches. Revisits and loops are fine. Every article is one node in the network, so arriving somewhere you have been before links into it.
 - **Skimmed or read.** For the page you're on, click *Skimmed* or *Read*. If you don't, it's guessed from how long it was until you opened the next page: one minute or more counts as read (you can change that in Settings). Each step shows a small mark: a filled dot for read, a ring for skimmed, dotted when it's only a guess. Click a mark to change it.
 - **Trails** (left, below). All your trails, newest first, with a filter. Click one to see it on its own, with every page named.
@@ -76,7 +77,7 @@ It should still feel like day one after years of use.
 The ⚙ button opens Settings:
 
 - **Light or dark.** Follows your system by default.
-- **Look.** Desktop 95 is the default, and 27 other looks are available. Hover a card to try one, click to keep it.
+- **Look.** Desktop 95 is the default, and six other looks are available. Hover a card to try one, click to keep it.
 - **Map:** how many connections to show, fade old connections, how much older threads fade, turn the map slowly when you're not using it, and re-arrange it from scratch.
 - **Reading:** colour pages by how you read them or by how often you were there; how much time in total a page needs to count as read; and, for pages you recorded by hand (which have no measured time), whether to guess from the time until the next page.
 - **Other:** the Wikipedia language for links, and optional sounds.
@@ -84,18 +85,13 @@ The ⚙ button opens Settings:
 ![Settings](.github/gallery.png)
 
 <details>
-<summary>All 28 looks</summary>
+<summary>All 7 looks</summary>
 
-![Six of the looks with the same trails selected](.github/looks.jpg)
-
-- *Plain*
-- *Retro computing:* Desktop 95 · Mono '91 · Amber Terminal · Vector Arcade · Teletext · 8-bit Home
-- *Futuristic:* Holo HUD · Star Chart · Bio-Neural
-- *AI:* Latent Space · Training Run · Sentinel
-- *Millennium / Y2K:* Aqua Bubble · Y2K Chrome · GeoCities · Media Player
-- *90s console games:* 16-bit RPG · Handheld '89 · Polygon Era · Fighter Select · Overworld Map
-- *Synthwave:* Outrun Sunset · Vaporwave · Neon Rain
-- *Minimal:* Swiss Paper · Midnight Mono · Zen Ink
+- *Plain* (follows your light or dark setting)
+- *Retro computing:* Desktop 95 · Amber Terminal
+- *Futuristic:* Star Chart
+- *Synthwave:* Neon Rain
+- *Minimal:* Swiss Paper · Midnight Mono
 
 Look names describe a style; they are not affiliated with any product.
 </details>
@@ -228,7 +224,7 @@ npm run build:extension   # the extension: dist/extension and dist/wiki-trails-e
 index.html            page: top bar, three panels, Settings and Open dialogs
 js/app.js             bundled app (built from src/, includes three.js and 3d-force-graph)
 css/style.css         layout and components; every colour is a CSS variable
-css/skins.css         plain light/dark, window styles, and the 27 optional looks
+css/skins.css         plain light/dark, window styles, and the other looks
 src/main.js           wires the map, panels and keyboard together
 src/app.js            app state, selection, events, and the highlight for a selection
 src/model.js          data model: trails → articles and weighted connections

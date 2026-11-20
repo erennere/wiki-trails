@@ -37,7 +37,7 @@ export function initSyncUI({ openSettings }) {
       const when = sync.at ? `last synced ${fmtAgo(sync.at)}` : 'not synced yet';
       const st = sync.state === 'busy' ? 'syncing now…' : sync.state === 'offline' ? 'offline, will sync when you’re back online' : sync.state === 'error' ? 'there’s a problem (see below)' : when;
       $('sync-state').innerHTML = `Connected to <b>${esc(sync.cfg.repo)}</b>: ${esc(st)}.`
-        + (sync.cfg.private === false ? ' <span class="warn">This repository is public, so anyone can see your history: make it private on GitHub (Settings → General → Danger zone).</span>' : '');
+        + (sync.cfg.private === false ? ' <span class="hint">It\'s public, so anyone can see this history, and your site shows it to visitors.</span>' : '');
       $('sync-ext').textContent = extLine();
     }
     const err = sync.on && sync.state === 'error' ? sync.error : $('sync-err').dataset.msg || '';

@@ -79,6 +79,15 @@ async function onOpen(m, tabId, openerTabId) {
     const v = latest((x) => x.trailId === tab.trailId && x.article === m.title);
     if (v) return here(v.trailId, v.visitId, m.title);
   }
+  // not you opening a page: the browser reloading tabs it had open (after a restart, or a tab it had
+  // put to sleep), or a reload or back/forward in a tab we know nothing about. Nothing is recorded; if
+  // the page was recorded recently, time you now spend on it counts there, and links you click go on
+  // from it.
+  if (m.restored || (!tab && (m.nav === 'reload' || m.nav === 'back_forward'))) {
+    const v = latest((x) => x.article === m.title);
+    if (v) here(v.trailId, v.visitId, m.title);
+    return;
+  }
   if (!S.on) return;
   let trailId, parent = null;
   const at = m.from ? place(tabId, openerTabId, m.from, now) : null;
@@ -267,6 +276,10 @@ function updateBadge() {
   a.setBadgeBackgroundColor?.({ color: '#888888' });
 }
 api.alarms?.onAlarm.addListener((a) => { if (a.name === 'push') push(); });
-api.runtime.onStartup?.addListener(() => schedulePush(0.2));
+// a new browser session: tab numbers start over, so what we knew about tabs no longer applies
+api.runtime.onStartup?.addListener(() => {
+  queue = queue.then(async () => { await load(); S.tabs = {}; S.docs = {}; await save(); }).catch(() => {});
+  schedulePush(0.2);
+});
 api.runtime.onInstalled?.addListener(() => { migrate().catch(() => {}); schedulePush(0.2); });
 load().then(updateBadge);
