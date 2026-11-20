@@ -1,5 +1,6 @@
 #!/bin/bash
-# Builds a small Mac app that installs the Wiki Trails extension in Safari, and opens it.
+# Builds the small app that installs the Wiki Trails extension in Safari: for the Mac (built and
+# opened here) and for iPhone and iPad (in the same Xcode project; install it from Xcode, see below).
 # Needs a Mac with Xcode (free from the App Store). Run from the repository folder, with the
 # unzipped extension folder (the one with manifest.json in it):
 #   bash scripts/package_safari.sh ~/Downloads/wiki-trails-extension
@@ -26,7 +27,7 @@ TOOL=safari-web-extension-packager                      # Xcode 26 and later
 xcrun --find "$TOOL" >/dev/null 2>&1 || TOOL=safari-web-extension-converter   # its older name
 rm -rf "$OUT"
 xcrun "$TOOL" "$EXT" --project-location "$OUT" --app-name "Wiki Trails" \
-  --bundle-identifier "${BUNDLE_ID:-io.github.wikitrails}" --swift --macos-only \
+  --bundle-identifier "${BUNDLE_ID:-io.github.wikitrails}" --swift \
   --copy-resources --no-open --no-prompt --force
 PROJ="$(find "$OUT" -maxdepth 3 -name '*.xcodeproj' | head -1)"
 SCHEME="$(xcodebuild -list -json -project "$PROJ" | python3 -c 'import json,sys; s=json.load(sys.stdin)["project"]["schemes"]; print(next((x for x in s if "macOS" in x), s[0]))')"
@@ -36,3 +37,7 @@ echo "Opening $APP"
 open "$APP"
 echo "Now: Safari > Settings > Extensions > tick 'Wiki Trails'."
 echo "If it isn't listed: open $PROJ in Xcode, choose your Apple ID under Signing & Capabilities for both targets, and press Run."
+echo
+echo "For your iPhone or iPad: plug it in, open $PROJ in Xcode, pick the iOS scheme and your device at the top,"
+echo "choose your Apple ID (Personal Team) under Signing & Capabilities for the iOS app and the iOS extension, and press Run."
+echo "Then on the phone: Settings > Apps > Safari > Extensions > Wiki Trails > Allow Extension."

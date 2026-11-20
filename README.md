@@ -144,11 +144,11 @@ The token stays in the browser where you entered it. When it expires, make a new
 
 ## The browser extension
 
-The extension records your trails while you read Wikipedia, with nothing to type, and sends them to your history repository. It works in Microsoft Edge and Google Chrome, and in Safari on a Mac. Its toolbar button shows whether it's recording and where pages go, and opens Wiki Trails.
+The extension records your trails while you read Wikipedia, with nothing to type, and sends them to your history repository. It works in Microsoft Edge and Google Chrome, and in Safari on a Mac, iPhone and iPad. Its toolbar button shows whether it's recording and where pages go, and opens Wiki Trails.
 
 <img src=".github/extension-popup.png" width="300" alt="The extension's toolbar button: recording, 4 pages today, a switch to pause, where pages go, and Open Wiki Trails">
 
-**Wikipedia as an app.** The official Wikipedia app can't be recorded: it takes no extensions and keeps its history to itself. You can get Wikipedia in an app window of its own that *is* recorded. In Edge, open Wikipedia and choose **⋯ → Apps → Install this site as an app**. In Safari, choose **File → Add to Dock**. Extensions work in both kinds of window. Safari turns on the extensions that may read wikipedia.org for the web app by itself; check under the web app's **Settings → Extensions** if not.
+**Wikipedia as an app.** The official Wikipedia app takes no extensions, but on iPhone and iPad it keeps its own record of what you read, and you can bring that in: see [The Wikipedia app on iPhone and iPad](#the-wikipedia-app-on-iphone-and-ipad). On a computer you can get Wikipedia in an app window of its own that the extension records. In Edge, open Wikipedia and choose **⋯ → Apps → Install this site as an app**. In Safari, choose **File → Add to Dock**. Extensions work in both kinds of window. Safari turns on the extensions that may read wikipedia.org for the web app by itself; check under the web app's **Settings → Extensions** if not.
 
 ### What it records
 
@@ -188,7 +188,28 @@ Safari only takes extensions that come inside a Mac app, so you build that app o
 
 **Only trying it out?** Under **Settings → Developer**, **Add Temporary Extension…** loads the unzipped folder without Xcode. Safari removes it after 24 hours or when it quits.
 
-**iPhone and iPad** need the extension inside an iOS app, which you can only install with a paid Apple Developer Program membership. The script builds for the Mac only. The site itself works on them, synced.
+### Install in Safari on iPhone and iPad
+
+Safari on iPhone and iPad also takes extensions only inside an app, and you install that app from Xcode on a Mac. The script above makes it too: the Xcode project in `dist/safari` has an iOS app next to the Mac one.
+
+1. Run the script as above (step 2), on a Mac with Xcode.
+2. Connect your iPhone with a cable. Open the project in `dist/safari` in Xcode. At the top, pick the scheme that ends in *(iOS)* and your iPhone.
+3. Under **Signing & Capabilities**, choose your Apple ID as the team (*Personal Team*) for the iOS app and the iOS extension. If you haven't added it yet, do so under **Xcode → Settings → Accounts**. If Xcode says the bundle identifier isn't available, change it to something of your own, such as `io.github.yourname.wikitrails`.
+4. Press **Run**. The first time, the iPhone asks you to turn on **Developer Mode** (Settings → Privacy & Security) and to trust your Apple ID (Settings → General → VPN & Device Management).
+5. On the iPhone: **Settings → Apps → Safari → Extensions → Wiki Trails**, turn on **Allow Extension**, and allow it on Wikipedia and on `erennere.github.io`.
+6. Open the site in Safari on the iPhone and connect it with your repository and token (Settings → Sync); the extension follows. Pages read in Safari then go to your history like on your computer, while Safari is open: if you close Safari right away, they go the next time you open it.
+
+**Every 7 days.** With a free Apple ID, the app you install this way stops working after 7 days. Connect the iPhone and press Run in Xcode again; your history is safe in the repository. A paid Apple Developer Program membership makes it last a year, or lets you install it through TestFlight.
+
+### The Wikipedia app on iPhone and iPad
+
+The Wikipedia app records every article you open in it: when, how long you spent on it, and which article you opened it from. Wiki Trails can read that, so what you read in the app becomes trails like any other, with its links and reading time.
+
+1. In the Wikipedia app, open **Settings → Help and feedback** and tap **Export User Data** at the bottom. Confirm with **Share**.
+2. Save the zip (`app-container.zip`) to Files, or AirDrop it to your computer.
+3. In Wiki Trails, **File → Open** and choose the zip.
+
+The trails are added to your history, never in its place, and go to your other devices if you're synced. Do it again whenever you like: the trails you already have grow, nothing is doubled. The zip also holds the app's settings, saved articles and reading lists; Wiki Trails reads only the reading history, in the browser, and sends nothing else anywhere.
 
 ### Host on GitHub Pages
 

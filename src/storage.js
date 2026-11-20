@@ -1,5 +1,6 @@
 // Storage: IndexedDB in the browser (no ~5 MB localStorage ceiling), plus history files on disk.
 import { validate, uid } from './model.js';
+import { isAppExport, readAppExport } from './appimport.js';
 
 const DB = 'wiki-trails', STORE = 'kv', KEY = 'history', OLD_KEY = 'wiki-trails.v2';
 
@@ -79,6 +80,7 @@ export async function loadPublished() {
 /* ---------- history files ---------- */
 let handle = null;   // remembered file (Chrome/Edge): Ctrl+S then writes to it silently
 const TYPES = [{ description: 'Wiki Trails history', accept: { 'application/json': ['.json'] } }];
+const OPEN_TYPES = [{ description: 'Wiki Trails history, or data exported from the Wikipedia app', accept: { 'application/json': ['.json'], 'application/zip': ['.zip'], 'application/x-sqlite3': ['.sqlite'] } }];
 export const fileName = () => handle?.name || null;
 
 export async function saveToFile(state, { saveAs = false } = {}) {
@@ -105,18 +107,24 @@ export async function saveToFile(state, { saveAs = false } = {}) {
 export async function pickFile() {
   if (!('showOpenFilePicker' in window)) return 'fallback';
   try {
-    const [h] = await window.showOpenFilePicker({ types: TYPES });
+    const [h] = await window.showOpenFilePicker({ types: OPEN_TYPES });
     const f = await h.getFile();
-    const state = validate(JSON.parse(await f.text()));
-    handle = h; // later saves go back to the same file
-    return { state, name: f.name };
+    const r = await readAny(f);
+    if (!r.app) handle = h; // later saves go back to the same file
+    return { ...r, name: f.name };
   } catch (e) {
     if (e.name === 'AbortError') return null;
     if (e.name === 'SecurityError' || e.name === 'NotAllowedError') return 'fallback';
     throw e;
   }
 }
-export async function readFile(file) { return validate(JSON.parse(await file.text())); }
+export async function readFile(file) { return (await readAny(file)).state; }
+/** A Wiki Trails file, or what the Wikipedia app exported. Returns { state, app: views read | 0 }. */
+export async function readAny(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (isAppExport(file.name, bytes)) { const r = await readAppExport(bytes); return { state: validate(r), app: r.views || 0 }; }
+  return { state: validate(JSON.parse(new TextDecoder().decode(bytes))), app: 0 };
+}
 
 /** Merge two histories: trails are unioned by id (the longer copy wins), layouts combined. */
 export function merge(a, b) {

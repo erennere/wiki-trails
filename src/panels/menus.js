@@ -1,7 +1,7 @@
 // File menu (save, open, examples, clear) and the Settings dialog (appearance, map, other).
-import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, applyReadingRule } from '../app.js';
+import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, applyReadingRule, ownHistory } from '../app.js';
 import { validate, emptyState } from '../model.js';
-import { saveToFile, pickFile, readFile, merge } from '../storage.js';
+import { saveToFile, pickFile, readAny, merge, isExample } from '../storage.js';
 import { exampleState } from '../example.js';
 import { sync } from '../sync.js';
 import { SKINS, CATS } from '../skins.js';
@@ -48,7 +48,8 @@ export function initMenus({ graph }) {
   }
 
   let pending = null;
-  function askOpen(s, name) {
+  function askOpen(s, name, fromApp = 0) {
+    if (fromApp) return addFromApp(s, fromApp);
     if (!app.state.trails.length || app.published) return applyOpen(s, 'replace', name); // a shown history isn't yours to add to
     pending = { s, name };
     const clicks = s.trails.reduce((n, t) => n + t.visits.length - 1, 0);
@@ -62,6 +63,22 @@ export function initMenus({ graph }) {
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); } catch { /* ignore */ }
     renderSaved();
   }
+  // what the Wikipedia app recorded is always added to your history, never put in its place
+  function addFromApp(s, views) {
+    if (!s.trails.length) return toast(`No Wikipedia articles in that export (${plural(views, 'page view')}).`, 5000);
+    if (app.published) { graph.reset(); ownHistory(); } // someone else's history was shown: this starts yours
+    else if (isExample(app.state) && !sync.on) { graph.reset(); app.state = { ...emptyState(), lang: app.state.lang }; } // examples aren't yours either
+    const before = new Map(app.state.trails.map((t) => [t.id, t.visits.length]));
+    let grew = 0;
+    for (const t of s.trails) if (before.has(t.id) && t.visits.length > before.get(t.id)) grew++;
+    const m = merge(app.state, s); snapshot(); app.state = { ...m.state, lang: app.state.trails.length ? app.state.lang : s.lang }; app.sel = null; commit({ fresh: true });
+    const added = s.trails.filter((t) => !before.has(t.id)).length;
+    const pages = s.trails.reduce((n, t) => n + t.visits.length, 0);
+    const what = [added && plural(added, 'new trail'), grew && `${plural(grew, 'trail')} longer`].filter(Boolean).join(', ');
+    toast(what
+      ? `From the Wikipedia app: ${what} (${plural(pages, 'page')} in the export).${sync.on ? ' Syncing to your other devices.' : ''}`
+      : `Already up to date with the Wikipedia app (${plural(pages, 'page')} in the export).`, 6000);
+  }
   $('od-merge').onclick = () => { $('opendlg').hidden = true; if (pending) applyOpen(pending.s, 'merge', pending.name); pending = null; };
   $('od-replace').onclick = () => { $('opendlg').hidden = true; if (pending) applyOpen(pending.s, 'replace', pending.name); pending = null; };
   $('od-cancel').onclick = $('od-close').onclick = () => { $('opendlg').hidden = true; pending = null; };
@@ -71,10 +88,10 @@ export function initMenus({ graph }) {
     try {
       const r = await pickFile();
       if (r === 'fallback') return $('import').click();
-      if (r) askOpen(r.state, r.name);
+      if (r) askOpen(r.state, r.name, r.app);
     } catch (err) { toast(`Could not open: ${err.message}`); }
   }
-  async function openFileObj(f) { try { askOpen(await readFile(f), f.name); } catch (err) { toast(`Could not open ${f.name}: ${err.message}`); } }
+  async function openFileObj(f) { try { const r = await readAny(f); askOpen(r.state, f.name, r.app); } catch (err) { toast(`Could not open ${f.name}: ${err.message}`, 6000); } }
   $('import').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openFileObj(f); };
 
   // example data ships as a <script> so it also works when index.html is opened from disk

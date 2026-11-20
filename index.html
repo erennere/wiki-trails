@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="css/skins.css?v=603ac25061">
 <script src="js/early.js?v=d75d9f19bc"></script>
 <script src="vendor/d3.min.js?v=f2094bbf61"></script>
-<script src="js/app.js?v=bc5820fef8" defer></script>
+<script src="js/app.js?v=8cc7581645" defer></script>
 </head>
 <body>
 
@@ -47,7 +47,7 @@
     <div class="dropdown" id="filemenu" hidden>
       <button class="mi" id="m-save">Save history <small>Ctrl+S</small></button>
       <button class="mi" id="m-saveas">Save as…</button>
-      <button class="mi" id="m-open">Open history… <small>Ctrl+O</small></button>
+      <button class="mi" id="m-open" title="A Wiki Trails file, or the zip the Wikipedia app on iPhone exports (Settings → Help and feedback → Export User Data)">Open history or Wikipedia app export… <small>Ctrl+O</small></button>
       <div class="info" id="savedinfo"></div>
       <hr>
       <h4>Examples (real reading trails)</h4>
@@ -196,6 +196,6 @@
 
 <div class="dropzone" id="dropzone" hidden><div>Drop a Wiki Trails history file to open it</div></div>
 <div class="toast" id="toast" role="status"></div>
-<input type="file" id="import" accept="application/json,.json" hidden>
+<input type="file" id="import" accept="application/json,.json,.zip,.sqlite,application/zip" hidden>
 </body>
 </html>
