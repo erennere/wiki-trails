@@ -121,11 +121,21 @@ function renderLegend() {
     if (mark === 'ends' && ends) html = `<span>${dot(R.up)}where you began</span><span>${dot(R.down[0])}where you stopped</span>`;
     else if (mark === 'reading' && any) html = '<span><i class="sw2" style="background:var(--read)"></i>read</span><span><i class="sw2" style="background:var(--skim, color-mix(in srgb, var(--read) 45%, transparent))"></i>skimmed</span>';
     if (html) html += '<span class="hint">bigger: more visits</span>';
+    // how many pages the map shows: with fewer, those seen longest ago and deepest into a trail go first
+    if (app.DV.articles.size > 3) html += `<label class="showctl" title="With fewer, the pages you saw longest ago and deepest into their trails go first">Pages <span class="hint">recent</span><input type="range" id="showpages" min="0.05" max="1" step="0.05" value="${app.settings.show}" aria-label="How many pages the map shows"><span class="hint">all</span><span class="cnt" id="showcnt"></span></label>`;
   }
   lg.hidden = !html;
   lg.innerHTML = html;
+  const sp = $('showpages');
+  if (sp) {
+    const count = () => { const c = graph.shownCount(); $('showcnt').textContent = c.shown < c.total ? `${c.shown} of ${c.total}` : `${c.total}`; };
+    let raf = 0;
+    sp.addEventListener('input', () => { app.settings.show = +sp.value; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { graph.setView({ show: app.settings.show }); count(); }); });
+    sp.addEventListener('change', () => { setSetting('show', app.settings.show); });
+    count();
+  }
 }
-on('settings', (k) => { if (k === 'mark') renderLegend(); });
+on('settings', (k) => { if (k === 'mark' || k === 'show') renderLegend(); });
 on('skin', () => renderLegend());
 
 /* the bar over the map: how many threads, and which period */
@@ -213,7 +223,7 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------- start ---------- */
 (async () => {
-  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, mark: app.settings.mark });
+  graph.setView({ density: app.settings.density, fade: app.settings.fade, ageFade: app.settings.ageFade, rotate: app.settings.rotate, mark: app.settings.mark, show: app.settings.show });
   // your own history: anything you recorded, opened or synced here (examples don't count)
   const local = await loadLocal();
   let synced = false; try { synced = !!JSON.parse(localStorage.getItem('wiki-trails.sync'))?.token; } catch { /* not connected */ }

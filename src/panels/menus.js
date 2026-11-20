@@ -147,6 +147,7 @@ export function initMenus({ graph }) {
   function renderSettings() {
     document.querySelectorAll('#themeseg button').forEach((b) => b.classList.toggle('on', b.dataset.theme === app.settings.theme));
     $('density').value = app.settings.density;
+    $('setshow').value = app.settings.show;
     $('fade').checked = app.settings.fade;
     $('agefade').value = app.settings.ageFade;
     $('colourby').value = app.settings.mark;
@@ -168,6 +169,7 @@ export function initMenus({ graph }) {
   grid.addEventListener('mouseover', (e) => { const c = e.target.closest('.card'); if (c && c.dataset.id !== app.skin.id) applySkin(c.dataset.id, { persist: false }); });
   grid.addEventListener('mouseleave', () => { if (app.skin.id !== app.settings.skin) applySkin(app.settings.skin, { persist: false }); });
   grid.addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) { applySkin(c.dataset.id); renderSkins(); } });
+  $('setshow').oninput = () => { setSetting('show', +$('setshow').value); graph.setView({ show: app.settings.show }); };
   $('density').oninput = () => { setSetting('density', +$('density').value); graph.setView({ density: app.settings.density }); };
   $('fade').onchange = () => { setSetting('fade', $('fade').checked); graph.setView({ fade: app.settings.fade }); };
   $('colourby').onchange = () => { setSetting('mark', $('colourby').value); graph.setView({ mark: app.settings.mark }); };

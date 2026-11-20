@@ -160,6 +160,23 @@ export function derive(state, range = null) {
   // where explorations began (a trail's first page, unless the trail continues another one) and where you
   // stopped going on (the tip of every branch, as the pins on a drawn trail); a page you only looked up
   // on its own is just a beginning
+  // how deep each page lies: the fewest clicks from where one of its trails began (a trail that continues
+  // another one counts on from the page it continues)
+  for (const a of articles.values()) a.depth = Infinity;
+  const depthIn = new Map();
+  const walk = (tr, ti, v, d) => {
+    const key = tr.id + '\u0001' + v.id;
+    if ((depthIn.get(key) ?? Infinity) <= d) return;
+    depthIn.set(key, d);
+    const a = articles.get(v.article); if (a && inRange(visitTime(tr, v))) a.depth = Math.min(a.depth, d);
+    for (const cid of ti.children.get(v.id) || []) { const c = ti.byId.get(cid); if (c) walk(tr, ti, c, d + (c.article === v.article ? 0 : 1)); }
+  };
+  const order = [...trailIndex.values()].sort((p, q) => (ex.join.has(p.trail.id) ? 1 : 0) - (ex.join.has(q.trail.id) ? 1 : 0));
+  for (const ti of order) {
+    const j = ex.join.get(ti.trail.id), from = j ? depthIn.get(j.trailId + '\u0001' + j.visitId) ?? 0 : 0;
+    for (const v of ti.trail.visits) if (v.parent == null) walk(ti.trail, ti, v, from);
+  }
+  for (const a of articles.values()) if (!Number.isFinite(a.depth)) a.depth = 0;
   const goesOn = new Set([...ex.join.values()].map((j) => j.trailId + '\u0001' + j.visitId));
   for (const ti of trailIndex.values()) {
     const tr = ti.trail;

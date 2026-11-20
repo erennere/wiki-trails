@@ -22,7 +22,10 @@ export function createGraph(el, handlers) {
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
   let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
-  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends' };
+  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1 };
+  // groups of pages joined by links (newest first), the newest visit, and the pages shown when not all are
+  let groups = [], newest = 0, spanDays = 1, keep = null, repacked = false;
+  const LAYOUT_V = '\u0001groups';
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
   const G = new ForceGraph3D(el, { controlType: 'orbit' })
@@ -37,13 +40,24 @@ export function createGraph(el, handlers) {
     .onBackgroundClick((ev) => { if (!layerClick(ev)) handlers.onBackground?.(); })
     .onEngineStop(() => {
       if (!settling) return;
+      if (!repacked) {
+        // now that each group has its real size, give them their places again so none touch, then
+        // one more (still) tick so the spheres follow
+        repacked = true;
+        repack();
+        for (const n of nodes) if (Number.isFinite(n.x)) { n.fx = n.x; n.fy = n.y; n.fz = n.z; }
+        G.cooldownTicks(1); G.d3ReheatSimulation();
+        return;
+      }
       settling = false;
       for (const n of nodes) if (Number.isFinite(n.x)) { n.fx = n.x; n.fy = n.y; n.fz = n.z; posCache.set(n.id, [n.x, n.y, n.z]); }
       measure();
       drawThreads(); placeLabels(true);
       handlers.onSettled?.();
     });
-  G.d3Force('charge').strength(-34);
+  G.d3Force('charge').strength(-34).distanceMax(220);
+  G.d3Force('center', null);
+  G.d3Force('group', groupForce());
   G.d3Force('link').distance((l) => 18 + 26 / Math.sqrt(l.total || 1));
   const cam = G.camera(); cam.fov = 30; cam.updateProjectionMatrix();
   const ctl = G.controls();
@@ -61,6 +75,10 @@ export function createGraph(el, handlers) {
   const rgba = (c, a) => { const k = d3.color(c) || d3.color('#888'); k.opacity = a; return k.formatRgb(); };
   function nodeColor(n) {
     if (threads) return threads.on.has(n.id) ? rgba(style.link, 0.55) : rgba(style.link, 0.07);
+    const op = groupOp(n), c = baseColor(n);
+    return op < 0.99 ? rgba(c, op) : c;
+  }
+  function baseColor(n) {
     // colour only where it says something: where explorations began and ended (cool before, warm after,
     // as on the trails), or read against skimmed; every other page is the same plain colour
     if (view.mark === 'ends') {
@@ -76,19 +94,19 @@ export function createGraph(el, handlers) {
   const recencyOf = (t) => 0.08 + 0.92 * Math.exp(-Math.max(0, now - t) / Math.max(14 * 864e5, span / 6));
   function linkColor(l) {
     if (threads) return rgba(style.link, 0.035);
-    return rgba(style.link, 0.07 + 0.5 * linkStrength(l));
+    return rgba(style.link, (0.07 + 0.5 * linkStrength(l)) * groupOp(nodeBy.get(l.source.id ?? l.source)));
   }
   const linkWidth = (l) => (threads ? 0 : (l.strong ? 0.25 + 1.1 * linkStrength(l) * scale : 0));
   function restyle() {
     // while threads are drawn, their pages are shown as the threads' own beads instead
     G.nodeColor(nodeColor).nodeVal((n) => (threads ? nodeSize(n) * 0.5 : nodeSize(n)))
-      .nodeVisibility((n) => (!vis || vis.has(n.id)) && !(threads && threads.on.has(n.id)))
-      .linkVisibility((l) => budget.has(l.key) && (!visLinks || visLinks.has(l.key)))
+      .nodeVisibility((n) => isShown(n) && !(threads && threads.on.has(n.id)))
+      .linkVisibility((l) => budget.has(l.key) && (!visLinks || visLinks.has(l.key)) && (!keep || (keep.has(l.source.id ?? l.source) && keep.has(l.target.id ?? l.target))))
       .linkColor(linkColor).linkWidth(linkWidth);
   }
   function rebudget() {
     // only the strongest connections are drawn, so years of history stay calm
-    const pool = links.filter((l) => !visLinks || visLinks.has(l.key));
+    const pool = links.filter((l) => (!visLinks || visLinks.has(l.key)) && (!keep || (keep.has(l.source.id ?? l.source) && keep.has(l.target.id ?? l.target))));
     pool.sort((p, q) => linkStrength(q) - linkStrength(p));
     const max = Math.round(1400 * view.density);
     budget = new Set(pool.slice(0, max).map((l) => l.key));
@@ -119,7 +137,8 @@ export function createGraph(el, handlers) {
     if (layout) {
       const entries = Object.entries(layout);
       const is3d = entries.length && entries.every(([, p]) => Array.isArray(p) && p.length === 3);
-      if (is3d) for (const [t, p] of entries) if (!posCache.has(t)) posCache.set(t, p);
+      // layouts from before pages were kept in groups are laid out again
+      if (is3d && layout[LAYOUT_V]) for (const [t, p] of entries) if (t !== LAYOUT_V && !posCache.has(t)) posCache.set(t, p);
     }
     const old = nodeBy;
     nodeBy = new Map(); nodes = [];
@@ -131,19 +150,13 @@ export function createGraph(el, handlers) {
         const p = posCache.get(a.title);
         if (p) { [n.x, n.y, n.z] = p; n.fx = n.x; n.fy = n.y; n.fz = n.z; } else fresh++;
       }
-      n.visits = a.visits; n.last = a.last; n.read = a.read; n.skim = a.skim; n.begins = a.begins; n.ends = a.ends;
+      n.visits = a.visits; n.last = a.last; n.read = a.read; n.skim = a.skim; n.begins = a.begins; n.ends = a.ends; n.depth = a.depth || 0;
       nodeBy.set(a.title, n); nodes.push(n);
     }
     links = [...D.links.values()].map((l) => ({ key: l.key, source: l.a, target: l.b, total: l.total, last: l.last }));
     adj = new Map();
     for (const l of links) { (adj.get(l.source) || adj.set(l.source, []).get(l.source)).push(l.target); (adj.get(l.target) || adj.set(l.target, []).get(l.target)).push(l.source); }
-    // new pages start next to a page they're connected to, then settle; everything else stays put
-    const placed = nodes.filter((n) => Number.isFinite(n.x)).length;
-    for (const n of nodes) {
-      if (Number.isFinite(n.x)) continue;
-      const nb = (adj.get(n.id) || []).map((t) => nodeBy.get(t)).find((m) => m && Number.isFinite(m.x));
-      if (nb && placed) { n.x = nb.x + (Math.random() - 0.5) * 16; n.y = nb.y + (Math.random() - 0.5) * 16; n.z = nb.z + (Math.random() - 0.5) * 16; }
-    }
+    const regroup = arrange();
     maxVisits = Math.max(1, ...nodes.map((n) => n.visits));
     maxTotal = Math.max(1, ...links.map((l) => l.total));
     now = Date.now();
@@ -151,10 +164,11 @@ export function createGraph(el, handlers) {
     G.nodeRelSize(nodes.length < 60 ? 3.2 : nodes.length < 600 ? 2.4 : 1.9);
     setVisible(DV, false);
     restyle();
-    settling = fresh > 0;
+    settling = fresh > 0 || regroup > 0;
+    repacked = false;
     // most of the first layout is worked out up front; the last part settles on screen
-    const warm = fresh === nodes.length ? Math.round(Math.min(300, 120000 / Math.max(1, nodes.length))) : fresh ? 30 : 0;
-    G.warmupTicks(warm).cooldownTicks(fresh ? Math.max(60, 360 - warm) : 0);
+    const warm = fresh === nodes.length ? Math.round(Math.min(300, 120000 / Math.max(1, nodes.length))) : settling ? 30 : 0;
+    G.warmupTicks(warm).cooldownTicks(settling ? Math.max(60, 360 - warm) : 0);
     G.graphData({ nodes, links });
     if (!settling) measure();
     drawThreads();
@@ -170,20 +184,173 @@ export function createGraph(el, handlers) {
   function setVisible(DV, apply = true) {
     vis = DV && DV.articles.size !== nodeBy.size ? new Set(DV.articles.keys()) : null;
     // where explorations began and ended within the period shown
-    if (DV) for (const n of nodes) { const a = DV.articles.get(n.id); n.begins = a?.begins || 0; n.ends = a?.ends || 0; }
+    if (DV) for (const n of nodes) { const a = DV.articles.get(n.id); n.begins = a?.begins || 0; n.ends = a?.ends || 0; if (a) n.depth = a.depth || 0; }
     visLinks = vis ? new Set(DV.links.keys()) : null;
+    computeKeep();
     rebudget();
     if (apply) { restyle(); placeLabels(true); }
   }
   function reset() { posCache.clear(); nodeBy = new Map(); nodes = []; links = []; }
+  /* ---------- groups: pages joined by links stay together, apart from everything else ----------
+     Explorations that share no page get places of their own: the newest in the middle, older ones
+     further out, each where there's room. Older groups are fainter. */
+  const DAY = 864e5;
+  const isPlaced = (n) => !!n && Number.isFinite(n.x);
+  function arrange() {
+    const seen = new Set(); groups = [];
+    for (const n of nodes) {
+      if (seen.has(n.id)) continue;
+      const g = { nodes: [], last: 0, first: Infinity, key: n.id }; seen.add(n.id);
+      for (let i = 0, q = [n]; i < q.length; i++) {
+        const m = q[i]; g.nodes.push(m); m.group = g;
+        if ((m.last || 0) > g.last) g.last = m.last || 0;
+        if (m.last && m.last < g.first) g.first = m.last;
+        if (m.id < g.key) g.key = m.id;
+        for (const t of adj.get(m.id) || []) if (!seen.has(t) && nodeBy.has(t)) { seen.add(t); q.push(nodeBy.get(t)); }
+      }
+      groups.push(g);
+    }
+    for (const g of groups) { g.span = Number.isFinite(g.first) ? g.last - g.first : 0; g.r0 = roomFor(g.nodes.length, 0); }
+    groups.sort((a, b) => b.last - a.last || b.nodes.length - a.nodes.length || (a.key < b.key ? -1 : 1));
+    newest = groups[0]?.last || 0;
+    const oldest = groups.length ? Math.min(...groups.map((g) => g.last || newest)) : newest;
+    spanDays = Math.max(1, (newest - oldest) / DAY);
+    let regroup = 0;
+    for (const g of groups) {
+      const at = g.nodes.filter(isPlaced);
+      // a new trail that joins two groups makes them one: it settles again as a whole
+      g.merged = new Set(at.map((n) => n.gkey).filter(Boolean)).size > 1;
+      if (g.merged) for (const n of g.nodes) if (n.fx != null) { n.fx = n.fy = n.fz = undefined; regroup++; }
+      g.c = at.length ? [0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length) : null;
+      const spread = at.length ? Math.max(...at.map((n) => Math.hypot(n.x - g.c[0], n.y - g.c[1], n.z - g.c[2]))) : 0;
+      // how much room it needs: measured once it's laid out, guessed from its size before
+      g.r = roomFor(g.nodes.length, !g.merged && at.length >= g.nodes.length * 0.7 ? spread : 0);
+    }
+    pack(groups);
+    for (const g of groups) {
+      // a group already laid out moves to its place as a whole, keeping its shape
+      if (g.c) {
+        const d = [0, 1, 2].map((k) => g.anchor[k] - g.c[k]);
+        if (Math.hypot(...d) > 14 || g.merged) for (const n of g.nodes) if (isPlaced(n)) {
+          n.x += d[0]; n.y += d[1]; n.z += d[2];
+          if (n.fx != null) { n.fx = n.x; n.fy = n.y; n.fz = n.z; }
+          if (posCache.has(n.id)) posCache.set(n.id, [n.x, n.y, n.z]);
+        }
+      }
+      // new pages start next to a page they're linked to, or in their group's place
+      for (const n of g.nodes) {
+        if (isPlaced(n)) continue;
+        const nb = (adj.get(n.id) || []).map((t) => nodeBy.get(t)).find(isPlaced);
+        const b = nb ? [nb.x, nb.y, nb.z] : g.anchor, j = nb ? 16 : 8;
+        n.x = b[0] + (Math.random() - 0.5) * j; n.y = b[1] + (Math.random() - 0.5) * j; n.z = b[2] + (Math.random() - 0.5) * j;
+      }
+      for (const n of g.nodes) n.gkey = g.key;
+    }
+    return regroup;
+  }
+  /* Places for the groups: the newest at the middle, each next one at the nearest spot outward where
+     it doesn't touch any other, round the middle and a little wider than high. */
+  function pack(gs) {
+    const GAP = 26, CELL = 140, grid = new Map(), golden = Math.PI * (3 - Math.sqrt(5));
+    const cells = (p, r) => {
+      const out = [], lo = p.map((v) => Math.floor((v - r) / CELL)), hi = p.map((v) => Math.floor((v + r) / CELL));
+      for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) out.push(x + ',' + y + ',' + z);
+      return out;
+    };
+    const free = (p, r) => {
+      for (const k of cells(p, r + GAP)) for (const o of grid.get(k) || []) if (Math.hypot(p[0] - o.anchor[0], p[1] - o.anchor[1], p[2] - o.anchor[2]) < r + o.r + GAP) return false;
+      return true;
+    };
+    const put = (g, p) => { g.anchor = p; for (const k of cells(p, g.r + GAP)) (grid.get(k) || grid.set(k, []).get(k)).push(g); };
+    gs.forEach((g, i) => {
+      if (!i) return put(g, [0, 0, 0]);
+      const step = Math.max(10, g.r * 0.5);
+      // side by side across the screen (as the map first faces you), not in front of or behind each other
+      for (let R = gs[0].r + g.r + GAP; ; R += step) {
+        const K = Math.min(400, Math.max(12, Math.round(2 * Math.PI * R / (g.r + GAP))));
+        for (let k = 0; k < K; k++) {
+          const th = (k / K) * 2 * Math.PI + i * golden;
+          const p = [R * Math.cos(th), R * Math.sin(th) * 0.62, 0];
+          if (free(p, g.r)) return put(g, p);
+        }
+      }
+    });
+  }
+  /* Room a group needs: from its number of pages, or more in coarse steps if it has spread further. Coarse,
+     so the places don't change when a layout is saved and read back a hair different. */
+  const roomFor = (count, spread) => Math.max(count === 1 ? 12 : 8 + 30 * Math.sqrt(count), Math.ceil((spread + 12) / 20) * 20);
+  function repack() {
+    for (const g of groups) {
+      const at = g.nodes.filter(isPlaced); if (!at.length) continue;
+      g.c = [0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length);
+      g.r = roomFor(g.nodes.length, Math.max(...at.map((n) => Math.hypot(n.x - g.c[0], n.y - g.c[1], n.z - g.c[2]))));
+    }
+    pack(groups);
+    for (const g of groups) {
+      if (!g.c) continue;
+      const d = [0, 1, 2].map((k) => g.anchor[k] - g.c[k]);
+      if (Math.hypot(...d) > 0.5) for (const n of g.nodes) if (isPlaced(n)) { n.x += d[0]; n.y += d[1]; n.z += d[2]; }
+    }
+  }
+  /* Holds each group round its place while it settles, moving it as a whole so its shape is its own. */
+  function groupForce() {
+    const f = (alpha) => {
+      for (const g of groups) {
+        if (!g.anchor) continue;
+        let sx = 0, sy = 0, sz = 0, c = 0, loose = 0;
+        for (const n of g.nodes) { if (!isPlaced(n)) continue; sx += n.x; sy += n.y; sz += n.z; c++; if (n.fx == null) loose++; }
+        if (!c || !loose) continue;
+        const k = 0.1 * alpha * (loose / c);
+        const dx = (g.anchor[0] - sx / c) * k, dy = (g.anchor[1] - sy / c) * k, dz = (g.anchor[2] - sz / c) * k;
+        for (const n of g.nodes) if (n.fx == null && isPlaced(n)) { n.vx += dx; n.vy += dy; n.vz += dz; }
+        // a group read over several days: newer pages towards its middle, older ones further out
+        if (g.span > 2 * DAY) {
+          const k2 = 0.04 * alpha;
+          for (const n of g.nodes) {
+            if (n.fx != null || !isPlaced(n)) continue;
+            const ox = n.x - g.anchor[0], oy = n.y - g.anchor[1], oz = n.z - g.anchor[2], d = Math.hypot(ox, oy, oz) || 1;
+            const want = g.r0 * (0.12 + 0.8 * Math.min(1, (g.last - (n.last || g.first)) / g.span));
+            const f = (want - d) / d * k2;
+            n.vx += ox * f; n.vy += oy * f; n.vz += oz * f;
+          }
+        }
+      }
+    };
+    f.initialize = () => {};
+    return f;
+  }
+  /** How clearly a page's group shows: the newest fully, older ones fainter (Settings → fade older). */
+  function groupOp(n) {
+    if (!n || !view.fade || !newest || threads) return 1;
+    // a group from one sitting fades as a whole; in one read over many days, each page by when you saw it
+    const g = n.group, t = g ? Math.max(n.last || g.last, g.last - DAY) : (n.last ?? newest);
+    const age = Math.max(0, newest - t) / DAY;
+    return 1 - view.ageFade * 0.85 * (1 - Math.exp(-age / Math.max(1.5, spanDays / 5)));
+  }
+  /** Fewer pages: the ones you saw longest ago and deepest into their trails go first. */
+  function computeKeep() {
+    keep = null;
+    if (!(view.show < 0.999)) return;
+    const pool = nodes.filter((n) => !vis || vis.has(n.id));
+    const want = Math.max(3, Math.round(pool.length * view.show));
+    if (want >= pool.length) return;
+    const tau = Math.max(1.5, spanDays / 5) * DAY;
+    const score = (n) => Math.exp(-Math.max(0, newest - (n.last || 0)) / tau) - 0.12 * (n.depth || 0);
+    pool.sort((a, b) => score(b) - score(a) || b.visits - a.visits);
+    keep = new Set(pool.slice(0, want).map((n) => n.id));
+  }
+  const isShown = (n) => (!vis || vis.has(n.id)) && (!keep || keep.has(n.id));
+  function shownCount() { const pool = nodes.filter((n) => !vis || vis.has(n.id)); return { shown: keep ? keep.size : pool.length, total: pool.length }; }
+
   function relayout() {
     posCache.clear();
-    for (const n of nodes) { n.fx = n.fy = n.fz = undefined; }
-    settling = true;
+    for (const n of nodes) { n.fx = n.fy = n.fz = undefined; n.x = n.y = n.z = undefined; n.gkey = undefined; }
+    arrange();
+    settling = true; repacked = false;
     G.warmupTicks(Math.round(Math.min(300, 120000 / Math.max(1, nodes.length)))).cooldownTicks(200); G.graphData({ nodes, links });
   }
   function getPositions() {
-    const out = {};
+    const out = { [LAYOUT_V]: [2, 0, 0] };
     for (const n of nodes) if (Number.isFinite(n.x)) out[n.id] = [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, Math.round(n.z * 10) / 10];
     return out;
   }
@@ -541,12 +708,13 @@ export function createGraph(el, handlers) {
   function overviewLabels(boxes, fwd) {
     const tmp = new THREE.Vector3(), cand = [];
     for (const n of nodes) {
-      if ((vis && !vis.has(n.id)) || !Number.isFinite(n.x)) continue;
+      if (!isShown(n) || !Number.isFinite(n.x)) continue;
       tmp.set(n.x, n.y, n.z).sub(cam.position);
       if (tmp.dot(fwd) <= 0) continue;
       const p = G.graph2ScreenCoords(n.x, n.y, n.z);
       if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
-      cand.push({ n, p, prio: n.visits + (shownLast.has(n.id) ? 2.5 : 0) + (n.id === cursor ? 1e6 : 0) });
+      // newer groups' names first; a name already shown stays a while, so names don't flicker
+      cand.push({ n, p, prio: (n.visits + 1) * groupOp(n) ** 1.5 + (shownLast.has(n.id) ? 2.5 : 0) + (n.id === cursor ? 1e6 : 0) });
     }
     cand.sort((a, b) => b.prio - a.prio);
     // a couple of dozen names over the whole map; zoomed in, as many as fit
@@ -567,7 +735,8 @@ export function createGraph(el, handlers) {
         const kind = n.id === cursor ? 'cursor' : 'hub';
         if (o.kind !== kind) { o.kind = kind; o.el.className = 'lbl3d ' + kind; }
         if (o.el.style.display === 'none') o.el.style.display = '';
-        if (o.el.style.opacity) o.el.style.opacity = '';
+        const lo = groupOp(n) < 0.99 ? String(Math.max(0.45, groupOp(n)).toFixed(2)) : '';
+        if (o.el.style.opacity !== lo) o.el.style.opacity = lo;
         o.el.style.transform = `translate(${Math.round(c[0])}px, ${Math.round(c[1])}px)`;
         break;
       }
@@ -613,7 +782,7 @@ export function createGraph(el, handlers) {
   }
   const currentBack = () => tmpB.copy(cam.position).sub(ctl.target).normalize().clone();
   function visiblePoints() {
-    const list = nodes.filter((n) => (!vis || vis.has(n.id)) && Number.isFinite(n.x));
+    const list = nodes.filter((n) => isShown(n) && Number.isFinite(n.x));
     if (list.length < 200) return list.map((n) => new THREE.Vector3(n.x, n.y, n.z));
     // ignore the few far-flung pages so the bulk of the map fills the window
     const q = (arr, f) => arr[Math.floor(f * (arr.length - 1))];
@@ -624,7 +793,11 @@ export function createGraph(el, handlers) {
   /** The whole (visible) history. */
   function fit(animate = true) {
     const pts = visiblePoints(); if (!pts.length) return;
-    moveTo(frame(pts, currentBack(), 0.9), animate ? 2000 : 0, false);
+    // the newest group you can see in the middle, the older ones round it
+    const g = groups.find((x) => x.anchor && x.nodes.some((n) => isShown(n) && isPlaced(n)));
+    let mid = null;
+    if (g) { const at = g.nodes.filter(isPlaced); mid = new THREE.Vector3(...[0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length)); }
+    moveTo(frame(pts, currentBack(), 0.9, mid), animate ? 2000 : 0, false);
   }
   /** The camera for these points: the angle where they spread out best, filling the window. */
   function bestFrame(pts, center) {
@@ -697,6 +870,8 @@ export function createGraph(el, handlers) {
     if ('density' in v || 'fade' in v) { rebudget(); restyle(); }
     if ('ageFade' in v && threads) drawThreads();
     if ('mark' in v) restyle();
+    if ('show' in v) { computeKeep(); rebudget(); restyle(); placeLabels(true); }
+    if ('ageFade' in v || 'fade' in v) { restyle(); placeLabels(true); }
   }
   function neighbourhood(title, hops = 1) {
     const s = new Set([title]); let frontier = [title];
@@ -705,9 +880,10 @@ export function createGraph(el, handlers) {
   }
 
   return {
-    update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView, roleColors,
+    update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView, roleColors, shownCount,
     fit, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood,
     nodeCount: () => nodes.length,
+    look: (t) => { const n = nodeBy.get(t); return n ? { color: nodeColor(n), shown: isShown(n), op: groupOp(n) } : null; },
     isSettling: () => settling,
     hasNode: (t) => nodeBy.has(t),
     screenOf: (t) => { const n = nodeBy.get(t); if (!n || !Number.isFinite(n.x)) return null; const p = G.graph2ScreenCoords(n.x, n.y, n.z); return [p.x, p.y]; },

@@ -12,11 +12,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=1dde48ca76">
+<link rel="stylesheet" href="css/style.css?v=d5e8117956">
 <link rel="stylesheet" href="css/skins.css?v=603ac25061">
 <script src="js/early.js?v=d75d9f19bc"></script>
 <script src="vendor/d3.min.js?v=f2094bbf61"></script>
-<script src="js/app.js?v=17beebb208" defer></script>
+<script src="js/app.js?v=81b9dc6211" defer></script>
 </head>
 <body>
 
@@ -155,12 +155,13 @@
       <p class="hint">Desktop 95 is the default. Hover a card to try a look, click to keep it.</p>
       <div id="skingrid"></div>
       <h4>Map</h4>
-      <div class="setrow"><span>How much to show</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
+      <div class="setrow"><span>Pages on the map</span><span class="hint">recent</span><input type="range" id="setshow" min="0.05" max="1" step="0.05" title="With fewer, the pages you saw longest ago and deepest into their trails go first"><span class="hint">all</span></div>
+      <div class="setrow"><span>Connections drawn</span><span class="hint">calm</span><input type="range" id="density" min="0.3" max="2.5" step="0.1"><span class="hint">detailed</span></div>
       <div class="setrow"><span>Fade connections you haven't used in a while</span><input type="checkbox" id="fade"></div>
       <div class="setrow"><span>On the whole map, colour</span><select id="colourby"><option value="ends">where explorations began and ended</option><option value="reading">pages you read and skimmed</option><option value="none">nothing: all pages alike</option></select></div>
       <div class="setrow"><span>For pages recorded by hand, guess from the time until the next page whether you read or skimmed them</span><input type="checkbox" id="guessread"></div>
       <div class="setrow"><span>A page counts as read after, in total,</span><select id="readafter"><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option></select></div>
-      <div class="setrow"><span>How much older threads fade</span><span class="hint">a little</span><input type="range" id="agefade" min="0" max="1" step="0.05"><span class="hint">a lot</span></div>
+      <div class="setrow"><span>How much older pages and threads fade</span><span class="hint">a little</span><input type="range" id="agefade" min="0" max="1" step="0.05"><span class="hint">a lot</span></div>
       <div class="setrow"><span>Turn the map slowly when you're not using it</span><input type="checkbox" id="rotate"></div>
       <div class="setrow"><span>Arrange the map from scratch</span><button class="btn small" id="relayout">Re-arrange</button></div>
       <h4>Other</h4>
