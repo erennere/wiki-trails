@@ -264,7 +264,8 @@ export function createGraph(el, handlers) {
     // decide the camera first, so strands can be sized in screen pixels for that view. The view fits the
     // pages within three clicks of what you selected; pages further out may run off the edge, faded.
     const framed = threads && threads.on.size > 40 ? near : threads?.on;
-    plan = threads ? bestFrame([...framed].map(posOf).filter(Boolean)) : null;
+    // the page you clicked goes in the middle of the window
+    plan = threads ? bestFrame([...framed].map(posOf).filter(Boolean), spec.anchor ? posOf(spec.anchor) : null) : null;
     unit = unitAt(plan ? plan.d : cam.position.distanceTo(ctl.target));
     restyle();
     drawThreads();
@@ -480,9 +481,6 @@ export function createGraph(el, handlers) {
             push(t, kind, 700 - 65 * d + 90 * th.rec + (last ? 25 : first ? 15 : 0) - 120 * sd + boost, (d <= 1 ? 1 : Math.max(0.45, 1 - 0.12 * (d - 1))) * (1 - 0.3 * sd));
           }));
         }
-      } else {
-        const list = nodes.filter((n) => !vis || vis.has(n.id)).sort((p, q) => q.visits - p.visits);
-        list.slice(0, Math.max(5, Math.min(16, Math.round(list.length / 20)))).forEach((n, i) => wanted.push({ t: n.id, kind: 'hub', prio: 100 - i }));
       }
       if (cursor) wanted.push({ t: cursor, kind: 'cursor', prio: 900 });
       wanted.sort((p, q) => q.prio - p.prio);
@@ -497,6 +495,7 @@ export function createGraph(el, handlers) {
     }
     // greedy: the most important labels first; skip any that would overlap
     const boxes = [], fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+    if (!threads) return overviewLabels(boxes, fwd);
     const tmp = new THREE.Vector3();
     for (const w of wanted) {
       const o = pool.get(w.t), n = nodeBy.get(w.t);
@@ -525,13 +524,57 @@ export function createGraph(el, handlers) {
     }
   }
 
+  /*
+   * Names in the overview come and go with zoom: of the pages on screen, the most visited ones get a
+   * name where there's room. Zoomed out that's the big hubs; zoomed in, nearly every page you can see.
+   */
+  let shownLast = new Set();
+  function overviewLabels(boxes, fwd) {
+    const tmp = new THREE.Vector3(), cand = [];
+    for (const n of nodes) {
+      if ((vis && !vis.has(n.id)) || !Number.isFinite(n.x)) continue;
+      tmp.set(n.x, n.y, n.z).sub(cam.position);
+      if (tmp.dot(fwd) <= 0) continue;
+      const p = G.graph2ScreenCoords(n.x, n.y, n.z);
+      if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
+      cand.push({ n, p, prio: n.visits + (shownLast.has(n.id) ? 2.5 : 0) + (n.id === cursor ? 1e6 : 0) });
+    }
+    cand.sort((a, b) => b.prio - a.prio);
+    // a couple of dozen names over the whole map; zoomed in, as many as fit
+    const room = Math.max(8, Math.round((W * H) / 16000));
+    const budget = Math.min(room, 50, Math.round(22 + 900 / Math.max(cand.length, 30)));
+    const shown = new Set();
+    for (const { n, p } of cand) {
+      if (shown.size >= budget) break;
+      const w = n.lw || (n.lw = 7 * n.id.length + 14), h = 18;
+      // above the dot if there's room, else below, right or left of it
+      for (const [dx, dy] of [[-w / 2, -h - 10], [-w / 2, 10], [12, -h / 2], [-w - 12, -h / 2]]) {
+        const c = [p.x + dx, p.y + dy, p.x + dx + w, p.y + dy + h];
+        if (c[0] < 2 || c[2] > W - 2 || c[1] < 2 || c[3] > H - 2) continue;
+        if (boxes.some((b) => c[0] < b[2] && c[2] > b[0] && c[1] < b[3] && c[3] > b[1])) continue;
+        boxes.push(c); shown.add(n.id);
+        let o = pool.get(n.id);
+        if (!o) { const e = document.createElement('div'); e.textContent = n.id; labelBox.appendChild(e); o = { el: e }; pool.set(n.id, o); }
+        const kind = n.id === cursor ? 'cursor' : 'hub';
+        if (o.kind !== kind) { o.kind = kind; o.el.className = 'lbl3d ' + kind; }
+        if (o.el.style.display === 'none') o.el.style.display = '';
+        if (o.el.style.opacity) o.el.style.opacity = '';
+        o.el.style.transform = `translate(${Math.round(c[0])}px, ${Math.round(c[1])}px)`;
+        break;
+      }
+    }
+    for (const [t, o] of pool) if (!shown.has(t) && o.el.style.display !== 'none') o.el.style.display = 'none';
+    if (pool.size > 300) for (const [t, o] of pool) if (!shown.has(t)) { o.el.remove(); pool.delete(t); }
+    shownLast = shown;
+  }
+
   /* ---------- camera ---------- */
   const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
   /** Where the camera must be, looking along `back`, so these points fill `fill` of the window. */
-  function frame(pts, back, fill) {
+  function frame(pts, back, fill, center) {
     const tv = Math.tan(cam.fov * Math.PI / 360), th = tv * (W / Math.max(1, H));
     const right = new THREE.Vector3().crossVectors(UP, back).normalize(), up = new THREE.Vector3().crossVectors(back, right);
-    const box = new THREE.Box3().setFromPoints(pts), c = box.getCenter(new THREE.Vector3());
+    const box = new THREE.Box3().setFromPoints(pts), c = center ? center.clone() : box.getCenter(new THREE.Vector3());
     const need = () => {
       let m = 60 * scale;
       for (const p of pts) {
@@ -540,7 +583,7 @@ export function createGraph(el, handlers) {
       }
       return m;
     };
-    for (let it = 0; it < 4; it++) {
+    for (let it = 0; it < (center ? 0 : 4); it++) {
       const d = need();
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const p of pts) {
@@ -575,15 +618,15 @@ export function createGraph(el, handlers) {
     moveTo(frame(pts, currentBack(), 0.9), animate ? 2000 : 0, false);
   }
   /** The camera for these points: the angle where they spread out best, filling the window. */
-  function bestFrame(pts) {
+  function bestFrame(pts, center) {
     if (!pts.length) return null;
     const cur = currentBack();
-    let best = frame(pts, cur, 0.8), bestScore = best.d;
+    let best = frame(pts, cur, 0.8, center), bestScore = best.d;
     if (pts.length > 2) {
       for (let yaw = 0; yaw < 360; yaw += 15) for (const pitch of [-40, -20, 0, 20, 40]) {
         const y = yaw * Math.PI / 180, p = pitch * Math.PI / 180;
         const back = new THREE.Vector3(Math.cos(p) * Math.sin(y), Math.sin(p), Math.cos(p) * Math.cos(y));
-        const f = frame(pts, back, 0.8), score = f.d * (1 + 0.45 * (1 - back.dot(cur))); // prefer small turns
+        const f = frame(pts, back, 0.8, center), score = f.d * (1 + 0.45 * (1 - back.dot(cur))); // prefer small turns
         if (score < bestScore) { best = f; bestScore = score; }
       }
     }
