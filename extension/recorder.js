@@ -129,8 +129,15 @@ async function onDwell(m) {
 const SOON = 1, LATER = 10;              // minutes: new pages go out after a minute, reading time can wait
 const BACKOFF = [1, 2, 5, 10, 30, 60];   // after a failure
 let pushing = null;
+let timer = null, timerAt = 0;
 async function schedulePush(minutes) {
-  if (!api.alarms) return;
+  if (!api.alarms) {
+    // browsers without alarms (some on iPhone): a plain timer, while the extension is running
+    const at = Date.now() + minutes * 60e3;
+    if (timer && timerAt <= at + 1000) return;
+    clearTimeout(timer); timerAt = at; timer = setTimeout(() => { timer = null; push(); }, minutes * 60e3);
+    return;
+  }
   const a = await api.alarms.get('push');
   if (a && a.scheduledTime <= Date.now() + minutes * 60e3 + 1000) return; // already due sooner
   api.alarms.create('push', { delayInMinutes: minutes });

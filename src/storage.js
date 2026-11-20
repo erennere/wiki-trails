@@ -121,9 +121,9 @@ export async function pickFile() {
 export async function readFile(file) { return (await readAny(file)).state; }
 /** A Wiki Trails file, or what the Wikipedia app exported. Returns { state, app: views read | 0 }. */
 export async function readAny(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (isAppExport(file.name, bytes)) { const r = await readAppExport(bytes); return { state: validate(r), app: r.views || 0 }; }
-  return { state: validate(JSON.parse(new TextDecoder().decode(bytes))), app: 0 };
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  if (isAppExport(file.name, head)) { const r = await readAppExport(file); return { state: validate(r), app: r.views || 0 }; }
+  return { state: validate(JSON.parse(await file.text())), app: 0 };
 }
 
 /** Merge two histories: trails are unioned by id (the longer copy wins), layouts combined. */
