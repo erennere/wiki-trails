@@ -4,7 +4,7 @@
 
 Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
-Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. You can read them at a glance:
+Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. The tree is made of pages, not clicks: going the same way twice is one line, and a branch splits off only at the page where you went somewhere new. You can read them at a glance:
 
 - **A ring marks where it started and a pin where it ended.** Both stay on top and keep their size at any zoom. When several trails start or end on the same page, their rings or pins sit side by side.
 - **The way it went:** each trail is thin where it started and bold where it ended, with arrowheads along it pointing from start to end.

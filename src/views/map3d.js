@@ -499,7 +499,7 @@ export function createGraph(el, handlers) {
     // where a trail starts (ring) and where each of its branches ends (pin)
     const endsOf = (th) => {
       const c0 = th.chains[0], out = [['start', c0.path[0], c0.dist[0], c0.grp[0], c0.path.length === 1]];
-      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0) out.push(['end', c.path[L], c.dist[L], c.grp[L], false]); }
+      for (const c of th.chains) { const L = c.path.length - 1; if (L > 0 && !c.extra) out.push(['end', c.path[L], c.dist[L], c.grp[L], false]); }
       return out;
     };
     fans = new Map(); const fanIdx = new Map();
@@ -651,7 +651,7 @@ export function createGraph(el, handlers) {
           const boost = pin ? (th.key === pin ? 400 : -400) : 0;
           th.chains.forEach((c, ci) => c.path.forEach((t, k) => {
             if (c.dist[k] > reach && th.key !== pin) return;
-            const d = Math.min(c.dist[k], 9), last = k === c.path.length - 1 && c.path.length > 1, first = ci === 0 && k === 0;
+            const d = Math.min(c.dist[k], 9), last = k === c.path.length - 1 && c.path.length > 1 && !c.extra, first = ci === 0 && k === 0;
             const kind = last ? 'end' : first ? 'start' : 'step';
             const sd = c.side[k] ? 1 : 0;
             push(t, kind, 700 - 65 * d + 90 * th.rec + (last ? 25 : first ? 15 : 0) - 120 * sd + boost, (d <= 1 ? 1 : Math.max(0.45, 1 - 0.12 * (d - 1))) * (1 - 0.3 * sd));

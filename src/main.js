@@ -237,7 +237,7 @@ document.addEventListener('keydown', (e) => {
   const rel = (p) => { if (!p) return null; const r = $('graph').getBoundingClientRect(); return [r.left + p[0], r.top + p[1]]; };
   window.__wikiTrails = { // handy for debugging in the console (and for tests)
     app, graph, still: () => graph.setView({ rotate: false }), settling: () => graph.isSettling(), gstats: () => graph.stats(), drawMs: () => graph.drawMs(),
-    nodeXY: (t) => rel(graph.screenOf(t)), pin: (k) => pinThread(k),
+    nodeXY: (t) => rel(graph.screenOf(t)), pin: (k) => pinThread(k), select: (s) => select(s),
     sync: { now: (k) => syncNow(k), state: () => ({ on: sync.on, state: sync.state, error: sync.error, at: sync.at }) },
     // the same changes the panels make, for tests
     rename: (id, name) => { const t = trailOf(id); if (t) { snapshot(); t.name = name; commit(); } },

@@ -151,87 +151,134 @@ function pathOf(ti, visits) {
   return { path, depths, ids };
 }
 /**
- * A trail as a tree to draw. It's split into chains that cover every page of the trail once: the main
- * one runs from the start through `mainId` and on the way you went last; every other branch is a chain
- * of its own that starts where it forks off, so branches visibly split from one line.
- * Every page also gets its distance (in clicks) from the nearest of `anchors` (0 everywhere if none).
- * Returns { chains: [{ path, ids, depths, dist }], path, ids, depths (of the main chain), ways }.
+ * A trail as a tree to draw, made of pages, not of visits: going the same way twice (A → B → C, later
+ * A → B → C → D) is one line, A → B → C → D, and a branch splits off only at the page where you went
+ * somewhere else. Each page gets one place in the tree: where you first went to it, preferring the ways
+ * on from the selected page over branches off the way here.
+ * It's split into chains that cover the tree once: the main one runs from the start through the
+ * selected page and on the way you went last; every other branch is a chain of its own that starts
+ * where it forks off. A link between two pages that the tree reaches in other ways (you came back to a
+ * page by another route) is a short chain of its own (extra: true), so nothing you did is lost.
+ * Every page also gets its distance in clicks from the selected page along the tree (0 if none).
+ * Returns { chains: [{ path, ids, depths, dist, side, grp, tids, extra? }], groups, path, ids, tids, depths, ways }.
  */
 function treeOf(ti, anchors, mainId) {
-  // clicks away, counted along the trail (opening the same page again is no click)
-  const dist = new Map(), q = [...anchors];
-  for (const id of q) dist.set(id, 0);
-  while (q.length) {
-    const id = q.shift(), v = ti.byId.get(id), d0 = dist.get(id), nb = [...(ti.children.get(id) || [])];
-    if (v?.parent != null) nb.push(v.parent);
-    for (const n of nb) {
-      const d = d0 + (ti.byId.get(n)?.article === v?.article ? 0 : 1);
-      if (dist.has(n) && dist.get(n) <= d) continue;
-      dist.set(n, d);
-      if (d === d0) q.unshift(n); else q.push(n);
+  const visits = ti.trail.visits, byId = ti.byId;
+  const at = (id) => byId.get(id)?.article;
+  const S = anchors.size ? at(mainId) ?? at([...anchors][0]) : null; // the selected page
+  // the way here, as pages: from where the trail began to the selected page, any loop on the way cut out
+  const U = [], vid = new Map();
+  if (S) {
+    for (const v of chainTo(ti, mainId)) {
+      const i = U.indexOf(v.article);
+      if (i >= 0) { for (const x of U.splice(i + 1)) vid.delete(x); } else { U.push(v.article); vid.set(v.article, v.id); }
+      if (v.article === S) break;
     }
+    vid.set(S, mainId);
   }
-  const dOf = (id) => (anchors.size ? dist.get(id) ?? 99 : 0);
-  const main = [...chainTo(ti, mainId), ...continueFrom(ti, mainId).slice(1)];
-  const drawn = new Set(main.map((v) => v.id)), lists = [main];
-  for (let c = 0; c < lists.length; c++) {
-    for (const v of lists[c]) for (const k of ti.children.get(v.id) || []) {
-      if (drawn.has(k)) continue;
-      const on = continueFrom(ti, k);
-      for (const x of on) drawn.add(x.id);
-      lists.push([v, ...on]);
-    }
-  }
-  // the route through the selected page: how you got there, and everything you went on to from it.
-  // The rest (what else you did on the way there) is a side branch, drawn muted.
-  let route = null;
-  if (anchors.size) {
-    route = new Set();
-    for (const id of anchors) {
-      for (const v of chainTo(ti, id)) route.add(v.id);
-      const st = [id];
-      while (st.length) { const x = st.pop(); route.add(x); for (const k of ti.children.get(x) || []) st.push(k); }
-    }
-  }
-  // what each page is to the selected one, for its colour:
-  //  'up'      the way here (the pages before it on the trail, and the page itself)
-  //  'down:id' a way on from here, one per page you went on to, with everything after it
+  // each page's place: the page it hangs from, and what it is to the selected page, for its colour:
+  //  'up'      the way here (the pages before it, and the page itself)
+  //  'down:p'  a way on from here, one per page you went on to (p), with everything after it
   //  'side:n'  a branch off the way here, by where it leaves it (n clicks before the page)
-  const grp = new Map(), ups = new Set();
-  if (anchors.size) {
-    for (const id of anchors) for (const v of chainTo(ti, id)) ups.add(v.id);
-    for (const a of anchors) for (const k of ti.children.get(a) || []) {
-      const st = [k];
-      while (st.length) { const x = st.pop(); if (grp.has(x) || ups.has(x)) continue; grp.set(x, 'down:' + k); for (const y of ti.children.get(x) || []) st.push(y); }
+  //  'all'     nothing selected
+  const par = new Map(), grp = new Map(), seq = new Map(), tOf = new Map();
+  const claim = (page, from, g, v) => { par.set(page, from); grp.set(page, g); vid.set(page, v.id); seq.set(page, seq.size); tOf.set(page, v.t || 0); };
+  if (S) U.forEach((p, i) => { par.set(p, i ? U[i - 1] : null); grp.set(p, 'up'); seq.set(p, seq.size); });
+  else if (ti.root) claim(ti.root.article, null, 'all', ti.root);
+  const groupFrom = (from, page) => {
+    if (!S) return 'all';
+    if (from === S) return 'down:' + page;
+    const i = U.indexOf(from);
+    if (i >= 0) return 'side:' + (U.length - 1 - i);
+    return grp.get(from);
+  };
+  // first everything you went on to from the selected page, then the rest; within each, in the order
+  // you opened the pages. A page reached from one not placed yet waits for the next round.
+  const below = new Set();
+  if (S) for (const v of visits) { const p = v.parent == null ? null : byId.get(v.parent); if (anchors.has(v.id) || (p && below.has(p.id))) below.add(v.id); }
+  for (const phase of S ? [below, null] : [null]) {
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const v of visits) {
+        if (v.parent == null || grp.has(v.article)) continue;
+        if (phase && !phase.has(v.parent)) continue;
+        const from = at(v.parent);
+        if (from === v.article || !grp.has(from)) continue;
+        claim(v.article, from, groupFrom(from, v.article), v); changed = true;
+      }
     }
-    for (const id of ups) grp.set(id, 'up');
-    for (const v of ti.trail.visits) {
-      if (grp.has(v.id)) continue;
-      let a = v;
-      while (a && !ups.has(a.id)) a = a.parent == null ? null : ti.byId.get(a.parent);
-      grp.set(v.id, 'side:' + (a ? dOf(a.id) : 99));
-    }
+  }
+  // pages no way above reaches (a trail joined without a link): trees of their own, off to the side
+  for (const v of visits) if (!grp.has(v.article)) {
+    const from = v.parent != null ? at(v.parent) : null;
+    claim(v.article, from && grp.has(from) && from !== v.article ? from : null, from && grp.has(from) ? groupFrom(from, v.article) : S ? 'side:99' : 'all', v);
+  }
+  // clicks from the selected page along the tree
+  const dist = new Map();
+  const dOf = (p) => {
+    if (!S) return 0;
+    if (dist.has(p)) return dist.get(p);
+    const i = U.indexOf(p);
+    const d = i >= 0 ? U.length - 1 - i : par.get(p) != null ? dOf(par.get(p)) + 1 : 99;
+    dist.set(p, d); return d;
+  };
+  // the tree's branches, each followed on the way you went last (the latest you were anywhere along it)
+  const kids = new Map();
+  for (const [p, f] of par) if (f != null && !(S && U.includes(p))) (kids.get(f) || kids.set(f, []).get(f)).push(p);
+  for (const l of kids.values()) l.sort((x, y) => seq.get(x) - seq.get(y));
+  const latest = new Map();
+  const late = (p) => {
+    if (latest.has(p)) return latest.get(p);
+    let t = tOf.get(p) || 0;
+    for (const k of kids.get(p) || []) t = Math.max(t, late(k));
+    latest.set(p, t); return t;
+  };
+  const goOn = (p) => { const out = [p]; let x = p; for (;;) { const ks = (kids.get(x) || []).filter((k) => !inChain.has(k)); if (!ks.length) break; x = ks.reduce((a, b) => (late(b) >= late(a) ? b : a)); out.push(x); inChain.add(x); } return out; };
+  const inChain = new Set();
+  const roots = [...par].filter(([p, f]) => f == null).map(([p]) => p);
+  const lists = [];
+  const start = S ? U[0] : roots[0];
+  if (start != null) {
+    let main;
+    if (S) { U.forEach((p) => inChain.add(p)); main = [...U.slice(0, -1), ...goOn(S)]; } else { inChain.add(start); main = goOn(start); }
+    lists.push(main);
+  }
+  for (const r of roots) if (!inChain.has(r)) { inChain.add(r); lists.push(goOn(r)); }
+  for (let c = 0; c < lists.length; c++) for (const p of lists[c]) for (const k of kids.get(p) || []) {
+    if (inChain.has(k)) continue;
+    inChain.add(k); lists.push([p, ...goOn(k)]);
+  }
+  // links the tree doesn't have: another way you came to a page
+  const pk = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a), have = new Set();
+  for (const l of lists) for (let k = 1; k < l.length; k++) have.add(pk(l[k - 1], l[k]));
+  const extra = [];
+  for (const v of visits) {
+    const from = v.parent != null ? at(v.parent) : null;
+    if (!from || from === v.article || have.has(pk(from, v.article))) continue;
+    have.add(pk(from, v.article)); extra.push([from, v.article]);
   }
   // the order colours are handed out in: ways on from here as you took them, then branches off the way
   // here, nearest first
-  const firstT = new Map();
-  for (const v of ti.trail.visits) { const g = grp.get(v.id); if (g && !firstT.has(g)) firstT.set(g, v.t || 0); }
-  const groups = [...firstT.keys()].filter((g) => g !== 'up').sort((a, b) => {
+  const groups = [...new Set([...grp.keys()].sort((x, y) => seq.get(x) - seq.get(y)).map((p) => grp.get(p)))].filter((g) => g !== 'up' && g !== 'all').sort((a, b) => {
     const [ka, na] = a.split(':'), [kb, nb] = b.split(':');
     if (ka !== kb) return ka === 'down' ? -1 : 1;
-    return ka === 'down' ? firstT.get(a) - firstT.get(b) : +na - +nb;
+    return ka === 'down' ? 0 : +na - +nb;
   });
-  const real = (id) => ti.byId.get(id); // a joined trail keeps where each visit really is
-  const chains = lists.map((vs) => {
-    const c = pathOf(ti, vs);
-    c.dist = c.ids.map(dOf);
-    c.side = c.ids.map((id) => (route ? !route.has(id) : false));
-    c.grp = c.ids.map((id) => grp.get(id) || 'all');
-    c.tids = c.ids.map((id) => real(id)?._t || ti.trail.id);
-    c.ids = c.ids.map((id) => real(id)?._v || id);
+  const real = (id) => byId.get(id); // a joined trail keeps where each visit really is
+  const mk = (path, isExtra) => {
+    const ids = path.map((p) => vid.get(p));
+    const c = { path, depths: ids.map((id) => ti.depth.get(id)?.depth || null), dist: path.map(dOf) };
+    c.grp = path.map((p) => grp.get(p) || 'all');
+    c.side = c.grp.map((g) => g.startsWith('side:'));
+    c.tids = ids.map((id) => real(id)?._t || ti.trail.id);
+    c.ids = ids.map((id) => real(id)?._v || id);
+    if (isExtra) c.extra = true;
     return c;
-  }).filter((c, i) => i === 0 || c.path.length > 1);
-  return { chains, groups, path: chains[0].path, ids: chains[0].ids, tids: chains[0].tids, depths: chains[0].depths, ways: chains.length, sides: [] };
+  };
+  const chains = lists.map((l) => mk(l)).filter((c, i) => i === 0 || c.path.length > 1);
+  const ways = chains.length;
+  for (const e of extra) chains.push(mk(e, true));
+  return { chains, groups, path: chains[0].path, ids: chains[0].ids, tids: chains[0].tids, depths: chains[0].depths, ways, sides: [] };
 }
 
 /** Several trails that belong together (see explorations() in model.js), as one trail to draw. */
