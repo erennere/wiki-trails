@@ -18,31 +18,66 @@ export function emptyState() {
 }
 
 /** Turn a Wikipedia URL or a typed title into a canonical article title. */
-export function normTitle(input) {
+export function normTitle(input, site = 'wikipedia') {
   let s = (input || '').trim();
   const m = s.match(/\/wiki\/([^#?\s]+)/);
   if (m) { try { s = decodeURIComponent(m[1]); } catch { s = m[1]; } }
   s = s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-  return s ? s[0].toUpperCase() + s.slice(1) : '';
+  // Wikipedia titles start with a capital; on Wiktionary "water" and "Water" are different entries
+  return s ? (site === 'wiktionary' ? s : s[0].toUpperCase() + s.slice(1)) : '';
 }
 
-/** Language code from a URL like https://de.wikipedia.org/wiki/..., or null. */
+/** The sites trails are kept for. A visit says which one it's on; no site means Wikipedia. */
+export const SITES = ['wikipedia', 'wiktionary'];
+export const siteOfVisit = (v) => v.site || 'wikipedia';
+
+/** Language code from a URL like https://de.wikipedia.org/wiki/... or https://tr.wiktionary.org/..., or null. */
 export function langFromUrl(input) {
-  const m = (input || '').match(/\/\/([a-z-]+)\.(?:m\.)?wikipedia\.org\//i);
+  const m = (input || '').match(/\/\/([a-z-]+)\.(?:m\.)?(?:wikipedia|wiktionary)\.org\//i);
   return m ? m[1].toLowerCase() : null;
+}
+/** 'wiktionary' for a Wiktionary URL, 'wikipedia' for a Wikipedia one, else null. */
+export function siteFromUrl(input) {
+  const m = (input || '').match(/\/\/[a-z-]+\.(?:m\.)?(wikipedia|wiktionary)\.org\//i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * The trails as seen on one site: only its pages, each hanging from the nearest page before it on the
+ * same site (a Wiktionary entry you looked up in the middle of a Wikipedia trail is skipped over, and
+ * the trail goes on). Trails with no page on the site are left out. Ids stay the same.
+ */
+export function siteView(state, site) {
+  const any = state.trails.some((t) => t.visits.some((v) => v.site));
+  if (site === 'wikipedia' && !any) return state;
+  const trails = [];
+  for (const t of state.trails) {
+    const byId = new Map(t.visits.map((v) => [v.id, v]));
+    const kept = new Set(), visits = [];
+    for (const v of t.visits) {
+      if (siteOfVisit(v) !== site) continue;
+      let p = v.parent;
+      while (p != null && !kept.has(p)) p = byId.get(p)?.parent ?? null;
+      kept.add(v.id);
+      visits.push(p === v.parent ? v : { ...v, parent: p });
+    }
+    if (visits.length) trails.push(visits.length === t.visits.length ? t : { ...t, visits });
+  }
+  return { ...state, trails };
 }
 
 export function validate(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.trails)) throw new Error('Not a Wiki Trails file');
   const s = { version: 2, lang: typeof raw.lang === 'string' ? raw.lang : 'en', trails: [] };
   if (raw.layout && typeof raw.layout === 'object') s.layout = raw.layout;
+  if (raw.layoutWiktionary && typeof raw.layoutWiktionary === 'object') s.layoutWiktionary = raw.layoutWiktionary;
   if (raw.example) s.example = String(raw.example); // loaded from File → Examples, so not your own history
   for (const t of raw.trails) {
     if (!t || !Array.isArray(t.visits)) continue;
     const ids = new Set();
     const visits = [];
     for (const v of t.visits) {
-      const article = normTitle(v?.article);
+      const article = normTitle(v?.article, v?.site);
       if (!article || !v.id || ids.has(v.id)) continue;
       if (v.parent != null && !ids.has(v.parent)) continue; // parents must come first
       ids.add(v.id);
@@ -55,6 +90,7 @@ export function validate(raw) {
         ...(Number.isFinite(v.scroll) ? { scroll: Math.max(0, Math.min(1, v.scroll)) } : {}),
         ...(v.src === 'auto' ? { src: 'auto' } : {}),
         ...(typeof v.lang === 'string' && /^[a-z-]{2,12}$/.test(v.lang) ? { lang: v.lang } : {}),
+        ...(v.site === 'wiktionary' ? { site: 'wiktionary' } : {}),
       });
     }
     if (!visits.length) continue;
@@ -142,7 +178,8 @@ export function derive(state, range = null) {
       const t = visitTime(tr, v);
       if (!inRange(t)) continue;
       const a = art(v.article);
-      a.visits++; a.trails.add(tr.id); if (t > a.last) a.last = t;
+      a.visits++; a.trails.add(tr.id); if (t > a.last) { a.last = t; if (v.lang) a.lang = v.lang; } // the language you last read it in
+      if (v.lang && !a.lang) a.lang = v.lang;
       if (v.parent == null) { a.starts.add(tr.id); continue; }
       const from = byId.get(v.parent).article, to = v.article;
       if (from === to) continue;

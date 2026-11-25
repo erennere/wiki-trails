@@ -23,14 +23,14 @@ export function initTimeline() {
   function render() {
     const svg = d3.select('#tlsvg'), node = svg.node(), w = node.clientWidth || 600, h = node.clientHeight || 38;
     svg.selectAll('*').remove();
-    const span = timeSpan(app.state);
+    const span = timeSpan(app.V);
     $('timeline').hidden = !span;
     if (!span) return;
     const days = (span[1] - span[0]) / 864e5;
     const binMs = days > 400 ? 7 * 864e5 : days > 3 ? 864e5 : 36e5; // weeks, days, or hours in the first days
     const t0 = span[0] - binMs / 2, t1 = Math.max(span[1], span[0] + 12 * binMs);
     const bins = new Map();
-    for (const tr of app.state.trails) for (const v of tr.visits) {
+    for (const tr of app.V.trails) for (const v of tr.visits) {
       if (v.parent == null) continue;
       const b = Math.floor((visitTime(tr, v) - t0) / binMs);
       bins.set(b, (bins.get(b) || 0) + 1);
@@ -61,7 +61,7 @@ export function initTimeline() {
   const pad = (n) => String(n).padStart(2, '0');
   const day = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   function openCustom() {
-    const span = timeSpan(app.state), pop = $('rangepop');
+    const span = timeSpan(app.V), pop = $('rangepop');
     const [a, b] = app.range || span || [Date.now() - 30 * 864e5, Date.now()];
     $('rfrom').value = day(a); $('rto').value = day(b);
     if (span) { for (const id of ['rfrom', 'rto']) { $(id).min = day(span[0]); $(id).max = day(span[1]); } }
@@ -89,7 +89,7 @@ export function initTimeline() {
   function preset(name) {
     if (name === 'custom') { $('rangepop').hidden ? openCustom() : closeCustom(); return; }
     closeCustom();
-    const span = timeSpan(app.state);
+    const span = timeSpan(app.V);
     if (name === 'all' || !span) setRange(null, 'all');
     else setRange([Math.max(span[0], span[1] - (+name) * 864e5), span[1] + 1], name);
     render();

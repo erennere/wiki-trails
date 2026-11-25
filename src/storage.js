@@ -136,6 +136,6 @@ export function merge(a, b) {
     else if (t.visits.length > mine.visits.length) byId.set(t.id, t);
   }
   const trails = [...byId.values()].sort((p, q) => Date.parse(p.created) - Date.parse(q.created));
-  return { state: { ...a, trails, layout: { ...(b.layout || {}), ...(a.layout || {}) } }, added };
+  return { state: { ...a, trails, layout: { ...(b.layout || {}), ...(a.layout || {}) }, layoutWiktionary: { ...(b.layoutWiktionary || {}), ...(a.layoutWiktionary || {}) } }, added };
 }
 export { uid };

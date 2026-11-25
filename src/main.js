@@ -1,5 +1,5 @@
 // Wiki Trails: wiring. The map and the panels only talk through the shared state in app.js.
-import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading, ownHistory } from './app.js';
+import { app, on, commit, select, setHover, setPeriod, refreshThreads, pinThread, setSetting, cursorVisit, saveSettings, undo, trailOf, snapshot, markReading, ownHistory, layoutKey, setSite, siteCounts } from './app.js';
 import { loadLocal, loadPublished, saveLocal, isExample } from './storage.js';
 import { emptyState, uid } from './model.js';
 import { createGraph } from './views/map3d.js';
@@ -53,7 +53,7 @@ const graph = createGraph($('graph'), {
   onThreadHover: (h) => { threadHover = h; showTip(); },
   onBackground: () => (app.pin ? pinThread(null) : select(null)),
   onZoomedOut: () => select(null),
-  onSettled: () => { app.state.layout = graph.getPositions(); if (!app.published) saveLocal(app.state); },
+  onSettled: () => { app.state[layoutKey()] = graph.getPositions(); if (!app.published) saveLocal(app.state); },
   onResize: () => { clearTimeout(rz); rz = setTimeout(() => (app.threads ? showThreads() : graph.fit(false)), 160); },
 });
 const fx = createEffects($('fx'));
@@ -165,10 +165,10 @@ $('zoomout').onclick = () => graph.zoomBy(1 / 1.5);
 $('fit').onclick = () => (app.threads ? graph.frameThreads() : graph.fit(true));
 
 on('data', (opts = {}) => {
-  const first = graph.update(app.D, app.DV, app.state.layout);
+  const first = graph.update(app.D, app.DV, app.state[layoutKey()]);
   graph.setCursor(cursorVisit()?.article || null);
   showThreads(false);
-  $('empty').hidden = app.state.trails.length > 0;
+  $('empty').hidden = app.V.trails.length > 0;
   if (first || opts.fresh) fitWhenSettled();
   else if (opts.added) {
     // keep the page you just added in view
@@ -208,6 +208,26 @@ function setViewMode(v) {
   if (v === 'stats') stats.render();
 }
 $('viewseg').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) setViewMode(b.dataset.view); });
+
+/* ---------- Wikipedia or Wiktionary ---------- */
+function renderSite() {
+  const n = siteCounts(), any = app.state.trails.length > 0;
+  document.querySelectorAll('#siteseg [data-site]').forEach((b) => {
+    const on = b.dataset.site === app.site;
+    b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
+    b.title = `${n[b.dataset.site]} ${n[b.dataset.site] === 1 ? 'page' : 'pages'} opened on ${b.textContent}`;
+  });
+  const wikt = app.site === 'wiktionary';
+  $('empty-h').textContent = wikt && any ? 'No Wiktionary pages yet' : 'Your map is empty';
+  $('empty-p').innerHTML = wikt
+    ? 'The Wiktionary entries you read show up here, as trails like on Wikipedia. The extension records them; you can also paste one in <b>Record</b> on the left.'
+    : 'Paste the first Wikipedia page of a trail in <b>Record</b> on the left, or try an example.';
+  document.querySelector('#empty .btns').hidden = wikt;
+}
+$('siteseg').addEventListener('click', (e) => { const b = e.target.closest('[data-site]'); if (b) setSite(b.dataset.site); });
+on('site', () => { graph.reset(); renderSite(); });
+on('data', renderSite);
+renderSite();
 document.documentElement.dataset.view = 'map';
 initSearch();
 initTimeline();

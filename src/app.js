@@ -1,7 +1,7 @@
 // The app's shared state and the few actions that change it.
 // Panels and views never talk to each other directly: they call these
 // actions and listen for events ('data', 'select', 'hover', 'cursor', 'range', 'threads', 'pin', 'skin', 'settings', 'dirty').
-import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, continueFrom, sideTrips, setReadingRule } from './model.js';
+import { derive, emptyState, visitTime, timeSpan, threadOf, chainTo, continueFrom, sideTrips, setReadingRule, siteView, SITES } from './model.js';
 import { saveLocal } from './storage.js';
 import { orderVisits } from './sync-core.js';
 
@@ -25,7 +25,18 @@ export const app = {
   published: null,  // whose published history you're looking at (data/trails.json), until you start your own
 };
 setReadingRule({ guess: app.settings.guessReading, readAfter: app.settings.readAfter });
-app.D = app.DV = derive(app.state);
+// which site's trails you're looking at: Wikipedia or Wiktionary. app.V is the history as seen there.
+app.site = SITES.includes(app.settings.site) ? app.settings.site : 'wikipedia';
+app.V = siteView(app.state, app.site);
+app.D = app.DV = derive(app.V);
+/** Where the map's layout for a site is kept in the history. */
+export const layoutKey = (site = app.site) => (site === 'wiktionary' ? 'layoutWiktionary' : 'layout');
+/** How many pages you've opened on each site. */
+export function siteCounts() {
+  const n = { wikipedia: 0, wiktionary: 0 };
+  for (const t of app.state.trails) for (const v of t.visits) n[v.site || 'wikipedia']++;
+  return n;
+}
 
 /* ---------- events ---------- */
 const listeners = {};
@@ -45,8 +56,18 @@ export function inRange(tr) {
 
 /* ---------- data changes ---------- */
 function rederive() {
-  app.D = derive(app.state); app.DV = app.range ? derive(app.state, app.range) : app.D;
-  const sp = timeSpan(app.state); app.span = sp ? sp[1] - sp[0] : 0;
+  app.V = siteView(app.state, app.site);
+  app.D = derive(app.V); app.DV = app.range ? derive(app.V, app.range) : app.D;
+  const sp = timeSpan(app.V); app.span = sp ? sp[1] - sp[0] : 0;
+}
+/** Look at the trails on another site (Wikipedia or Wiktionary). */
+export function setSite(site) {
+  if (!SITES.includes(site) || site === app.site) return;
+  app.site = site; app.settings.site = site; saveSettings();
+  app.sel = null; app.hover = null; app.pin = null; app.period = null; app.threads = null;
+  rederive();
+  emit('site');
+  emit('data', { fresh: true });
 }
 
 /** Call after changing app.state. */
@@ -67,7 +88,7 @@ export function markReading(trailId, visitId, depth) {
   const v = app.D.trailIndex.get(trailId)?.byId.get(visitId); if (!v) return;
   snapshot();
   // how you read a page is about the page, so the mark goes on every time you opened it
-  for (const tr of app.state.trails) for (const x of tr.visits) if (x.article === v.article) { if (depth) x.read = depth; else delete x.read; }
+  for (const tr of app.state.trails) for (const x of tr.visits) if (x.article === v.article && (x.site || 'wikipedia') === (v.site || 'wikipedia')) { if (depth) x.read = depth; else delete x.read; }
   commit();
 }
 /** After changing how reading is guessed. */
@@ -89,7 +110,7 @@ export const canUndo = () => undoStack.length > 0;
 export function undo() {
   const s = undoStack.pop(); if (!s) return false;
   const o = JSON.parse(s);
-  app.state = { ...o.state, layout: app.state.layout };
+  app.state = { ...o.state, layout: app.state.layout, layoutWiktionary: app.state.layoutWiktionary };
   app.cur = o.cur;
   commit();
   return true;
@@ -128,7 +149,7 @@ export function setCursor(cur) { app.cur = cur; emit('cursor'); }
 
 export function setRange(range, name = range ? 'custom' : 'all') {
   app.range = range; app.rangeName = name;
-  app.DV = range ? derive(app.state, range) : app.D;
+  app.DV = range ? derive(app.V, range) : app.D;
   app.threads = threadsFor(app.sel); keepPin();
   emit('range');
 }

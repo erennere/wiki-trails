@@ -17,7 +17,7 @@ export function initDetails({ record, loadTest }) {
   /* ---------- nothing selected ---------- */
   function overview() {
     $('dtitle').textContent = 'Overview';
-    if (!app.state.trails.length) {
+    if (!app.V.trails.length) {
       box.innerHTML = `<h3>Welcome to Wiki Trails</h3>
         <p>Keep a map of how you wander through Wikipedia.</p>
         <section><h4>How it works</h4>
@@ -32,10 +32,10 @@ export function initDetails({ record, loadTest }) {
       return;
     }
     const DV = app.DV, clicks = [...DV.links.values()].reduce((n, l) => n + l.total, 0);
-    const trails = [...app.state.trails].filter((t) => !app.range || DV.articles.has(t.visits[0].article)).reverse();
+    const trails = [...app.V.trails].filter((t) => !app.range || DV.articles.has(t.visits[0].article)).reverse();
     const top = [...DV.articles.values()].sort((p, q) => q.visits - p.visits).slice(0, 8);
-    const span = timeSpan(app.state);
-    box.innerHTML = `<div class="stats"><div><b>${DV.articles.size}</b><span>articles</span></div><div><b>${clicks}</b><span>clicks</span></div><div><b>${app.range ? new Set([...DV.articles.values()].flatMap((a) => [...a.trails])).size : app.state.trails.length}</b><span>trails</span></div></div>
+    const span = timeSpan(app.V);
+    box.innerHTML = `<div class="stats"><div><b>${DV.articles.size}</b><span>articles</span></div><div><b>${clicks}</b><span>clicks</span></div><div><b>${app.range ? new Set([...DV.articles.values()].flatMap((a) => [...a.trails])).size : app.V.trails.length}</b><span>trails</span></div></div>
       <p class="explain">${app.range ? `Showing ${fmtDate(app.range[0])} – ${fmtDate(app.range[1])}.` : span ? `From ${fmtDate(span[0])} to ${fmtDate(span[1])}.` : ''} Click any article on the map to see every trail that went through it.</p>
       <section><h4>Most visited</h4>${top.map((a) => `<div class="lrow" data-a="${esc(a.title)}"><span class="l">${esc(a.title)}</span><span class="c">${a.visits}× · ${fmtAgo(a.last)}</span></div>`).join('')}</section>
       <section><h4>Latest trails</h4>${trails.slice(0, 6).map((t) => `<div class="lrow" data-t="${t.id}"><span class="l">${esc(trailLabel(t))}</span><span class="c">${fmtDate(t.created, false)}</span></div>`).join('')}</section>`;
@@ -71,7 +71,7 @@ export function initDetails({ record, loadTest }) {
       ${a.reading?.depth || a.reading?.secs != null ? `<div class="readsum">${readMark(a.reading, { button: false })} ${a.reading.depth === 'read' ? 'Read' : a.reading.depth === 'skim' ? 'Skimmed' : 'Not known'}${a.reading.secs != null ? ` <span class="sep">·</span> ${a.reading.measured ? `${dur(a.reading.secs)} on it in total` : `about ${dur(a.reading.secs)} before the next page (guessed)`}` : ''}${a.reading.depth && !a.reading.guessed ? ' <span class="sep">·</span> you marked it' : ''}</div>` : ''}
       <div class="actions">
         <button class="btn small" id="d-start">Start a trail here</button>
-        <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on Wikipedia ↗</a>
+        <a class="btn small" href="${wikiUrl(title)}" target="_blank" rel="noopener">Open on ${app.site === 'wiktionary' ? 'Wiktionary' : 'Wikipedia'} ↗</a>
       </div>
       <section><h4>You came from</h4>${list(inc)}</section>
       <section><h4>You went on to</h4>${list(out)}</section>`;

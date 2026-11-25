@@ -12,7 +12,7 @@ export function initSearch() {
     if (!q) { box.hidden = true; items = []; return; }
     const arts = [...app.D.articles.values()].filter((a) => a.title.toLowerCase().includes(q))
       .sort((p, q2) => (p.title.toLowerCase().startsWith(q) ? 0 : 1) - (q2.title.toLowerCase().startsWith(q) ? 0 : 1) || q2.visits - p.visits).slice(0, 7);
-    const trails = [...app.state.trails].reverse().filter((t) => trailLabel(t).toLowerCase().includes(q)).slice(0, 5);
+    const trails = [...app.V.trails].reverse().filter((t) => trailLabel(t).toLowerCase().includes(q)).slice(0, 5);
     items = [...arts.map((a) => ({ kind: 'article', id: a.title })), ...trails.map((t) => ({ kind: 'trail', id: t.id }))];
     active = 0;
     let i = 0;

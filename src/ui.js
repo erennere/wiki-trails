@@ -19,7 +19,8 @@ export function fmtAgo(t) {
   const days = Math.round(d / 864e5);
   return days < 60 ? plural(days, 'day') + ' ago' : fmtDate(t);
 }
-export const wikiUrl = (title) => `https://${app.state.lang || 'en'}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+/** A page's address: on the site you're looking at, in the language you last read it in. */
+export const wikiUrl = (title) => `https://${app.D?.articles.get(title)?.lang || app.state.lang || 'en'}.${app.site || 'wikipedia'}.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
 
 let toastT;
 /** A short message at the bottom of the screen. */

@@ -2,7 +2,7 @@
 
 **[Open it: erennere.github.io/wiki-trails](https://erennere.github.io/wiki-trails/)**, showing my own trails until you start yours.
 
-Map how you wander through Wikipedia. Each trail is the page you started on, then each link you clicked. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
+Map how you wander through Wikipedia and Wiktionary. Each trail is the page you started on, then each link you clicked. **Wikipedia | Wiktionary** at the top switches between the two; each has its own map. The [browser extension](#the-browser-extension) records them while you read, in Edge, Chrome and Safari, and [sync](#sync-between-your-devices) keeps one history across all your browsers and devices; you can also record trails by hand. Wiki Trails draws all your trails as one brain-like network in 3D. Connections you use often are brighter and thicker, the way well-used pathways between neurons strengthen.
 
 Click any article and every trail that went through it lights up whole, as a tree: one line up to where you went back and clicked something else, then splitting into branches. The tree is made of pages, not clicks: going the same way twice is one line, and a branch splits off only at the page where you went somewhere new. You can read them at a glance:
 
@@ -154,16 +154,17 @@ The extension records your trails while you read Wikipedia, with nothing to type
 
 ### What it records
 
-- **Every Wikipedia article you open**, in any language. Talk pages, search results, edit views and the Main Page are not recorded.
+- **Every Wikipedia article and Wiktionary entry you open**, in any language (also on the mobile sites and in Chinese or Serbian script variants), and on Wiktionary also reconstructions and appendices. Talk pages, search results, edit views and the main page (whatever it's called in that language) are not recorded. Each page opens in the language you read it in.
+- **Between Wikipedia and Wiktionary, or between languages,** a link you click continues the trail too. In the Wikipedia view a Wiktionary look-up in the middle of a trail is skipped over, and the other way round.
 - **A link you click** becomes the next step of the trail you're on, also when you open it in a new tab.
 - **Back and forward** add no step. The next link you click branches from the page you went back to, as in the app.
 - **A new trail starts** when you arrive from anywhere else: a search engine, a bookmark, an address you typed, Wikipedia's search box or its Main Page.
 - **Reloading** a page adds nothing.
 - **How much time you spent on each page**, and how far you scrolled. Time only counts while the tab is showing, the browser window is the one you're using, and you moved the mouse, scrolled or typed in the last 45 seconds, so a page left open in the background doesn't count. A page counts as read once you spent at least a minute on it **in total**, over every time you opened it; you can change that under Settings → *A page counts as read after*, and you can still mark any page yourself.
 
-To pause, click the toolbar button and untick *Record the Wikipedia pages I open*, or click *Pause* in the Record panel. While it's paused, the button shows "off".
+To pause, click the toolbar button and untick *Record the Wikipedia and Wiktionary pages I open*, or click *Pause* in the Record panel. While it's paused, the button shows "off".
 
-**Privacy.** The extension runs on Wikipedia article pages and on the Wiki Trails site, nowhere else. It sends what it records only to your own GitHub repository. The app loads its fonts from Google Fonts; without a connection it uses your system's fonts.
+**Privacy.** The extension runs on Wikipedia and Wiktionary pages and on the Wiki Trails site, nowhere else. It sends what it records only to your own GitHub repository. The app loads its fonts from Google Fonts; without a connection it uses your system's fonts.
 
 **History from the first version.** The first version of the extension kept its own copy of the app and history in the browser. The new version finds that history and adds it to your repository once you connect.
 

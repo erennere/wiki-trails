@@ -57,6 +57,10 @@ async function emitVisit(trailId, visit) {
 }
 
 /* ---------- where does a page belong? ---------- */
+// pages are told apart by site as well as title ("Android" on Wiktionary isn't the Wikipedia article);
+// Wikipedia keys stay the plain title, as they were before Wiktionary
+const K = (site, title) => (site === 'wiktionary' ? '\u0001wikt:' + title : title);
+const siteField = (site) => (site === 'wiktionary' ? { site } : {});
 const latest = (pred) => { for (let i = S.recent.length - 1; i >= 0; i--) if (pred(S.recent[i])) return S.recent[i]; return null; };
 function place(tabId, openerTabId, from, now) {
   const tab = S.tabs[tabId], opener = openerTabId != null ? S.tabs[openerTabId] : null;
@@ -69,48 +73,54 @@ function place(tabId, openerTabId, from, now) {
 
 async function onOpen(m, tabId, openerTabId) {
   const now = m.t || Date.now();
+  const key = K(m.site, m.title), fkey = m.from ? K(m.fromSite || m.site, m.from) : null;
   prune(now);
   const tab = S.tabs[tabId];
-  const here = (trailId, visitId, article) => { S.tabs[tabId] = { trailId, visitId, article }; S.docs[m.doc] = { trailId, visitId, tab: tabId, t: now }; };
+  const here = (trailId, visitId, article) => { S.tabs[tabId] = { trailId, visitId, article, site: m.site || 'wikipedia', lang: m.lang }; S.docs[m.doc] = { trailId, visitId, tab: tabId, t: now }; };
   // reloading, or landing again on the page you're on
-  if (tab && tab.article === m.title && (m.nav === 'reload' || m.nav === 'navigate')) return here(tab.trailId, tab.visitId, m.title);
+  if (tab && tab.article === key && (m.nav === 'reload' || m.nav === 'navigate')) return here(tab.trailId, tab.visitId, key);
   // back or forward: go to that page's step in this tab's trail
   if (m.nav === 'back_forward' && tab) {
-    const v = latest((x) => x.trailId === tab.trailId && x.article === m.title);
-    if (v) return here(v.trailId, v.visitId, m.title);
+    const v = latest((x) => x.trailId === tab.trailId && x.article === key);
+    if (v) return here(v.trailId, v.visitId, key);
   }
   // not you opening a page: the browser reloading tabs it had open (after a restart, or a tab it had
   // put to sleep), or a reload or back/forward in a tab we know nothing about. Nothing is recorded; if
   // the page was recorded recently, time you now spend on it counts there, and links you click go on
   // from it.
   if (m.restored || (!tab && (m.nav === 'reload' || m.nav === 'back_forward'))) {
-    const v = latest((x) => x.article === m.title);
-    if (v) here(v.trailId, v.visitId, m.title);
+    const v = latest((x) => x.article === key);
+    if (v) here(v.trailId, v.visitId, key);
     return;
   }
   if (!S.on) return;
   let trailId, parent = null;
-  const at = m.from ? place(tabId, openerTabId, m.from, now) : null;
+  let at = fkey ? place(tabId, openerTabId, fkey, now) : null;
+  if (!at && m.via) {
+    // from another site or language: the page open in this tab, or in the tab the link came from
+    const c = [tab, openerTabId != null ? S.tabs[openerTabId] : null].find((x) => x && (x.site || 'wikipedia') === m.via.site && x.lang === m.via.lang);
+    if (c) at = { trailId: c.trailId, visitId: c.visitId };
+  }
   if (at) ({ trailId, visitId: parent } = at);
   else if (m.from && !m.fromNs) {
     {
       // you clicked from a page that wasn't recorded (say, before you turned recording on): start there
       trailId = uid();
-      const root = { id: uid(), article: m.from, parent: null, t: now - 1000, lang: m.lang, src: 'auto' };
+      const root = { id: uid(), article: m.from, parent: null, t: now - 1000, lang: m.fromLang || m.lang, src: 'auto', ...siteField(m.fromSite || m.site) };
       await emitVisit(trailId, root);
-      S.recent.push({ trailId, visitId: root.id, article: m.from, t: root.t });
+      S.recent.push({ trailId, visitId: root.id, article: fkey, t: root.t });
       parent = root.id;
     }
   } else trailId = uid(); // came from search, a search engine, a bookmark…: a new trail
-  const visit = { id: uid(), article: m.title, parent, t: now, lang: m.lang, src: 'auto' };
+  const visit = { id: uid(), article: m.title, parent, t: now, lang: m.lang, src: 'auto', ...siteField(m.site) };
   await emitVisit(trailId, visit);
-  S.recent.push({ trailId, visitId: visit.id, article: m.title, t: now });
-  here(trailId, visit.id, m.title);
+  S.recent.push({ trailId, visitId: visit.id, article: key, t: now });
+  here(trailId, visit.id, key);
 }
 
 function onShown(m, tabId) {
   const d = S.docs[m.doc];
-  if (d) S.tabs[tabId] = { trailId: d.trailId, visitId: d.visitId, article: m.title };
+  if (d) S.tabs[tabId] = { trailId: d.trailId, visitId: d.visitId, article: K(m.site, m.title) };
 }
 
 async function onDwell(m) {

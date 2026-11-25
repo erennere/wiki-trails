@@ -1,6 +1,6 @@
 // Record: the trail you're building, as a numbered list of steps, plus one input for the next page.
-import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading, ownHistory } from '../app.js';
-import { uid, normTitle, langFromUrl, trailShape } from '../model.js';
+import { app, on, commit, snapshot, setCursor, trailOf, cursorVisit, undo, canUndo, depthOf, markReading, ownHistory, setSite } from '../app.js';
+import { uid, normTitle, langFromUrl, siteFromUrl, trailShape } from '../model.js';
 import { $, esc, stepsHTML, blip, toast, plural } from '../ui.js';
 import { ext, setRecording } from '../extlink.js';
 
@@ -31,20 +31,21 @@ export function initRecord({ showLeft }) {
   }
   function msg(text, warn = false) { $('msg').textContent = text || ''; $('msg').classList.toggle('warn', warn); }
   function hint() {
-    const t = normTitle($('next').value), a = t && app.D.articles.get(t);
+    const t = normTitle($('next').value, siteFromUrl($('next').value) || app.site), a = t && app.D.articles.get(t);
     msg(a ? `You've been here before: ${plural(a.visits, 'visit')} in ${plural(a.trails.size, 'trail')}.` : '');
   }
 
   function add() {
-    const raw = $('next').value, title = normTitle(raw);
+    // a Wiktionary link is a Wiktionary page; a plain title is on the site you're looking at
+    const raw = $('next').value, site = siteFromUrl(raw) || app.site, title = normTitle(raw, site);
     if (!title) { $('next').focus(); return; }
     let v = cursorVisit();
-    if (v && v.article === title) { msg('That is the page you are on.', true); return; }
+    if (v && v.article === title && site === app.site) { msg('That is the page you are on.', true); return; }
     if (ownHistory()) v = null; // the first page of your own history
     snapshot();
     const lang = langFromUrl(raw);
     if (lang && !app.state.trails.length) app.state.lang = lang;
-    const visit = { id: uid(), article: title, parent: v ? v.id : null, t: Date.now() };
+    const visit = { id: uid(), article: title, parent: v ? v.id : null, t: Date.now(), ...(lang ? { lang } : {}), ...(site !== 'wikipedia' ? { site } : {}) };
     if (!v) {
       const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [visit] };
       app.state.trails.push(t);
@@ -55,6 +56,7 @@ export function initRecord({ showLeft }) {
     }
     $('next').value = '';
     commit({ added: true });
+    if (site !== app.site) setSite(site); // show where it went
     blip();
     $('next').focus();
   }
@@ -109,7 +111,7 @@ export function initRecord({ showLeft }) {
       showLeft();
       ownHistory();
       snapshot();
-      const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now() }] };
+      const t = { id: uid(), name: '', created: new Date().toISOString(), visits: [{ id: uid(), article: title, parent: null, t: Date.now(), ...(app.site !== 'wikipedia' ? { site: app.site } : {}) }] };
       app.state.trails.push(t);
       app.cur = { trailId: t.id, visitId: t.visits[0].id };
       commit({ added: true });

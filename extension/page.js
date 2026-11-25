@@ -1,34 +1,56 @@
-// Runs on Wikipedia pages. For an article it tells the recorder:
-//  - which article this is (its canonical title, so redirects count as the target page),
-//  - which Wikipedia article you came from (the page's referrer), if any,
+// Runs on Wikipedia and Wiktionary pages, in every language. For an article or entry it tells the recorder:
+//  - which page this is (its canonical title, so redirects count as the target page) and on which site,
+//  - which Wikipedia or Wiktionary page you came from (the page's referrer), if any,
 //  - whether you got here by going back or forward, or by reloading,
 //  - how long the page was in front of you while you were using it, and how far you scrolled.
 // It sends nothing anywhere except to the extension itself.
 (() => {
   const api = globalThis.browser ?? globalThis.chrome;
   const body = document.body;
-  // only ordinary articles being read (not talk pages, special pages, edit views, …)
-  if (!body || !body.classList.contains('ns-0') || !body.classList.contains('action-view')) return;
+  const siteOf = (host) => host.match(/(?:^|\.)(wikipedia|wiktionary)\.org$/)?.[1] || null;
+  const SITE = siteOf(location.hostname);
+  // only ordinary articles being read (not talk pages, special pages, edit views, …); on Wiktionary also
+  // reconstructed words (Reconstruction:…) and appendices
+  const cl = body?.classList;
+  const ok = cl && (cl.contains('ns-0') || (SITE === 'wiktionary' && (cl.contains('ns-118') || cl.contains('ns-100'))));
+  if (!SITE || !ok || !cl.contains('action-view')) return;
 
-  const titleOf = (href) => {
+  const langOf = (host) => host.split('.')[0];
+  // a page's address → { title, site, lang }; also /zh-cn/…, /sr-ec/… (pages in another script)
+  const pageOf = (href) => {
     try {
       const u = new URL(href);
-      if (!/(^|\.)wikipedia\.org$/.test(u.hostname)) return null;
-      let raw = null;
+      const site = siteOf(u.hostname); if (!site) return null;
+      let raw = null, m;
       if (u.pathname.startsWith('/wiki/')) raw = u.pathname.slice(6);
       else if (u.pathname === '/w/index.php') raw = u.searchParams.get('title');
+      else if ((m = u.pathname.match(/^\/[a-z]{2,3}(?:-[a-z0-9]+)+\/(.+)$/))) raw = m[1];
       if (!raw) return null;
-      const t = decodeURIComponent(raw).replace(/_/g, ' ').trim();
-      return t ? t[0].toUpperCase() + t.slice(1) : null;
+      let t = decodeURIComponent(raw).replace(/_/g, ' ').trim();
+      if (!t) return null;
+      if (site === 'wikipedia') t = t[0].toUpperCase() + t.slice(1); // on Wiktionary "water" and "Water" differ
+      return { title: t, site, lang: langOf(u.hostname) };
     } catch { return null; }
   };
-  const langOf = (host) => host.split('.')[0];
+  // this wiki's main page, whatever it's called in this language (the logo links to it)
+  const main = pageOf(document.querySelector('a.mw-wiki-logo, a.mw-logo, a.branding-box, .branding-box a')?.href || '')?.title || 'Main Page';
+  const isMain = (p) => !!p && (p.title === 'Main Page' || (p.site === SITE && p.lang === langOf(location.hostname) && p.title === main));
 
   const canonical = document.querySelector('link[rel="canonical"]')?.href || location.href;
-  const title = titleOf(canonical);
-  if (!title || title === 'Main Page') return;
-  let from = titleOf(document.referrer);
-  if (from === title || from === 'Main Page') from = null; // an article opened from the Main Page starts a trail of its own
+  const me = pageOf(canonical);
+  if (!me || isMain(me)) return;
+  const title = me.title;
+  let src = pageOf(document.referrer);
+  // an article opened from the main page starts a trail of its own
+  if (src && ((src.site === me.site && src.title === title) || isMain(src))) src = null;
+  const from = src?.title || null;
+  // going to another site (Wikipedia ↔ Wiktionary, or another language) the referrer is only the site's
+  // address, not the page: say which site and language it was, and the recorder takes the page that was
+  // open in this tab (or the tab the link was opened from)
+  let via = null;
+  if (!src && document.referrer) {
+    try { const r = new URL(document.referrer), site = siteOf(r.hostname); if (site && r.hostname !== location.hostname && r.pathname.length <= 1) via = { site, lang: langOf(r.hostname) }; } catch { /* not a URL */ }
+  }
   // Wikipedia's search, talk pages, categories… aren't articles. Their titles look like "Special:Search",
   // "Talk:Moon", "User talk:Eren" (articles with a colon usually have a space after it). The recorder
   // still counts such a page if it recorded it as an article.
@@ -38,7 +60,7 @@
   const send = (msg) => { try { api.runtime.sendMessage({ wikiTrails: 1, doc, ...msg }); } catch { /* extension reloaded */ } };
 
   // wasDiscarded: the browser had put this tab to sleep and is loading it again, which isn't you opening it
-  send({ type: 'open', title, lang: langOf(location.hostname), from, fromNs, nav, restored: !!document.wasDiscarded, t: Date.now() });
+  send({ type: 'open', title, site: SITE, lang: langOf(location.hostname), from, fromSite: src?.site, fromLang: src?.lang, fromNs, via, nav, restored: !!document.wasDiscarded, t: Date.now() });
 
   // time on the page: only while you're actually on it — the tab is showing, the browser window is the
   // one you're using, and you moved, scrolled or typed in the last 45 seconds. A page left open, in a
@@ -74,6 +96,6 @@
   addEventListener('blur', () => { state(); report(true); });
   addEventListener('pagehide', () => report(true));
   // coming back to this page from the browser's back/forward cache
-  addEventListener('pageshow', (e) => { if (e.persisted) { last = active = performance.now(); on = visible() && document.hasFocus(); send({ type: 'shown', title, t: Date.now() }); } });
+  addEventListener('pageshow', (e) => { if (e.persisted) { last = active = performance.now(); on = visible() && document.hasFocus(); send({ type: 'shown', title, site: SITE, t: Date.now() }); } });
   setInterval(() => { if (on) report(); }, 15000);
 })();

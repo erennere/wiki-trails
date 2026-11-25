@@ -9,10 +9,10 @@ export function initTrails() {
 
   function render() {
     const q = $('tfilter').value.trim().toLowerCase();
-    let list = [...app.state.trails].reverse().filter(inRange);
+    let list = [...app.V.trails].reverse().filter(inRange);
     const total = list.length;
     if (q) list = list.filter((t) => trailLabel(t).toLowerCase().includes(q) || t.visits.some((v) => v.article.toLowerCase().includes(q)));
-    $('tcount').textContent = app.state.trails.length ? `(${q ? `${list.length} of ` : ''}${total})` : '';
+    $('tcount').textContent = app.V.trails.length ? `(${q ? `${list.length} of ` : ''}${total})` : '';
     const sel = app.sel?.kind === 'trail' ? app.sel.id : null, rec = app.cur?.trailId;
     const shown = list.slice(0, limit);
     box.innerHTML = shown.map((t) => `<div class="item${t.id === sel ? ' on' : ''}" data-t="${t.id}">

@@ -1,5 +1,5 @@
 // File menu (save, open, examples, clear) and the Settings dialog (appearance, map, other).
-import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, applyReadingRule, ownHistory } from '../app.js';
+import { app, on, replaceState, commit, snapshot, setSetting, totalClicks, applyReadingRule, ownHistory, layoutKey } from '../app.js';
 import { validate, emptyState } from '../model.js';
 import { saveToFile, pickFile, readAny, merge, isExample } from '../storage.js';
 import { exampleState } from '../example.js';
@@ -38,7 +38,7 @@ export function initMenus({ graph }) {
   async function doSave(saveAs = false) {
     closeMenus();
     try {
-      app.state.layout = graph.getPositions();
+      app.state[layoutKey()] = graph.getPositions();
       const r = await saveToFile(app.state, { saveAs }); if (!r) return;
       saved = { at: Date.now(), clicks: totalClicks(), name: r.name };
       try { localStorage.setItem(SAVED_KEY, JSON.stringify(saved)); } catch { /* ignore */ }
