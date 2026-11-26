@@ -49,7 +49,8 @@
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "alarms"
+    "alarms",
+    "webNavigation"
   ],
   "homepage_url": "https://erennere.github.io/wiki-trails/"
 }

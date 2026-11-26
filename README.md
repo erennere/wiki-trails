@@ -159,7 +159,7 @@ The extension records your trails while you read Wikipedia, with nothing to type
 - **A link you click** becomes the next step of the trail you're on, also when you open it in a new tab.
 - **Back and forward** add no step. The next link you click branches from the page you went back to, as in the app.
 - **A new trail starts** when you arrive from anywhere else: a search engine, a bookmark, an address you typed, Wikipedia's search box or its Main Page.
-- **Reloading** a page adds nothing.
+- **Reloading** a page adds nothing, and neither do the tabs your browser reopens when it starts (or a closed tab you reopen): the browser loads those as reloads, which the extension sees (that's what the *webNavigation* permission is for).
 - **How much time you spent on each page**, and how far you scrolled. Time only counts while the tab is showing, the browser window is the one you're using, and you moved the mouse, scrolled or typed in the last 45 seconds, so a page left open in the background doesn't count. A page counts as read once you spent at least a minute on it **in total**, over every time you opened it; you can change that under Settings → *A page counts as read after*, and you can still mark any page yourself.
 
 To pause, click the toolbar button and untick *Record the Wikipedia and Wiktionary pages I open*, or click *Pause* in the Record panel. While it's paused, the button shows "off".

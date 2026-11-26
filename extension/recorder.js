@@ -26,6 +26,12 @@ async function load() {
   S = { on: r['rec:on'] !== false, tabs: {}, docs: {}, recent: [], dwell: {}, trails: {}, today: { day: '', n: 0 }, ...(r['rec:state'] || {}) };
   S.trails ||= {};
   S.on = r['rec:on'] !== false;
+  // a new browser session (session storage is emptied when the browser closes): tab numbers start over,
+  // so forget the old tabs now, before the tabs the browser reopens report in
+  if (api.storage.session) {
+    const b = await api.storage.session.get('boot').catch(() => ({}));
+    if (!b.boot) { S.tabs = {}; S.docs = {}; S.commits = {}; await api.storage.session.set({ boot: Date.now() }).catch(() => {}); }
+  }
   return S;
 }
 function prune(now) {
@@ -88,7 +94,9 @@ async function onOpen(m, tabId, openerTabId) {
   // put to sleep), or a reload or back/forward in a tab we know nothing about. Nothing is recorded; if
   // the page was recorded recently, time you now spend on it counts there, and links you click go on
   // from it.
-  if (m.restored || (!tab && (m.nav === 'reload' || m.nav === 'back_forward'))) {
+  // the browser loads a tab it reopens (after a restart) as a reload, whatever the page itself says
+  const c = S.commits?.[tabId], reopened = !tab && c && c.type === 'reload' && Math.abs(now - c.t) < 60e3;
+  if (m.restored || reopened || (!tab && (m.nav === 'reload' || m.nav === 'back_forward'))) {
     const v = latest((x) => x.article === key);
     if (v) here(v.trailId, v.visitId, key);
     return;
@@ -293,9 +301,20 @@ function updateBadge() {
   a.setBadgeBackgroundColor?.({ color: '#888888' });
 }
 api.alarms?.onAlarm.addListener((a) => { if (a.name === 'push') push(); });
+// how each tab's page was loaded: a link, typed, or a reload (which is also how reopened tabs load)
+api.webNavigation?.onCommitted?.addListener((d) => {
+  if (d.frameId !== 0 || !d.transitionType) return;
+  queue = queue.then(async () => {
+    await load();
+    S.commits ||= {};
+    S.commits[d.tabId] = { type: d.transitionType, t: Date.now() };
+    for (const [k, v] of Object.entries(S.commits)) if (Date.now() - v.t > 5 * 60e3) delete S.commits[k];
+    await save();
+  }).catch(() => {});
+}, { url: [{ hostSuffix: 'wikipedia.org' }, { hostSuffix: 'wiktionary.org' }] });
 // a new browser session: tab numbers start over, so what we knew about tabs no longer applies
 api.runtime.onStartup?.addListener(() => {
-  queue = queue.then(async () => { await load(); S.tabs = {}; S.docs = {}; await save(); }).catch(() => {});
+  queue = queue.then(async () => { await load(); await save(); }).catch(() => {}); // load() forgets the last session's tabs
   schedulePush(0.2);
 });
 api.runtime.onInstalled?.addListener(() => { migrate().catch(() => {}); schedulePush(0.2); });

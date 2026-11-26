@@ -18,6 +18,6 @@
     "sql.js": "^1.17.0",
     "three": "0.187.0"
   },
-  "version": "1.4.0",
+  "version": "1.4.1",
   "homepage": "https://erennere.github.io/wiki-trails/"
 }
