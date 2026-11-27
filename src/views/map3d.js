@@ -33,7 +33,7 @@ export function createGraph(el, handlers) {
   const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1, depth: true };
   // groups of pages joined by links (newest first), the newest visit, and the pages shown when not all are
   let groups = [], newest = 0, spanDays = 1, keep = null, repacked = false;
-  const LAYOUT_V = '\u0001sphere';
+  const LAYOUT_V = '\u0001cones';
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
   const G = new ForceGraph3D(el, { controlType: 'orbit', rendererConfig: { antialias: !HIDPI } })
@@ -370,7 +370,7 @@ export function createGraph(el, handlers) {
   function depthCue() {
     if (threads || !view.depth) { scene.fog = null; return; }
     const d = cam.position.distanceTo(sceneC);
-    fog.color.set(style.bg); fog.near = Math.max(1, d - 0.25 * sceneR); fog.far = d + 1.9 * sceneR;
+    fog.color.set(style.bg); fog.near = Math.max(1, d - 0.25 * sceneR); fog.far = d + 1.3 * sceneR; // the far half of the sphere clearly fainter
     scene.fog = fog;
     // the key light comes from over the viewer's left shoulder, whichever way the map is turned
     tmpB.set(-0.5, 0.8, 0.3).applyQuaternion(cam.quaternion);
@@ -422,13 +422,23 @@ export function createGraph(el, handlers) {
     newest = groups[0]?.last || 0;
     const oldest = groups.length ? Math.min(...groups.map((g) => g.last || newest)) : newest;
     spanDays = Math.max(1, (newest - oldest) / DAY);
-    // every exploration has a direction from the middle (an even spread over the sphere, turned so the newest
-    // faces you) and starts out from the middle by its age: the newest nearest, older ones further out
-    const byAge = [...groups].sort((p, q) => p.first - q.first || (p.key < q.key ? -1 : 1)), N = byAge.length, golden = Math.PI * (3 - Math.sqrt(5));
-    byAge.forEach((g, i) => { const y = N === 1 ? 0 : 1 - 2 * (i + 0.5) / N, r = Math.sqrt(1 - y * y), th = i * golden; g.dir = new THREE.Vector3(r * Math.cos(th), y, r * Math.sin(th)); });
-    if (groups[0]) { const q = new THREE.Quaternion().setFromUnitVectors(groups[0].dir.clone(), VIEW); for (const g of groups) g.dir.applyQuaternion(q); }
+    // every exploration gets its own cone out of the middle, as wide as its share of the sphere (bigger
+    // explorations get more), the cones spread so none overlaps another, turned so the newest points across
+    // the screen (up and to the right), not at you, where its branches would pile up over the middle
+    const weight = (g) => Math.pow(g.nodes.length, 0.85) + 0.5, total = groups.reduce((t, g) => t + weight(g), 0) || 1;
+    for (const g of groups) { g.f = weight(g) / total; g.alpha = Math.acos(Math.max(-1, 1 - 2 * g.f * 0.8)); }
+    const byAge = [...groups].sort((p, q) => p.first - q.first || (p.key < q.key ? -1 : 1)), golden = Math.PI * (3 - Math.sqrt(5));
+    let cum = 0;
+    byAge.forEach((g, i) => { const c = cum + g.f / 2; cum += g.f; const y = byAge.length === 1 ? 0 : 1 - 2 * c, r = Math.sqrt(Math.max(0, 1 - y * y)), th = i * golden; g.dir = new THREE.Vector3(r * Math.cos(th), y, r * Math.sin(th)); });
+    spreadCones(byAge);
+    if (groups[0]) {
+      const across = new THREE.Vector3(0, 1, 0).cross(VIEW).normalize().multiplyScalar(0.8).add(new THREE.Vector3(0, 0.6, 0)).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(groups[0].dir.clone(), across); for (const g of groups) g.dir.applyQuaternion(q);
+    }
+    // where it starts: the newer, the nearer the middle, but never where its cone is still too narrow for
+    // its first pages (so the middle is not a knot of every exploration's start)
     const tau = Math.max(1.5, spanDays / 4) * DAY;
-    for (const g of groups) g.r0 = START + REACH * (1 - Math.exp(-Math.max(0, newest - g.last) / tau));
+    for (const g of groups) g.r0 = Math.min(320, Math.max(START + REACH * (1 - Math.exp(-Math.max(0, newest - g.last) / tau)), 24 / Math.max(0.05, g.alpha)));
     let regroup = 0;
     const v = new THREE.Vector3(), side = new THREE.Vector3();
     for (const g of groups) {
@@ -455,7 +465,8 @@ export function createGraph(el, handlers) {
         if (isPlaced(n)) continue;
         const h = n === R ? 0 : Number.isFinite(n.hop) ? n.hop : 1;
         side.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5); side.addScaledVector(g.dir, -side.dot(g.dir)).normalize();
-        v.copy(g.dir).multiplyScalar(g.r0 + h * SHELL).addScaledVector(side, h * SHELL * 0.7 * Math.random());
+        const tilt = g.alpha * 0.6 * Math.random() * (h ? 1 : 0.2), rr = g.r0 + h * SHELL;
+        v.copy(g.dir).multiplyScalar(Math.cos(tilt) * rr).addScaledVector(side, Math.sin(tilt) * rr);
         n.x = v.x; n.y = v.y; n.z = v.z;
       }
       for (const n of g.nodes) n.gkey = g.key;
@@ -520,25 +531,49 @@ export function createGraph(el, handlers) {
   }
   /* Holds each group round its place while it settles, moving it as a whole so its shape is its own. */
   /* The trails grow out of the middle: every page is held at its distance from the middle (its exploration's
-     start, plus a step for every click from it) and drawn loosely towards its exploration's direction, so
-     branches fan out sideways and the whole is a sphere of trails. */
-  const SHELL = 38, START = 14, REACH = 130;
+     start, plus a step for every click from it) and inside its exploration's cone: loosely towards the
+     cone's middle, firmly back when it strays to the edge, so branches fan out within their own part of
+     the sphere and never into another exploration's. */
+  const SHELL = 40, START = 30, REACH = 140;
   function groupForce() {
     const f = (alpha) => {
       for (const g of groups) {
         if (!g.dir) continue;
+        const cosA = Math.cos(g.alpha * 0.85);
         for (const n of g.nodes) {
           if (n.fx != null || !isPlaced(n)) continue;
           const root = n === g.root, h = root ? 0 : Number.isFinite(n.hop) ? n.hop : 1;
           const d = Math.hypot(n.x, n.y, n.z) || 1e-3, kr = 0.3 * alpha * (g.r0 + h * SHELL - d) / d;
           n.vx += n.x * kr; n.vy += n.y * kr; n.vz += n.z * kr;
-          const ka = (root ? 0.3 : 0.035) * alpha;
+          const c = (n.x * g.dir.x + n.y * g.dir.y + n.z * g.dir.z) / d; // cos of the angle from the cone's middle
+          const out = c < cosA ? Math.min(1, (cosA - c) * 8) : 0;
+          const ka = (root ? 0.3 : 0.02 + 0.5 * out) * alpha;
           n.vx += (g.dir.x * d - n.x) * ka; n.vy += (g.dir.y * d - n.y) * ka; n.vz += (g.dir.z * d - n.z) * ka;
         }
       }
     };
     f.initialize = () => {};
     return f;
+  }
+  /* Spreads the cones over the sphere so that none overlaps another: neighbours closer than their two
+     half-widths (plus a gap) are pushed apart, the smaller one moving more. */
+  function spreadCones(gs) {
+    if (gs.length < 2 || gs.length > 1500) return;
+    const t = new THREE.Vector3();
+    for (let it = 0; it < 160; it++) {
+      let moved = 0;
+      for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+        const a = gs[i], b = gs[j], need = (a.alpha + b.alpha) * 1.06, cos = a.dir.dot(b.dir);
+        if (cos <= Math.cos(Math.min(Math.PI, need))) continue;
+        const ang = Math.acos(Math.min(1, cos)), push = (need - ang) * 0.5, wa = b.alpha / (a.alpha + b.alpha);
+        t.copy(a.dir).addScaledVector(b.dir, -cos); if (t.lengthSq() < 1e-9) t.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).addScaledVector(b.dir, -t.dot(b.dir));
+        t.normalize();
+        a.dir.addScaledVector(t, push * wa).normalize();
+        b.dir.addScaledVector(t, -push * (1 - wa)).normalize();
+        moved++;
+      }
+      if (!moved) break;
+    }
   }
   /** How clearly a page's group shows: the newest fully, older ones fainter (Settings → fade older). */
   function groupOp(n) {
