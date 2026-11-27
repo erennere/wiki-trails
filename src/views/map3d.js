@@ -12,7 +12,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const VIEW = new THREE.Vector3(0.52, 0.34, 0.78).normalize();
 // groups sit round the newest in a ball that's wider than deep and deeper than high, turned to face the
 // home view, so it fills a wide window and still has real depth from every side
-const SHAPE = [1.35, 0.72, 0.9];
+const SHAPE = [1, 1, 1]; // a ball: the newest exploration in the middle, older ones round it on every side
 const VIEW_H = new THREE.Vector3(VIEW.x, 0, VIEW.z).normalize(), RIGHT_H = new THREE.Vector3().crossVectors(UP, VIEW_H).normalize();
 const HIDPI = (window.devicePixelRatio || 1) >= 1.5;
 
@@ -33,7 +33,7 @@ export function createGraph(el, handlers) {
   const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1, depth: true };
   // groups of pages joined by links (newest first), the newest visit, and the pages shown when not all are
   let groups = [], newest = 0, spanDays = 1, keep = null, repacked = false;
-  const LAYOUT_V = '\u0001groups3d';
+  const LAYOUT_V = '\u0001groups-ball';
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
   const G = new ForceGraph3D(el, { controlType: 'orbit', rendererConfig: { antialias: !HIDPI } })
@@ -92,6 +92,16 @@ export function createGraph(el, handlers) {
   const key = new THREE.DirectionalLight(0xffffff, 0.75 * Math.PI);
   G.lights([new THREE.AmbientLight(0xffffff, 0.5 * Math.PI), key]);
   scene.add(key.target);
+  /* the shell: a faint glass ball round the whole map, brighter at its rim, so the eye reads it as a sphere */
+  const shellMat = new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color('#888') }, strength: { value: 0.4 } },
+    vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform vec3 color; uniform float strength; varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(color, pow(f, 4.0) * strength); }',
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 48), shellMat);
+  shell.renderOrder = 10; shell.visible = false;
+  scene.add(shell);
   // depth: what's further away fades towards the background (set per frame from the camera, see depthCue)
   const fog = new THREE.Fog(0x000000, 1, 2);
   let sceneR = 300; const sceneC = new THREE.Vector3();
@@ -298,7 +308,15 @@ export function createGraph(el, handlers) {
       sceneC.set(0, 0, 0); for (const n of pts) sceneC.add(tmpA.set(n.x, n.y, n.z)); sceneC.divideScalar(pts.length);
       const ds2 = pts.map((n) => Math.hypot(n.x - sceneC.x, n.y - sceneC.y, n.z - sceneC.z)).sort((p, q) => p - q);
       sceneR = Math.max(60, ds2[Math.floor(ds2.length * 0.95)]);
+      shell.position.copy(sceneC); shell.scale.setScalar(ds2[ds2.length - 1] + 20);
     }
+    shellLook();
+  }
+  function shellLook() {
+    shell.visible = !!view.depth && nodes.length > 2;
+    shellMat.uniforms.color.value.set(d3.color(style.link) ? style.link : '#888');
+    const dark = (d3.hsl(style.bg).l || 1) < 0.5;
+    shellMat.uniforms.strength.value = (threads ? 0.3 : 1) * (dark ? 0.2 : 0.16);
   }
   /** Fog from just in front of the map's middle to well behind it: the far side is dimmer than the near one. */
   function depthCue() {
@@ -391,20 +409,7 @@ export function createGraph(el, handlers) {
       return true;
     };
     const put = (g, p) => { g.anchor = p; for (const k of cells(p, g.r + GAP)) (grid.get(k) || grid.set(k, []).get(k)).push(g); };
-    // seen from the home view, a group should not sit right in front of (or behind) another: overlap of
-    // their outlines on the screen counts against a place, but only past a third, so the map keeps its depth
-    const right = new THREE.Vector3().crossVectors(UP, VIEW).normalize(), up = new THREE.Vector3().crossVectors(VIEW, right);
-    const placed = [], mean = [0, 0, 0];
-    const hidden = (p, r) => {
-      let s = 0;
-      for (const o of placed) {
-        const dx = p[0] - o.anchor[0], dy = p[1] - o.anchor[1], dz = p[2] - o.anchor[2];
-        const u = dx * right.x + dy * right.y + dz * right.z, v = dx * up.x + dy * up.y + dz * up.z;
-        const need = 0.7 * (r + o.r), d = Math.hypot(u, v);
-        if (d < need) s += (need - d) / need;
-      }
-      return s;
-    };
+    const mean = [0, 0, 0];
     gs.forEach((g, i) => {
       if (i) {
         const step = Math.max(10, g.r * 0.5), mlen = Math.hypot(...mean) || 1;
@@ -418,14 +423,14 @@ export function createGraph(el, handlers) {
             const a = R * rr * Math.cos(th) * SHAPE[0], b = R * y * SHAPE[1], c = R * rr * Math.sin(th) * SHAPE[2];
             const p = [a * RIGHT_H.x + c * VIEW_H.x, b, a * RIGHT_H.z + c * VIEW_H.z];
             if (!free(p, g.r)) continue;
-            const s = hidden(p, g.r) * 4 + 0.5 * (p[0] * mean[0] + p[1] * mean[1] + p[2] * mean[2]) / (mlen * R);
+            // on the emptier side, so the whole stays round (whether it hides another from the front doesn't matter: you turn it)
+            const s = 0.5 * (p[0] * mean[0] + p[1] * mean[1] + p[2] * mean[2]) / (mlen * R);
             if (s < bestS) { bestS = s; best = p; }
           }
-          if (best && (bestS < 0.6 || ++tries >= 3)) break;
+          if (best) break;
         }
         put(g, best);
       } else put(g, [0, 0, 0]);
-      placed.push(g);
       for (let k = 0; k < 3; k++) mean[k] += g.anchor[k] * g.nodes.length;
     });
   }
@@ -621,6 +626,7 @@ export function createGraph(el, handlers) {
   /** Focus one thread: it's drawn in full, the others step back. */
   function setPin(key) { pin = key; drawThreads(); placeLabels(true); }
   function drawThreads() {
+    shellLook();
     wake(); depthCue();
     disposeLayer();
     drawCursor();
@@ -976,7 +982,13 @@ export function createGraph(el, handlers) {
   }
   /** The whole (visible) history. */
   function fit(animate = true, back = null) {
-    const pts = visiblePoints(); if (!pts.length) return;
+    let pts = visiblePoints(); if (!pts.length) return;
+    // with the shell, the whole ball is what's framed, round its middle
+    if (shell.visible && !threads) {
+      const R = shell.scale.x, out = [];
+      for (let k = 0; k < 26; k++) { const y = 1 - 2 * (k + 0.5) / 26, r = Math.sqrt(1 - y * y), th = k * 2.39996; out.push(new THREE.Vector3(r * Math.cos(th), y, r * Math.sin(th)).multiplyScalar(R).add(shell.position)); }
+      return moveTo(frame(out, back || currentBack(), 0.94, shell.position.clone()), animate ? 900 : 0, false);
+    }
     // the newest group you can see in the middle, the older ones round it
     const g = groups.find((x) => x.anchor && x.nodes.some((n) => isShown(n) && isPlaced(n)));
     let mid = null;
