@@ -33,7 +33,7 @@ export function createGraph(el, handlers) {
   const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1, depth: true };
   // groups of pages joined by links (newest first), the newest visit, and the pages shown when not all are
   let groups = [], newest = 0, spanDays = 1, keep = null, repacked = false;
-  const LAYOUT_V = '\u0001groups-ball';
+  const LAYOUT_V = '\u0001sphere';
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
   const G = new ForceGraph3D(el, { controlType: 'orbit', rendererConfig: { antialias: !HIDPI } })
@@ -92,16 +92,6 @@ export function createGraph(el, handlers) {
   const key = new THREE.DirectionalLight(0xffffff, 0.75 * Math.PI);
   G.lights([new THREE.AmbientLight(0xffffff, 0.5 * Math.PI), key]);
   scene.add(key.target);
-  /* the shell: a faint glass ball round the whole map, brighter at its rim, so the eye reads it as a sphere */
-  const shellMat = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color('#888') }, strength: { value: 0.4 } },
-    vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform vec3 color; uniform float strength; varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(color, pow(f, 4.0) * strength); }',
-    transparent: true, depthWrite: false, side: THREE.DoubleSide,
-  });
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 72, 48), shellMat);
-  shell.renderOrder = 10; shell.visible = false;
-  scene.add(shell);
   // depth: what's further away fades towards the background (set per frame from the camera, see depthCue)
   const fog = new THREE.Fog(0x000000, 1, 2);
   let sceneR = 300; const sceneC = new THREE.Vector3();
@@ -308,15 +298,7 @@ export function createGraph(el, handlers) {
       sceneC.set(0, 0, 0); for (const n of pts) sceneC.add(tmpA.set(n.x, n.y, n.z)); sceneC.divideScalar(pts.length);
       const ds2 = pts.map((n) => Math.hypot(n.x - sceneC.x, n.y - sceneC.y, n.z - sceneC.z)).sort((p, q) => p - q);
       sceneR = Math.max(60, ds2[Math.floor(ds2.length * 0.95)]);
-      shell.position.copy(sceneC); shell.scale.setScalar(ds2[ds2.length - 1] + 20);
     }
-    shellLook();
-  }
-  function shellLook() {
-    shell.visible = !!view.depth && nodes.length > 2;
-    shellMat.uniforms.color.value.set(d3.color(style.link) ? style.link : '#888');
-    const dark = (d3.hsl(style.bg).l || 1) < 0.5;
-    shellMat.uniforms.strength.value = (threads ? 0.3 : 1) * (dark ? 0.2 : 0.16);
   }
   /** Fog from just in front of the map's middle to well behind it: the far side is dimmer than the near one. */
   function depthCue() {
@@ -357,39 +339,58 @@ export function createGraph(el, handlers) {
       }
       groups.push(g);
     }
-    for (const g of groups) { g.span = Number.isFinite(g.first) ? g.last - g.first : 0; g.r0 = roomFor(g.nodes.length, 0); }
+    for (const g of groups) {
+      g.span = Number.isFinite(g.first) ? g.last - g.first : 0;
+      // where the group's trails start: a page you began on (the most visited such), and every page's
+      // clicks from it; the group grows outward from there in every direction
+      const starts = g.nodes.filter((n) => !n.depth), pool = starts.length ? starts : g.nodes;
+      g.root = pool.reduce((a, b) => ((b.visits || 0) > (a.visits || 0) || ((b.visits || 0) === (a.visits || 0) && b.id < a.id) ? b : a));
+      for (const n of g.nodes) n.hop = Infinity;
+      g.root.hop = 0; g.maxHop = 0;
+      for (let i = 0, q = [g.root]; i < q.length; i++) {
+        const m = q[i];
+        for (const t of adj.get(m.id) || []) { const k = nodeBy.get(t); if (k && k.hop === Infinity) { k.hop = m.hop + 1; g.maxHop = Math.max(g.maxHop, k.hop); q.push(k); } }
+      }
+    }
     groups.sort((a, b) => b.last - a.last || b.nodes.length - a.nodes.length || (a.key < b.key ? -1 : 1));
     newest = groups[0]?.last || 0;
     const oldest = groups.length ? Math.min(...groups.map((g) => g.last || newest)) : newest;
     spanDays = Math.max(1, (newest - oldest) / DAY);
+    // every exploration has a direction from the middle (an even spread over the sphere, turned so the newest
+    // faces you) and starts out from the middle by its age: the newest nearest, older ones further out
+    const byAge = [...groups].sort((p, q) => p.first - q.first || (p.key < q.key ? -1 : 1)), N = byAge.length, golden = Math.PI * (3 - Math.sqrt(5));
+    byAge.forEach((g, i) => { const y = N === 1 ? 0 : 1 - 2 * (i + 0.5) / N, r = Math.sqrt(1 - y * y), th = i * golden; g.dir = new THREE.Vector3(r * Math.cos(th), y, r * Math.sin(th)); });
+    if (groups[0]) { const q = new THREE.Quaternion().setFromUnitVectors(groups[0].dir.clone(), VIEW); for (const g of groups) g.dir.applyQuaternion(q); }
+    const tau = Math.max(1.5, spanDays / 4) * DAY;
+    for (const g of groups) g.r0 = START + REACH * (1 - Math.exp(-Math.max(0, newest - g.last) / tau));
     let regroup = 0;
+    const v = new THREE.Vector3(), side = new THREE.Vector3();
     for (const g of groups) {
-      const at = g.nodes.filter(isPlaced);
-      // a new trail that joins two groups makes them one: it settles again as a whole
-      g.merged = new Set(at.map((n) => n.gkey).filter(Boolean)).size > 1;
-      if (g.merged) for (const n of g.nodes) if (n.fx != null) { n.fx = n.fy = n.fz = undefined; regroup++; }
-      g.c = at.length ? [0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length) : null;
-      const spread = at.length ? Math.max(...at.map((n) => Math.hypot(n.x - g.c[0], n.y - g.c[1], n.z - g.c[2]))) : 0;
-      // how much room it needs: measured once it's laid out, guessed from its size before
-      g.r = roomFor(g.nodes.length, !g.merged && at.length >= g.nodes.length * 0.7 ? spread : 0);
-    }
-    pack(groups);
-    for (const g of groups) {
-      // a group already laid out moves to its place as a whole, keeping its shape
-      if (g.c) {
-        const d = [0, 1, 2].map((k) => g.anchor[k] - g.c[k]);
-        if (Math.hypot(...d) > 14 || g.merged) for (const n of g.nodes) if (isPlaced(n)) {
-          n.x += d[0]; n.y += d[1]; n.z += d[2];
+      // a new trail that joins two explorations makes them one: it grows out again as a whole
+      g.merged = new Set(g.nodes.filter(isPlaced).map((n) => n.gkey).filter(Boolean)).size > 1;
+      if (g.merged) for (const n of g.nodes) { if (n.fx != null) regroup++; n.fx = n.fy = n.fz = undefined; n.x = n.y = n.z = undefined; }
+      const at = g.nodes.filter(isPlaced), R = g.root;
+      if (at.length && isPlaced(R)) {
+        // laid out before: turned as a whole to its direction and moved out or in to its distance, keeping its shape
+        // (by the direction of its middle, which is steadier than that of its start near the sphere's middle;
+        // only when clearly off, so a saved layout comes back exactly as it was)
+        const c = new THREE.Vector3(); for (const n of at) c.add(v.set(n.x, n.y, n.z)); c.divideScalar(at.length);
+        const cur = c.lengthSq() > 1e-6 ? c.clone().normalize() : g.dir.clone(), shift = g.r0 - Math.hypot(R.x, R.y, R.z);
+        const q = new THREE.Quaternion().setFromUnitVectors(cur, g.dir);
+        if (cur.angleTo(g.dir) > 0.3 || Math.abs(shift) > 30) for (const n of at) {
+          v.set(n.x, n.y, n.z).applyQuaternion(q).addScaledVector(g.dir, shift);
+          n.x = v.x; n.y = v.y; n.z = v.z;
           if (n.fx != null) { n.fx = n.x; n.fy = n.y; n.fz = n.z; }
           if (posCache.has(n.id)) posCache.set(n.id, [n.x, n.y, n.z]);
         }
       }
-      // new pages start next to a page they're linked to, or in their group's place
+      // pages not placed yet: out along the direction, a step further for every click from the start, spread sideways
       for (const n of g.nodes) {
         if (isPlaced(n)) continue;
-        const nb = (adj.get(n.id) || []).map((t) => nodeBy.get(t)).find(isPlaced);
-        const b = nb ? [nb.x, nb.y, nb.z] : g.anchor, j = nb ? 16 : 8;
-        n.x = b[0] + (Math.random() - 0.5) * j; n.y = b[1] + (Math.random() - 0.5) * j; n.z = b[2] + (Math.random() - 0.5) * j;
+        const h = n === R ? 0 : Number.isFinite(n.hop) ? n.hop : 1;
+        side.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5); side.addScaledVector(g.dir, -side.dot(g.dir)).normalize();
+        v.copy(g.dir).multiplyScalar(g.r0 + h * SHELL).addScaledVector(side, h * SHELL * 0.7 * Math.random());
+        n.x = v.x; n.y = v.y; n.z = v.z;
       }
       for (const n of g.nodes) n.gkey = g.key;
     }
@@ -438,6 +439,7 @@ export function createGraph(el, handlers) {
      so the places don't change when a layout is saved and read back a hair different. */
   const roomFor = (count, spread) => Math.max(count === 1 ? 12 : 8 + 30 * Math.sqrt(count), Math.ceil((spread + 12) / 20) * 20);
   function repack() {
+    return; // the sphere needs no packing: each exploration has its own direction
     for (const g of groups) {
       const at = g.nodes.filter(isPlaced); if (!at.length) continue;
       g.c = [0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length);
@@ -451,26 +453,21 @@ export function createGraph(el, handlers) {
     }
   }
   /* Holds each group round its place while it settles, moving it as a whole so its shape is its own. */
+  /* The trails grow out of the middle: every page is held at its distance from the middle (its exploration's
+     start, plus a step for every click from it) and drawn loosely towards its exploration's direction, so
+     branches fan out sideways and the whole is a sphere of trails. */
+  const SHELL = 38, START = 14, REACH = 130;
   function groupForce() {
     const f = (alpha) => {
       for (const g of groups) {
-        if (!g.anchor) continue;
-        let sx = 0, sy = 0, sz = 0, c = 0, loose = 0;
-        for (const n of g.nodes) { if (!isPlaced(n)) continue; sx += n.x; sy += n.y; sz += n.z; c++; if (n.fx == null) loose++; }
-        if (!c || !loose) continue;
-        const k = 0.1 * alpha * (loose / c);
-        const dx = (g.anchor[0] - sx / c) * k, dy = (g.anchor[1] - sy / c) * k, dz = (g.anchor[2] - sz / c) * k;
-        for (const n of g.nodes) if (n.fx == null && isPlaced(n)) { n.vx += dx; n.vy += dy; n.vz += dz; }
-        // a group read over several days: newer pages towards its middle, older ones further out
-        if (g.span > 2 * DAY) {
-          const k2 = 0.04 * alpha;
-          for (const n of g.nodes) {
-            if (n.fx != null || !isPlaced(n)) continue;
-            const ox = n.x - g.anchor[0], oy = n.y - g.anchor[1], oz = n.z - g.anchor[2], d = Math.hypot(ox, oy, oz) || 1;
-            const want = g.r0 * (0.12 + 0.8 * Math.min(1, (g.last - (n.last || g.first)) / g.span));
-            const f = (want - d) / d * k2;
-            n.vx += ox * f; n.vy += oy * f; n.vz += oz * f;
-          }
+        if (!g.dir) continue;
+        for (const n of g.nodes) {
+          if (n.fx != null || !isPlaced(n)) continue;
+          const root = n === g.root, h = root ? 0 : Number.isFinite(n.hop) ? n.hop : 1;
+          const d = Math.hypot(n.x, n.y, n.z) || 1e-3, kr = 0.3 * alpha * (g.r0 + h * SHELL - d) / d;
+          n.vx += n.x * kr; n.vy += n.y * kr; n.vz += n.z * kr;
+          const ka = (root ? 0.3 : 0.035) * alpha;
+          n.vx += (g.dir.x * d - n.x) * ka; n.vy += (g.dir.y * d - n.y) * ka; n.vz += (g.dir.z * d - n.z) * ka;
         }
       }
     };
@@ -626,7 +623,6 @@ export function createGraph(el, handlers) {
   /** Focus one thread: it's drawn in full, the others step back. */
   function setPin(key) { pin = key; drawThreads(); placeLabels(true); }
   function drawThreads() {
-    shellLook();
     wake(); depthCue();
     disposeLayer();
     drawCursor();
@@ -982,19 +978,13 @@ export function createGraph(el, handlers) {
   }
   /** The whole (visible) history. */
   function fit(animate = true, back = null) {
-    let pts = visiblePoints(); if (!pts.length) return;
-    // with the shell, the whole ball is what's framed, round its middle
-    if (shell.visible && !threads) {
-      const R = shell.scale.x, out = [];
-      for (let k = 0; k < 26; k++) { const y = 1 - 2 * (k + 0.5) / 26, r = Math.sqrt(1 - y * y), th = k * 2.39996; out.push(new THREE.Vector3(r * Math.cos(th), y, r * Math.sin(th)).multiplyScalar(R).add(shell.position)); }
-      return moveTo(frame(out, back || currentBack(), 0.94, shell.position.clone()), animate ? 900 : 0, false);
-    }
+    const pts = visiblePoints(); if (!pts.length) return;
     // the newest group you can see in the middle, the older ones round it
     const g = groups.find((x) => x.anchor && x.nodes.some((n) => isShown(n) && isPlaced(n)));
     let mid = null;
     if (g) { const at = g.nodes.filter(isPlaced); mid = new THREE.Vector3(...[0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length)); }
     // the layout already has the newest group in its middle; centring what's on screen uses the window best
-    moveTo(frame(pts, back || currentBack(), 0.9, null), animate ? 900 : 0, false);
+    moveTo(frame(pts, back || currentBack(), 0.9, new THREE.Vector3()), animate ? 900 : 0, false); // the sphere's middle in the middle
   }
   /** The whole map from the side it's first seen from. */
   function home() { fit(true, VIEW.clone()); }
