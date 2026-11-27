@@ -168,7 +168,7 @@ html[data-left="closed"] #left > .rail, html[data-right="closed"] #right > .rail
 .threadbar .tcount { color: var(--muted); }
 #graph canvas { display: block; }
 .labels3d { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
-.lbl3d { position: absolute; left: 0; top: 0; white-space: nowrap; font: var(--label-weight, 400) 12px var(--font-label); text-transform: var(--label-case, none); color: var(--label); background: color-mix(in srgb, var(--label-bg) 85%, transparent); padding: 1px 6px; border-radius: 4px; will-change: transform; }
+.lbl3d { position: absolute; left: 0; top: 0; transform-origin: 0 0; white-space: nowrap; font: var(--label-weight, 400) 12px var(--font-label); text-transform: var(--label-case, none); color: var(--label); background: color-mix(in srgb, var(--label-bg) 85%, transparent); padding: 1px 6px; border-radius: 4px; will-change: transform; }
 .lbl3d.anchor { font-size: 14px; font-weight: 600; box-shadow: 0 0 0 1px var(--label); }
 .lbl3d.start { opacity: .72; }
 .lbl3d.hub { opacity: .78; font-size: 11.5px; }
@@ -418,3 +418,11 @@ html[data-left="closed"] { --left-w: 38px; }
 .pubnote #pub-min { margin-left: auto; }
 .pubchip { position: absolute; right: 12px; top: 12px; z-index: 5; }
 .threadbar:not([hidden]) ~ .pubchip { top: 64px; }
+.navhint { position: absolute; left: 50%; bottom: 58px; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--win-bg); color: var(--win-fg); border: var(--win-border); border-radius: 8px; font-size: 12.5px; box-shadow: 0 2px 10px rgba(0,0,0,.12); white-space: nowrap; transition: opacity .5s; }
+.navhint.gone { opacity: 0; }
+
+/* exploring: the map on the whole screen */
+html.immersive #stage { position: fixed; inset: 0; z-index: 60; margin: 0; border-radius: 0; }
+html.immersive .topbar, html.immersive #left, html.immersive #right, html.immersive #timeline, html.immersive .pubnote, html.immersive .pubchip, html.immersive .navhint { display: none !important; }
+.explorehint { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 6; padding: 6px 12px; background: var(--win-bg); color: var(--win-fg); border: var(--win-border); border-radius: 8px; font-size: 12.5px; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.15); transition: opacity .8s; }
+.explorehint.gone { opacity: 0; }

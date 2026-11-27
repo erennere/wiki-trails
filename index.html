@@ -12,11 +12,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@400;600&family=VT323&family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=d5e8117956">
+<link rel="stylesheet" href="css/style.css?v=91a5f1fe6e">
 <link rel="stylesheet" href="css/skins.css?v=603ac25061">
 <script src="js/early.js?v=d75d9f19bc"></script>
 <script src="vendor/d3.min.js?v=f2094bbf61"></script>
-<script src="js/app.js?v=a5e6b5d3d1" defer></script>
+<script src="js/app.js?v=6dc6d9ce26" defer></script>
 </head>
 <body>
 
@@ -100,8 +100,11 @@
       <div class="mapctl">
         <button class="btn" id="zoomin" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="btn" id="zoomout" title="Zoom out" aria-label="Zoom out">−</button>
-        <button class="btn" id="fit" title="Fit to the window" aria-label="Fit to the window">⤢</button>
+        <button class="btn" id="fit" title="Whole map, from the front (or double-click empty space)" aria-label="Whole map">⌂</button>
+        <button class="btn" id="explore" title="Explore: the map on the whole screen (Esc to leave)" aria-label="Explore on the whole screen">⤢</button>
       </div>
+      <div class="explorehint" id="explorehint" hidden><b>Drag</b> to turn · <b>Scroll</b> to zoom · <b>W A S D</b> or <b>arrows</b> to fly · <b>Q E</b> down/up · <b>Shift</b> faster · <b>Esc</b> to leave</div>
+      <div class="navhint" id="navhint" hidden><b>Drag</b> to turn · <b>Scroll</b> to zoom where you point · <b>Right-drag</b> or <b>Shift+drag</b> to move · <b>Click</b> a page for its trails · <b>Double-click</b> empty space for the whole map<button class="collapse" id="navhint-x" title="Got it">✕</button></div>
       <div class="tip" id="tip" hidden></div>
       <div class="empty" id="empty">
         <div>

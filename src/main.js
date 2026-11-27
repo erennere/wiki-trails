@@ -162,7 +162,39 @@ function renderThreadbar() {
 
 $('zoomin').onclick = () => graph.zoomBy(1.5);
 $('zoomout').onclick = () => graph.zoomBy(1 / 1.5);
-$('fit').onclick = () => (app.threads ? graph.frameThreads() : graph.fit(true));
+$('fit').onclick = () => (app.threads ? graph.frameThreads() : graph.home());
+/* exploring: the map on the whole screen (the browser's full screen where it can), turning slowly, flown with the keys */
+{
+  const root = document.documentElement;
+  let hintTimer = 0;
+  const setExplore = (on) => {
+    root.classList.toggle('immersive', on);
+    $('explore').textContent = on ? '⤡' : '⤢';
+    $('explore').title = on ? 'Leave the whole screen (Esc)' : 'Explore: the map on the whole screen (Esc to leave)';
+    graph.explore(on);
+    const h = $('explorehint'); clearTimeout(hintTimer);
+    h.classList.remove('gone'); h.hidden = !on;
+    if (on) hintTimer = setTimeout(() => { h.classList.add('gone'); hintTimer = setTimeout(() => { h.hidden = true; }, 900); }, 9000);
+  };
+  $('explore').onclick = async () => {
+    const on = !root.classList.contains('immersive');
+    if (on) { try { await root.requestFullscreen?.({ navigationUI: 'hide' }); } catch { /* not allowed here: the window is enough */ } setExplore(true); }
+    else { if (document.fullscreenElement) await document.exitFullscreen().catch(() => {}); setExplore(false); }
+  };
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && root.classList.contains('immersive')) setExplore(false); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && root.classList.contains('immersive')) { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); setExplore(false); } });
+}
+// how to move round the map, until it has been used once
+{
+  const hint = $('navhint'); let seen = false;
+  try { seen = localStorage.getItem('wiki-trails.navhint') === 'seen'; } catch { /* storage unavailable */ }
+  hint.hidden = seen;
+  const done = { turn: false, zoom: false };
+  const check = () => { if (done.turn && done.zoom && !hint.hidden) { hint.classList.add('gone'); setTimeout(() => { hint.hidden = true; }, 600); try { localStorage.setItem('wiki-trails.navhint', 'seen'); } catch { /* */ } } };
+  $('graph').addEventListener('pointerdown', () => { done.turn = true; check(); });
+  $('graph').addEventListener('wheel', () => { done.zoom = true; check(); }, { passive: true });
+  $('navhint-x').onclick = () => { done.turn = done.zoom = true; check(); };
+}
 
 on('data', (opts = {}) => {
   const first = graph.update(app.D, app.DV, app.state[layoutKey()]);

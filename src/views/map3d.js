@@ -7,6 +7,14 @@ import * as THREE from 'three';
 
 const d3 = window.d3;
 const UP = new THREE.Vector3(0, 1, 0);
+// the side the map is first seen from (and the "home" view): a little from the right and above, so
+// depth reads at once instead of a flat face-on sheet
+const VIEW = new THREE.Vector3(0.52, 0.34, 0.78).normalize();
+// groups sit round the newest in a ball that's wider than deep and deeper than high, turned to face the
+// home view, so it fills a wide window and still has real depth from every side
+const SHAPE = [1.35, 0.72, 0.9];
+const VIEW_H = new THREE.Vector3(VIEW.x, 0, VIEW.z).normalize(), RIGHT_H = new THREE.Vector3().crossVectors(UP, VIEW_H).normalize();
+const HIDPI = (window.devicePixelRatio || 1) >= 1.5;
 
 export function createGraph(el, handlers) {
   const stage = el.parentElement;
@@ -22,18 +30,18 @@ export function createGraph(el, handlers) {
   let maxVisits = 1, maxTotal = 1, scale = 1;
   let settling = false, framed = 0, framing = false, lastTouch = -1e9;
   let threads = null, pin = null, cursor = null, plan = null, unit = 0.3; // unit: map distance per screen pixel where the threads are framed
-  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1 };
+  const view = { density: 1, fade: true, ageFade: 0.85, rotate: true, mark: 'ends', show: 1, depth: true };
   // groups of pages joined by links (newest first), the newest visit, and the pages shown when not all are
   let groups = [], newest = 0, spanDays = 1, keep = null, repacked = false;
-  const LAYOUT_V = '\u0001groups';
+  const LAYOUT_V = '\u0001groups3d';
   let style = { link: '#8a94a6', label: '#222', labelBg: '#fff', cursor: '#e8641c', anchor: '#222', bg: '#ffffff', read: '#2b59c3', skim: '#c5cfe6', node: '#9aa0aa' };
 
-  const G = new ForceGraph3D(el, { controlType: 'orbit' })
+  const G = new ForceGraph3D(el, { controlType: 'orbit', rendererConfig: { antialias: !HIDPI } })
     .backgroundColor('rgba(0,0,0,0)').showNavInfo(false).enableNodeDrag(false)
     .nodeId('id').nodeLabel(() => '').linkLabel(() => '')
     .nodeResolution(10).nodeOpacity(1).linkOpacity(1)
     .cooldownTime(40000)
-    .onNodeHover((n) => { el.style.cursor = n ? 'pointer' : ''; handlers.onHover?.(n ? n.id : null); })
+    .onNodeHover((n) => { hoverNode = n; el.style.cursor = n ? 'pointer' : ''; handlers.onHover?.(n ? n.id : null); })
     // connections aren't clickable; while threads are drawn, a click on a thread focuses it
     .onNodeClick((n, ev) => { if (!layerClick(ev)) handlers.onClick?.(n.id); })
     .onLinkClick((l, ev) => { if (!layerClick(ev)) handlers.onBackground?.(); })
@@ -51,7 +59,7 @@ export function createGraph(el, handlers) {
       }
       settling = false;
       for (const n of nodes) if (Number.isFinite(n.x)) { n.fx = n.x; n.fy = n.y; n.fz = n.z; posCache.set(n.id, [n.x, n.y, n.z]); }
-      measure();
+      measure(); wake(1000);
       drawThreads(); placeLabels(true);
       handlers.onSettled?.();
     });
@@ -59,10 +67,21 @@ export function createGraph(el, handlers) {
   G.d3Force('center', null);
   G.d3Force('group', groupForce());
   G.d3Force('link').distance((l) => 18 + 26 / Math.sqrt(l.total || 1));
-  const cam = G.camera(); cam.fov = 30; cam.updateProjectionMatrix();
+  const cam = G.camera(); cam.fov = 40; cam.updateProjectionMatrix();
+  cam.position.copy(VIEW).multiplyScalar(1000);
+  const renderer = G.renderer();
+  renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
   const ctl = G.controls();
-  ctl.autoRotateSpeed = 0.04; ctl.rotateSpeed = 0.55; ctl.enableDamping = true; ctl.dampingFactor = 0.08;
-  ctl.addEventListener('start', () => { lastTouch = performance.now(); ctl.autoRotate = false; });
+  // damping per frame made the camera trail the pointer longer the slower the frames; DAMP is per 1/60 s
+  // and is rescaled every frame (see tick), so it settles in the same time at any frame rate
+  const DAMP = 0.25;
+  ctl.autoRotateSpeed = 0.3; ctl.rotateSpeed = 0.6; ctl.enableDamping = true; ctl.dampingFactor = DAMP;
+  ctl.zoomToCursor = true; // the wheel zooms towards what's under the pointer
+  ctl.addEventListener('start', () => {
+    lastTouch = performance.now(); ctl.autoRotate = false;
+    // grabbing the map stops a camera move under way, instead of the move winning over your hand
+    if (framing) { const p = cam.position, q = ctl.target; G.cameraPosition({ x: p.x, y: p.y, z: p.z }, { x: q.x, y: q.y, z: q.z }, 1); framing = false; }
+  });
   ctl.addEventListener('change', () => {
     // zooming far out of the threads goes back to the whole history
     if (threads && framed && !framing && cam.position.distanceTo(ctl.target) > framed * 2.3) handlers.onZoomedOut?.();
@@ -70,6 +89,98 @@ export function createGraph(el, handlers) {
   const scene = G.scene();
   const layer = new THREE.Group();
   scene.add(layer);
+  const key = new THREE.DirectionalLight(0xffffff, 0.75 * Math.PI);
+  G.lights([new THREE.AmbientLight(0xffffff, 0.5 * Math.PI), key]);
+  scene.add(key.target);
+  // depth: what's further away fades towards the background (set per frame from the camera, see depthCue)
+  const fog = new THREE.Fog(0x000000, 1, 2);
+  let sceneR = 300; const sceneC = new THREE.Vector3();
+  /* ---------- drawing only when something changed ----------
+     The library draws every frame, even when nothing moves; on a high-DPI laptop that keeps the GPU
+     busy all the time. A frame is drawn when the camera moved, something animates, or the map changed. */
+  // the library draws through its post-processing composer (which clears the canvas first), so a frame
+  // is skipped there, as a whole
+  const composer = G.postProcessingComposer(), rawRender = composer.render.bind(composer), camSig = new Float64Array(17);
+  let renderUntil = 0, lastDraw = 0;
+  const wake = (ms = 300) => { renderUntil = Math.max(renderUntil, performance.now() + ms); };
+  const RSTAT = { drawn: 0, skipped: 0 };
+  function camChanged(sig) {
+    const e = cam.matrixWorld.elements; let ch = false;
+    for (let i = 0; i < 16; i++) if (sig[i] !== e[i]) { sig[i] = e[i]; ch = true; }
+    if (sig[16] !== cam.projectionMatrix.elements[0] + W * 1e-7) { sig[16] = cam.projectionMatrix.elements[0] + W * 1e-7; ch = true; }
+    return ch;
+  }
+  /* ---------- every page in one draw call ----------
+     The library makes one sphere mesh per page; with thousands of pages that's thousands of draw calls a
+     frame. They stay (hidden) for hovering and clicking; one instanced mesh draws them all. A faded page is
+     mixed towards the background instead of being see-through, so no sorting is needed either. */
+  const ballGeo = new THREE.SphereGeometry(1, 12, 9), ballMat = new THREE.MeshLambertMaterial();
+  let inst = null, cyl = null, segs = null;
+  const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, false).translate(0, 0.5, 0).rotateX(Math.PI / 2);
+  const segMat = new THREE.LineBasicMaterial({ vertexColors: true }), _ms = new THREE.Matrix4();
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _c = new THREE.Color(), _bg = new THREE.Color();
+  function syncInstances() {
+    let count = 0;
+    for (const n of nodes) { const o = n.__threeObj; if (o && o.parent && o.__graphDefaultObj) count++; }
+    if (!inst || inst.instanceMatrix.count < count) {
+      if (inst) { scene.remove(inst); inst.dispose(); }
+      inst = new THREE.InstancedMesh(ballGeo, ballMat, Math.max(64, Math.ceil(count * 1.3)));
+      inst.frustumCulled = false; inst.raycast = () => {}; scene.add(inst);
+    }
+    _bg.set(style.bg);
+    let i = 0;
+    for (const n of nodes) {
+      const o = n.__threeObj; if (!o || !o.parent || !o.__graphDefaultObj) continue;
+      o.visible = false;
+      if (threads && o.material.opacity < 0.15) continue; // all but invisible behind the threads: not drawn
+      _m.compose(o.position, _q, _s.setScalar(o.geometry.parameters?.radius || 1)); inst.setMatrixAt(i, _m);
+      _c.copy(o.material.color).lerp(_bg, 1 - o.material.opacity); inst.setColorAt(i, _c); i++;
+    }
+    inst.count = i; inst.instanceMatrix.needsUpdate = true; if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    // connections: the strong ones (tubes) as instances, the thin ones as one set of line segments
+    let nc = 0, nl = 0;
+    for (const l of links) { const o = l.__lineObj; if (!o || !o.parent) continue; if (o.isMesh) nc++; else if (o.isLine) nl++; }
+    if (!cyl || cyl.instanceMatrix.count < nc) {
+      if (cyl) { scene.remove(cyl); cyl.dispose(); }
+      cyl = new THREE.InstancedMesh(cylGeo, ballMat, Math.max(32, Math.ceil(nc * 1.3)));
+      cyl.frustumCulled = false; cyl.raycast = () => {}; scene.add(cyl);
+    }
+    if (!segs || segs.geometry.attributes.position.count < nl * 2) {
+      if (segs) { scene.remove(segs); segs.geometry.dispose(); }
+      const cap = Math.max(64, Math.ceil(nl * 1.3)) * 2, g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cap * 3), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cap * 3), 3));
+      segs = new THREE.LineSegments(g, segMat); segs.frustumCulled = false; segs.raycast = () => {}; scene.add(segs);
+    }
+    const P = segs.geometry.attributes.position, C = segs.geometry.attributes.color;
+    let j = 0, k = 0;
+    for (const l of links) {
+      const o = l.__lineObj; if (!o || !o.parent) continue;
+      o.visible = false;
+      if (threads && o.material.opacity < 0.15) continue;
+      _c.copy(o.material.color).lerp(_bg, 1 - o.material.opacity);
+      if (o.isMesh) {
+        const r = o.geometry.parameters?.radiusTop || 0.5;
+        o.updateMatrixWorld(); _m.copy(o.matrixWorld).multiply(_ms.makeScale(r, r, 1));
+        cyl.setMatrixAt(j, _m); cyl.setColorAt(j, _c); j++;
+      } else if (o.isLine) {
+        const a = o.geometry.attributes.position; if (!a || a.count < 2) continue;
+        P.setXYZ(k, a.getX(0), a.getY(0), a.getZ(0)); P.setXYZ(k + 1, a.getX(a.count - 1), a.getY(a.count - 1), a.getZ(a.count - 1));
+        C.setXYZ(k, _c.r, _c.g, _c.b); C.setXYZ(k + 1, _c.r, _c.g, _c.b); k += 2;
+      }
+    }
+    cyl.count = j; cyl.instanceMatrix.needsUpdate = true; if (cyl.instanceColor) cyl.instanceColor.needsUpdate = true;
+    segs.geometry.setDrawRange(0, k); P.needsUpdate = true; C.needsUpdate = true;
+  }
+  // an object the library made (or remade) since the last sync is still visible: sync again
+  const stray = () => { for (const n of nodes) if (n.__threeObj?.visible && n.__threeObj.__graphDefaultObj) return true; for (const l of links) if (l.__lineObj?.visible) return true; return false; };
+  composer.render = (dt) => {
+    const t = performance.now(), moved = camChanged(camSig);
+    if (settling || t < renderUntil || stray()) syncInstances();
+    const anim = settling || strands.length > 0 || ctl.autoRotate;
+    const pulse = !!cursor && t - lastDraw > 66; // the marker of the current page pulses gently, 15 times a second is enough
+    if (moved || anim || pulse || t < renderUntil) { if (moved) depthCue(); rawRender(dt); lastDraw = t; RSTAT.drawn++; } else RSTAT.skipped++;
+  };
 
   /* ---------- colours and styling of the network ---------- */
   const rgba = (c, a) => { const k = d3.color(c) || d3.color('#888'); k.opacity = a; return k.formatRgb(); };
@@ -98,6 +209,8 @@ export function createGraph(el, handlers) {
   }
   const linkWidth = (l) => (threads ? 0 : (l.strong ? 0.25 + 1.1 * linkStrength(l) * scale : 0));
   function restyle() {
+    wake(600);
+    for (const n of nodes) n._op = undefined; labelsDirty = true;
     // while threads are drawn, their pages are shown as the threads' own beads instead
     G.nodeColor(nodeColor).nodeVal((n) => (threads ? nodeSize(n) * 0.5 : nodeSize(n)))
       .nodeVisibility((n) => isShown(n) && !(threads && threads.on.has(n.id)))
@@ -161,7 +274,7 @@ export function createGraph(el, handlers) {
     maxTotal = Math.max(1, ...links.map((l) => l.total));
     now = Date.now();
     const ts = nodes.map((n) => n.last).filter(Boolean); span = ts.length ? Math.max(...ts) - Math.min(...ts) : 1;
-    G.nodeRelSize(nodes.length < 60 ? 3.2 : nodes.length < 600 ? 2.4 : 1.9);
+    G.nodeRelSize(nodes.length < 60 ? 4.4 : nodes.length < 600 ? 3.6 : 2.4);
     setVisible(DV, false);
     restyle();
     settling = fresh > 0 || regroup > 0;
@@ -171,7 +284,7 @@ export function createGraph(el, handlers) {
     G.warmupTicks(warm).cooldownTicks(settling ? Math.max(60, 360 - warm) : 0);
     G.graphData({ nodes, links });
     if (!settling) measure();
-    drawThreads();
+    drawThreads(); wake(1500);
     return first;
   }
   function measure() {
@@ -180,6 +293,22 @@ export function createGraph(el, handlers) {
     for (const l of links) { const a = nodeBy.get(l.source.id || l.source), b = nodeBy.get(l.target.id || l.target); if (a && b && Number.isFinite(a.x) && Number.isFinite(b.x)) ds.push(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)); }
     ds.sort((p, q) => p - q);
     scale = ds.length ? Math.max(0.4, ds[Math.floor(ds.length / 2)] / 30) : 1;
+    const pts = nodes.filter((n) => isShown(n) && Number.isFinite(n.x));
+    if (pts.length) {
+      sceneC.set(0, 0, 0); for (const n of pts) sceneC.add(tmpA.set(n.x, n.y, n.z)); sceneC.divideScalar(pts.length);
+      const ds2 = pts.map((n) => Math.hypot(n.x - sceneC.x, n.y - sceneC.y, n.z - sceneC.z)).sort((p, q) => p - q);
+      sceneR = Math.max(60, ds2[Math.floor(ds2.length * 0.95)]);
+    }
+  }
+  /** Fog from just in front of the map's middle to well behind it: the far side is dimmer than the near one. */
+  function depthCue() {
+    if (threads || !view.depth) { scene.fog = null; return; }
+    const d = cam.position.distanceTo(sceneC);
+    fog.color.set(style.bg); fog.near = Math.max(1, d - 0.25 * sceneR); fog.far = d + 1.9 * sceneR;
+    scene.fog = fog;
+    // the key light comes from over the viewer's left shoulder, whichever way the map is turned
+    tmpB.set(-0.5, 0.8, 0.3).applyQuaternion(cam.quaternion);
+    key.position.copy(cam.position).addScaledVector(tmpB, cam.position.distanceTo(ctl.target)); key.target.position.copy(ctl.target);
   }
   function setVisible(DV, apply = true) {
     vis = DV && DV.articles.size !== nodeBy.size ? new Set(DV.articles.keys()) : null;
@@ -262,18 +391,42 @@ export function createGraph(el, handlers) {
       return true;
     };
     const put = (g, p) => { g.anchor = p; for (const k of cells(p, g.r + GAP)) (grid.get(k) || grid.set(k, []).get(k)).push(g); };
-    gs.forEach((g, i) => {
-      if (!i) return put(g, [0, 0, 0]);
-      const step = Math.max(10, g.r * 0.5);
-      // side by side across the screen (as the map first faces you), not in front of or behind each other
-      for (let R = gs[0].r + g.r + GAP; ; R += step) {
-        const K = Math.min(400, Math.max(12, Math.round(2 * Math.PI * R / (g.r + GAP))));
-        for (let k = 0; k < K; k++) {
-          const th = (k / K) * 2 * Math.PI + i * golden;
-          const p = [R * Math.cos(th), R * Math.sin(th) * 0.62, 0];
-          if (free(p, g.r)) return put(g, p);
-        }
+    // seen from the home view, a group should not sit right in front of (or behind) another: overlap of
+    // their outlines on the screen counts against a place, but only past a third, so the map keeps its depth
+    const right = new THREE.Vector3().crossVectors(UP, VIEW).normalize(), up = new THREE.Vector3().crossVectors(VIEW, right);
+    const placed = [], mean = [0, 0, 0];
+    const hidden = (p, r) => {
+      let s = 0;
+      for (const o of placed) {
+        const dx = p[0] - o.anchor[0], dy = p[1] - o.anchor[1], dz = p[2] - o.anchor[2];
+        const u = dx * right.x + dy * right.y + dz * right.z, v = dx * up.x + dy * up.y + dz * up.z;
+        const need = 0.7 * (r + o.r), d = Math.hypot(u, v);
+        if (d < need) s += (need - d) / need;
       }
+      return s;
+    };
+    gs.forEach((g, i) => {
+      if (i) {
+        const step = Math.max(10, g.r * 0.5), mlen = Math.hypot(...mean) || 1;
+        let best = null, bestS = Infinity, tries = 0;
+        // shells round the newest group, each place on a shell tried (an even spread over the sphere):
+        // the nearest shell with room wins, on it the place least hidden and on the emptier side
+        for (let R = gs[0].r + g.r + GAP; ; R += step) {
+          const K = Math.min(500, Math.max(16, Math.round(4 * R * R / ((g.r + GAP) * (g.r + GAP)))));
+          for (let k = 0; k < K; k++) {
+            const y = 1 - 2 * (k + 0.5) / K, rr = Math.sqrt(1 - y * y), th = k * golden + i * 2.39996;
+            const a = R * rr * Math.cos(th) * SHAPE[0], b = R * y * SHAPE[1], c = R * rr * Math.sin(th) * SHAPE[2];
+            const p = [a * RIGHT_H.x + c * VIEW_H.x, b, a * RIGHT_H.z + c * VIEW_H.z];
+            if (!free(p, g.r)) continue;
+            const s = hidden(p, g.r) * 4 + 0.5 * (p[0] * mean[0] + p[1] * mean[1] + p[2] * mean[2]) / (mlen * R);
+            if (s < bestS) { bestS = s; best = p; }
+          }
+          if (best && (bestS < 0.6 || ++tries >= 3)) break;
+        }
+        put(g, best);
+      } else put(g, [0, 0, 0]);
+      placed.push(g);
+      for (let k = 0; k < 3; k++) mean[k] += g.anchor[k] * g.nodes.length;
     });
   }
   /* Room a group needs: from its number of pages, or more in coarse steps if it has spread further. Coarse,
@@ -422,6 +575,8 @@ export function createGraph(el, handlers) {
     if (u?.key) { handlers.onThreadClick?.(u.key); return true; }
     return false;
   }
+  let hoverNode = null;
+  el.addEventListener('dblclick', () => { if (!hoverNode && !threads) home(); });
   let hoverKey = null;
   el.addEventListener('pointermove', (ev) => {
     if (!threads) return;
@@ -466,6 +621,7 @@ export function createGraph(el, handlers) {
   /** Focus one thread: it's drawn in full, the others step back. */
   function setPin(key) { pin = key; drawThreads(); placeLabels(true); }
   function drawThreads() {
+    wake(); depthCue();
     disposeLayer();
     drawCursor();
     if (!threads) return;
@@ -631,8 +787,20 @@ export function createGraph(el, handlers) {
 
   /* ---------- labels ---------- */
   const pool = new Map(); // title → { el, kind, w }
-  let wanted = [];
+  let wanted = [], labelsDirty = true;
+  const labelSig = new Float64Array(17), pv = new THREE.Vector3();
+  const LSTAT = { placed: 0, skipped: 0 };
+  /** Where a point lands on the screen (CSS pixels) and how deep it is, without allocating. */
+  function project(x, y, z, out) {
+    pv.set(x, y, z).project(cam);
+    out.x = (pv.x + 1) * W / 2; out.y = (1 - pv.y) * H / 2; out.z = pv.z;
+    return out;
+  }
   function placeLabels(rebuild) {
+    // nothing moved and nothing changed: the names stay where they are
+    if (!rebuild && !labelsDirty && !settling && !camChanged(labelSig)) { LSTAT.skipped++; return; }
+    if (rebuild) camChanged(labelSig);
+    labelsDirty = false; LSTAT.placed++;
     if (rebuild) {
       wanted = [];
       if (threads) {
@@ -704,26 +872,41 @@ export function createGraph(el, handlers) {
    * Names in the overview come and go with zoom: of the pages on screen, the most visited ones get a
    * name where there's room. Zoomed out that's the big hubs; zoomed in, nearly every page you can see.
    */
-  let shownLast = new Set();
+  let shownLast = new Set(), cand = [];
+  /** 0 at the front of the map, 1 at its back (the same span the fog uses). */
+  function depthOf(viewDepth) {
+    if (!view.depth) return 0;
+    const d = cam.position.distanceTo(sceneC), near = d - sceneR, far = d + sceneR;
+    return Math.max(0, Math.min(1, (viewDepth - near) / (far - near)));
+  }
   function overviewLabels(boxes, fwd) {
-    const tmp = new THREE.Vector3(), cand = [];
+    const tmp = new THREE.Vector3();
+    let c = 0;
     for (const n of nodes) {
       if (!isShown(n) || !Number.isFinite(n.x)) continue;
       tmp.set(n.x, n.y, n.z).sub(cam.position);
-      if (tmp.dot(fwd) <= 0) continue;
-      const p = G.graph2ScreenCoords(n.x, n.y, n.z);
-      if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
-      // newer groups' names first; a name already shown stays a while, so names don't flicker
-      cand.push({ n, p, prio: (n.visits + 1) * groupOp(n) ** 1.5 + (shownLast.has(n.id) ? 2.5 : 0) + (n.id === cursor ? 1e6 : 0) });
+      const vd = tmp.dot(fwd);
+      if (vd <= 0) continue;
+      const e = cand[c] || (cand[c] = { n: null, p: { x: 0, y: 0, z: 0 }, prio: 0, k: 0 });
+      project(n.x, n.y, n.z, e.p);
+      if (e.p.x < 0 || e.p.x > W || e.p.y < 0 || e.p.y > H) continue;
+      // newer groups' names first, nearer ones before those behind; a name already shown stays a
+      // while, so names don't flicker
+      if (n._op === undefined) n._op = groupOp(n) ** 1.5;
+      e.n = n; e.k = depthOf(vd);
+      e.prio = (n.visits + 1) * n._op * (1.25 - 0.6 * e.k) + (shownLast.has(n.id) ? 2.5 : 0) + (n.id === cursor ? 1e6 : 0);
+      c++;
     }
-    cand.sort((a, b) => b.prio - a.prio);
+    const list = cand.slice(0, c).sort((a, b) => b.prio - a.prio);
     // a couple of dozen names over the whole map; zoomed in, as many as fit
     const room = Math.max(8, Math.round((W * H) / 16000));
     const budget = Math.min(room, 50, Math.round(22 + 900 / Math.max(cand.length, 30)));
     const shown = new Set();
-    for (const { n, p } of cand) {
+    for (const { n, p, k } of list) {
       if (shown.size >= budget) break;
-      const w = n.lw || (n.lw = 7 * n.id.length + 14), h = 18;
+      // names further back are a little smaller and fainter
+      const sc = 1.1 - 0.3 * k;
+      const w = (n.lw || (n.lw = 7 * n.id.length + 14)) * sc, h = 18 * sc;
       // above the dot if there's room, else below, right or left of it
       for (const [dx, dy] of [[-w / 2, -h - 10], [-w / 2, 10], [12, -h / 2], [-w - 12, -h / 2]]) {
         const c = [p.x + dx, p.y + dy, p.x + dx + w, p.y + dy + h];
@@ -735,9 +918,10 @@ export function createGraph(el, handlers) {
         const kind = n.id === cursor ? 'cursor' : 'hub';
         if (o.kind !== kind) { o.kind = kind; o.el.className = 'lbl3d ' + kind; }
         if (o.el.style.display === 'none') o.el.style.display = '';
-        const lo = groupOp(n) < 0.99 ? String(Math.max(0.45, groupOp(n)).toFixed(2)) : '';
+        const op = Math.max(0.45, groupOp(n)) * (1 - 0.5 * k);
+        const lo = op < 0.99 ? op.toFixed(2) : '';
         if (o.el.style.opacity !== lo) o.el.style.opacity = lo;
-        o.el.style.transform = `translate(${Math.round(c[0])}px, ${Math.round(c[1])}px)`;
+        o.el.style.transform = `translate(${Math.round(c[0])}px, ${Math.round(c[1])}px) scale(${sc.toFixed(2)})`;
         break;
       }
     }
@@ -791,14 +975,17 @@ export function createGraph(el, handlers) {
     return list.filter((n) => n.x >= lo[0] && n.x <= hi[0] && n.y >= lo[1] && n.y <= hi[1] && n.z >= lo[2] && n.z <= hi[2]).map((n) => new THREE.Vector3(n.x, n.y, n.z));
   }
   /** The whole (visible) history. */
-  function fit(animate = true) {
+  function fit(animate = true, back = null) {
     const pts = visiblePoints(); if (!pts.length) return;
     // the newest group you can see in the middle, the older ones round it
     const g = groups.find((x) => x.anchor && x.nodes.some((n) => isShown(n) && isPlaced(n)));
     let mid = null;
     if (g) { const at = g.nodes.filter(isPlaced); mid = new THREE.Vector3(...[0, 1, 2].map((k) => at.reduce((s, n) => s + [n.x, n.y, n.z][k], 0) / at.length)); }
-    moveTo(frame(pts, currentBack(), 0.9, mid), animate ? 2000 : 0, false);
+    // the layout already has the newest group in its middle; centring what's on screen uses the window best
+    moveTo(frame(pts, back || currentBack(), 0.9, null), animate ? 900 : 0, false);
   }
+  /** The whole map from the side it's first seen from. */
+  function home() { fit(true, VIEW.clone()); }
   /** The camera for these points: the angle where they spread out best, filling the window. */
   function bestFrame(pts, center) {
     if (!pts.length) return null;
@@ -818,10 +1005,10 @@ export function createGraph(el, handlers) {
   function focusOn(titles) {
     const pts = [...titles].map(posOf).filter(Boolean); if (!pts.length) return;
     if (pts.length === 1) { for (const m of adj.get([...titles][0]) || []) { const p = posOf(m); if (p) pts.push(p); } }
-    const f = bestFrame(pts); if (f) moveTo(f, 2600, true);
+    const f = bestFrame(pts); if (f) moveTo(f, 1200, true);
   }
   /** Move the camera to the view the threads were drawn for. */
-  function frameThreads() { if (plan) moveTo(plan, 2600, true); }
+  function frameThreads() { if (plan) moveTo(plan, 1200, true); }
   function zoomBy(f) {
     const d = cam.position.distanceTo(ctl.target) / f, back = currentBack();
     const p = ctl.target.clone().addScaledVector(back, d);
@@ -835,7 +1022,7 @@ export function createGraph(el, handlers) {
   function settleAndFit() { fit(false); }
 
   /* ---------- the loop: running lights, labels, the slow turn ---------- */
-  let W = el.clientWidth || 800, H = el.clientHeight || 600, lastT = performance.now(), frameMs = 16;
+  let W = el.clientWidth || 800, H = el.clientHeight || 600, lastT = performance.now(), frameMs = 16, prevT = performance.now();
   function tick(t) {
     requestAnimationFrame(tick);
     const dt = Math.min(0.1, (t - lastT) / 1000); frameMs = frameMs * 0.95 + (t - lastT) * 0.05; lastT = t;
@@ -849,23 +1036,60 @@ export function createGraph(el, handlers) {
       });
     }
     for (const o of layer.children) if (o.userData.cursor) o.scale.setScalar(o.userData.r * (1 + 0.25 * Math.sin(t / 300)));
-    if (!threads && view.rotate && !ctl.autoRotate && t - lastTouch > 45000 && !settling) ctl.autoRotate = true;
+    // the same damping per second whatever the frame rate
+    ctl.dampingFactor = 1 - Math.pow(1 - DAMP, Math.min(6, Math.max(0.25, (t - prevT) / (1000 / 60)))); prevT = t;
+    if (!threads && (view.rotate || exploring) && !ctl.autoRotate && t - lastTouch > (exploring ? 5000 : 30000) && !settling) ctl.autoRotate = true;
+    if (exploring && keys.size) fly(dt);
     placeLabels(false);
+  }
+  /* ---------- exploring: the brain on the whole screen, turning slowly, and flying through it ----------
+     W/S or ↑/↓ fly forwards and back, A/D or ←/→ sideways, Q/E or PageUp/PageDown up and down (Shift: faster).
+     Camera and the point it turns round move together, so you fly through the map, not just towards it. */
+  let exploring = false;
+  const keys = new Set();
+  const FLY = { KeyW: [0, 0, 1], ArrowUp: [0, 0, 1], KeyS: [0, 0, -1], ArrowDown: [0, 0, -1], KeyA: [-1, 0, 0], ArrowLeft: [-1, 0, 0],
+    KeyD: [1, 0, 0], ArrowRight: [1, 0, 0], KeyE: [0, 1, 0], PageUp: [0, 1, 0], KeyQ: [0, -1, 0], PageDown: [0, -1, 0] };
+  const fwd = new THREE.Vector3(), side = new THREE.Vector3(), upv = new THREE.Vector3(), step = new THREE.Vector3();
+  function fly(dt) {
+    fwd.subVectors(ctl.target, cam.position).normalize();
+    side.crossVectors(fwd, cam.up).normalize(); upv.crossVectors(side, fwd).normalize();
+    step.set(0, 0, 0);
+    for (const k of keys) { const d = FLY[k]; if (d) step.addScaledVector(side, d[0]).addScaledVector(upv, d[1]).addScaledVector(fwd, d[2]); }
+    if (!step.lengthSq()) return;
+    const speed = sceneR * 0.45 * (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 3 : 1);
+    step.normalize().multiplyScalar(speed * dt);
+    cam.position.add(step); ctl.target.add(step); ctl.update();
+    lastTouch = performance.now(); ctl.autoRotate = false; framing = false; wake(); labelsDirty = true;
+  }
+  const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.target?.isContentEditable;
+  window.addEventListener('keydown', (e) => {
+    if (!exploring || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (FLY[e.code] || e.code.startsWith('Shift')) { keys.add(e.code); if (FLY[e.code]) e.preventDefault(); }
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+  window.addEventListener('blur', () => keys.clear());
+  /** Exploring on or off: the whole map, then a slow turn (faster than when idle) until you take over. */
+  function explore(on) {
+    exploring = !!on; keys.clear();
+    ctl.autoRotateSpeed = exploring ? 1.1 : 0.3;
+    if (exploring && !threads) { home(); lastTouch = performance.now() - 3000; }
+    if (!exploring) ctl.autoRotate = !!view.rotate && !threads && performance.now() - lastTouch > 30000;
+    wake(); labelsDirty = true;
   }
   requestAnimationFrame(tick);
   new ResizeObserver(() => {
     W = el.clientWidth || W; H = el.clientHeight || H;
-    G.width(W).height(H);
+    G.width(W).height(H); wake(); labelsDirty = true;
     handlers.onResize?.();
   }).observe(el);
   G.width(W).height(H);
 
   function setPalette() {
-    readStyle();
+    readStyle(); wake(); labelsDirty = true;
     restyle(); drawThreads();
   }
   function setView(v) {
-    Object.assign(view, v);
+    Object.assign(view, v); wake(); labelsDirty = true;
     if ('rotate' in v) { ctl.autoRotate = !!v.rotate && !threads; lastTouch = v.rotate ? -1e9 : lastTouch; }
     if ('density' in v || 'fade' in v) { rebudget(); restyle(); }
     if ('ageFade' in v && threads) drawThreads();
@@ -881,8 +1105,9 @@ export function createGraph(el, handlers) {
 
   return {
     update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView, roleColors, shownCount,
-    fit, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood,
+    fit, home, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood, explore, exploring: () => exploring,
     nodeCount: () => nodes.length,
+    camInfo: () => ({ pos: cam.position.toArray(), target: ctl.target.toArray(), auto: ctl.autoRotate }),
     look: (t) => { const n = nodeBy.get(t); return n ? { color: nodeColor(n), shown: isShown(n), op: groupOp(n) } : null; },
     isSettling: () => settling,
     hasNode: (t) => nodeBy.has(t),
