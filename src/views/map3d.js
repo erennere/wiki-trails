@@ -86,6 +86,72 @@ export function createGraph(el, handlers) {
     // zooming far out of the threads goes back to the whole history
     if (threads && framed && !framing && cam.position.distanceTo(ctl.target) > framed * 2.3) handlers.onZoomedOut?.();
   });
+  /* ---------- turning like a ball under your hand ----------
+     A left drag (or one finger) turns the map like a trackball: the point you grab follows the pointer, and
+     dragging round the edge rolls it, with nothing held upright. Moving (right-drag, Shift+drag), zooming
+     and the slow turn stay with the library's controls. */
+  ctl.enableRotate = false;
+  const BALL_SPEED = 1.15;
+  const grab = { on: false, id: null, v: null, axis: new THREE.Vector3(), w: 0, t: 0 };
+  const canvas = renderer.domElement, touching = new Set();
+  // a pointer relative to a ball filling most of the view: x, y in its radii (y up)
+  function rel(e) {
+    const r = canvas.getBoundingClientRect(), R = Math.min(r.width, r.height) * 0.45;
+    return [(e.clientX - (r.left + r.width / 2)) / R, -(e.clientY - (r.top + r.height / 2)) / R];
+  }
+  // as a point on the ball (camera space); near its rim, a sheet that softens the turn
+  function onBall(e) {
+    const [x, y] = rel(e), d = x * x + y * y;
+    return new THREE.Vector3(x, y, d <= 0.5 ? Math.sqrt(1 - d) : 0.5 / Math.sqrt(d)).normalize();
+  }
+  const ROLL = new THREE.Vector3(0, 0, 1); // the line of sight, in camera space
+  const _qa = new THREE.Quaternion(), _off = new THREE.Vector3(), _ax = new THREE.Vector3();
+  // turn the map by angle round an axis given in camera space: the camera goes the other way round the target
+  function turn(axisCam, angle) {
+    _ax.copy(axisCam).applyQuaternion(cam.quaternion).normalize();
+    _qa.setFromAxisAngle(_ax, -angle);
+    _off.subVectors(cam.position, ctl.target).applyQuaternion(_qa);
+    cam.position.copy(ctl.target).add(_off);
+    cam.up.applyQuaternion(_qa);
+    cam.lookAt(ctl.target);
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') touching.add(e.pointerId);
+    if (touching.size > 1) { grab.on = false; grab.w = 0; return; } // two fingers: pinch and move, not turn
+    if (grab.on || e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || !ctl.enabled) return;
+    // grabbed outside the ball (towards the sides): the drag rolls it round the line of sight
+    const [x, y] = rel(e);
+    Object.assign(grab, { on: true, id: e.pointerId, roll: x * x + y * y > 1, a: Math.atan2(y, x), v: onBall(e), w: 0, t: performance.now() });
+    ctl.dispatchEvent({ type: 'start' });
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!grab.on || e.pointerId !== grab.id) return;
+    if (grab.roll) {
+      const [x, y] = rel(e), a = Math.atan2(y, x);
+      let da = a - grab.a; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+      if (Math.abs(da) < 1e-5) return;
+      const t = performance.now();
+      turn(ROLL, da);
+      grab.axis.copy(ROLL); grab.w = da / Math.max(1, t - grab.t); grab.t = t; grab.a = a;
+      ctl.dispatchEvent({ type: 'change' }); wake();
+      return;
+    }
+    const v = onBall(e), angle = grab.v.angleTo(v);
+    if (angle < 1e-5) return;
+    const axis = new THREE.Vector3().crossVectors(grab.v, v).normalize(), a = angle * BALL_SPEED, t = performance.now();
+    turn(axis, a);
+    // how fast it's turning, for a short glide after you let go
+    grab.axis.copy(axis); grab.w = a / Math.max(1, t - grab.t); grab.t = t; grab.v = v;
+    ctl.dispatchEvent({ type: 'change' }); wake();
+  });
+  const ballEnd = (e) => {
+    touching.delete(e.pointerId);
+    if (!grab.on || e.pointerId !== grab.id) return;
+    grab.on = false;
+    if (performance.now() - grab.t > 120) grab.w = 0; // held still before letting go: no glide
+    ctl.dispatchEvent({ type: 'end' });
+  };
+  window.addEventListener('pointerup', ballEnd); window.addEventListener('pointercancel', ballEnd);
   const scene = G.scene();
   const layer = new THREE.Group();
   scene.add(layer);
@@ -987,7 +1053,7 @@ export function createGraph(el, handlers) {
     moveTo(frame(pts, back || currentBack(), 0.9, new THREE.Vector3()), animate ? 900 : 0, false); // the sphere's middle in the middle
   }
   /** The whole map from the side it's first seen from. */
-  function home() { fit(true, VIEW.clone()); }
+  function home() { cam.up.set(0, 1, 0); fit(true, VIEW.clone()); } // upright again
   /** The camera for these points: the angle where they spread out best, filling the window. */
   function bestFrame(pts, center) {
     if (!pts.length) return null;
@@ -1038,6 +1104,8 @@ export function createGraph(el, handlers) {
       });
     }
     for (const o of layer.children) if (o.userData.cursor) o.scale.setScalar(o.userData.r * (1 + 0.25 * Math.sin(t / 300)));
+    // the glide after a turn, slowing down the same per second at any frame rate
+    if (!grab.on && grab.w !== 0) { const ms = t - prevT; turn(grab.axis, grab.w * ms); grab.w *= Math.exp(-ms / 110); if (Math.abs(grab.w) < 3e-5) grab.w = 0; wake(); }
     // the same damping per second whatever the frame rate
     ctl.dampingFactor = 1 - Math.pow(1 - DAMP, Math.min(6, Math.max(0.25, (t - prevT) / (1000 / 60)))); prevT = t;
     if (!threads && (view.rotate || exploring) && !ctl.autoRotate && t - lastTouch > (exploring ? 5000 : 30000) && !settling) ctl.autoRotate = true;
@@ -1109,7 +1177,7 @@ export function createGraph(el, handlers) {
     update, reset, relayout, setVisible, setPalette, setHighlight, setPin, setCursor, setView, roleColors, shownCount,
     fit, home, focusOn, frameThreads, settleAndFit, ensureVisible, zoomBy, getPositions, neighbourhood, explore, exploring: () => exploring,
     nodeCount: () => nodes.length,
-    camInfo: () => ({ pos: cam.position.toArray(), target: ctl.target.toArray(), auto: ctl.autoRotate }),
+    camInfo: () => ({ pos: cam.position.toArray(), target: ctl.target.toArray(), up: new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion).toArray(), camUp: cam.up.toArray(), auto: ctl.autoRotate }),
     look: (t) => { const n = nodeBy.get(t); return n ? { color: nodeColor(n), shown: isShown(n), op: groupOp(n) } : null; },
     isSettling: () => settling,
     hasNode: (t) => nodeBy.has(t),
